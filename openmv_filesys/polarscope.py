@@ -325,7 +325,7 @@ class PolarScope(object):
                     self.solution.get_pole_coords() # this caches x and y
                     if self.stable_solution() is not None:
                         self.locked_solution = [self.solution.Polaris.cx, self.solution.Polaris.cy, self.solution.x, self.solution.y, self.solution.get_rotation()]
-                        if debug and prev_sol is None:
+                        if self.debug and prev_sol is None:
                             print("new solution! matched %u" % self.solution.stars_matched)
                     return True
                 else:

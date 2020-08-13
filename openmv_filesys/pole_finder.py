@@ -165,7 +165,7 @@ class PoleSolution(object):
             raise Exception("no solution")
         if self.x is not None:
             return self.x, self.y, self.get_rotation()
-        x, y, r = get_pole_coords_for(self.Polaris)
+        x, y, r = self.get_pole_coords_for(self.Polaris)
         self.x = x
         self.y = y
         return self.x, self.y, self.get_rotation()

@@ -56,7 +56,7 @@ def log_exception(exc, time_str = "", to_print = True, to_file = True, fatal = F
                 except OSError:
                     pass
                 continue
-    if fatal or "Exception: IDE interrupt" in s:
+    if fatal or "IDE interrupt" in s:
         raise exc
     return headstr + "\r\n" + s
 
