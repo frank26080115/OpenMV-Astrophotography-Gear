@@ -1,11 +1,15 @@
-import blobstar
+import time
 try:
     import numpy as np
     pass
 except:
     import math
 try:
-    import gc
+    import micropython
+    micropython.opt_level(2)
+    import pyb
+    import blobstar
+    import ujson
     pass
 except:
     pass
@@ -16,7 +20,7 @@ except:
 # this table is pre-generated
 # vector to a star from Polaris, magnitude in pixels
 # sorted by closest first
-STARS_NEAR_POLARIS = [
+STARS_NEAR_POLARIS = micropython.const([
     ["HD 5914",         98.867180,  -10.647256],
     ["* lam UMi",      479.008301, -118.529852],
     ["HD 66368",       524.994808,  164.780381],
@@ -31,29 +35,42 @@ STARS_NEAR_POLARIS = [
     ["HD 135294",     1060.463568, -140.366796],
     ["* 24 UMi",      1082.153394, -105.587018],
     ["* del UMi",     1195.457555, -104.488215],
-    ["HD 107113",     1264.471354, -170.201903]]
+    ["HD 107113",     1264.471354, -170.201903]])
 
-PIXELS_PER_DEGREE = 875.677409 / 2.9063 # calculated using "OV Cep"
-DIST_TOL = 0.03 # percentage
-ANG_TOL  = 1.0  # degrees
-SCORE_REQUIRED = 4 # must have this many stars that match their estimated coordinates
+PIXELS_PER_DEGREE = micropython.const(875.677409 / 2.9063) # calculated using "OV Cep"
+DIST_TOL = micropython.const(0.03)    # percentage
+ANG_TOL  = micropython.const(1.0)     # degrees
+SCORE_REQUIRED = micropython.const(4) # must have this many stars that match their estimated coordinates
 
 class PoleSolution(object):
-    def __init__(self, star_list):
+    def __init__(self, star_list, search_limit = 3):
         self.solved = False
         self.star_list = star_list
+        self.search_limit = search_limit
 
-    def solve(self):
+    def solve(self, polaris_ra_dec = (2.960856, 89.349278)):
+
+        # polaris_ra_dec default to values at Jan 1 2020
+        # supply new values according to current date
+        self.polaris_ra_dec = polaris_ra_dec
+        self.x = None
+        self.y = None
+        self.solu_time = 0
         try:
-            gc.collect()
+            self.solu_time = int(round(pyb.millis() // 1000))
         except:
-            pass
+            self.solu_time = int(round(time.time()))
 
         if len(self.star_list) < SCORE_REQUIRED:
             return False # impossible to have a solution if not enough stars
 
         # Polaris is the brightest object in the potential field of view, so it's faster to start with it
         brite_sorted = blobstar.sort_brightness(self.star_list)
+        # limit the search for the first few possibilities
+        if len(brite_sorted) > self.search_limit:
+            brite_sorted = brite_sorted[0:self.search_limit]
+
+        # iterate through all posibilities, brightest first
         for i in brite_sorted:
             # we are guessing "i" is Polaris for this iteration
             i.score = []
@@ -62,7 +79,7 @@ class PoleSolution(object):
             i.rot_dist_sum = 0
             i.pix_calibration = []
 
-            for j in brite_sorted:
+            for j in self.star_list:
                 j.set_ref_star(i) # this is required for all entries in the list, so that sort_dist can work
                 # set_ref_star also computes the vector to the ref star and caches the result
             dist_sorted = blobstar.sort_dist(self.star_list) # sorted closest-to-Polaris first
@@ -126,15 +143,36 @@ class PoleSolution(object):
         self.pix_per_deg = PIXELS_PER_DEGREE * dist_calibration
         return True
 
-    def get_pole_coords(self, polaris_ra_dec = (2.960856, 89.349278)):
+    def get_rotation(self, compensate = True):
+        if self.solu_time == 0 or compensate == False:
+            return self.rotation
+        # compensate for the rotation that occured between solution and now
+        try:
+            t = int(round(pyb.millis() // 1000))
+        except:
+            t = int(round(time.time()))
+        dt = t - self.solu_time
+        rot = float(dt) * 360.0
+        rot /= 86164.09054 # sidereal day length
+        return self.rotation + rot
+
+    def get_pole_coords(self):
         if self.solved == False:
             raise Exception("no solution")
-        # polaris_ra_dec default to values at Jan 1 2020
-        # supply new values according to current date
-        rahr  = polaris_ra_dec[0]
-        dec   = polaris_ra_dec[1]
+        if self.x is not None:
+            return self.x, self.y, self.get_rotation()
+        x, y, r = get_pole_coords_for(self.Polaris)
+        self.x = x
+        self.y = y
+        return self.x, self.y, self.get_rotation()
+
+    def get_pole_coords_for(self, star):
+        if self.solved == False:
+            raise Exception("no solution")
+        rahr  = self.polaris_ra_dec[0]
+        dec   = self.polaris_ra_dec[1]
         radeg = (rahr * 360.0) / 24.0
-        ra_adj = radeg - self.rotation
+        ra_adj = radeg - self.get_rotation()
         rho = (90.0 - dec) * self.pix_per_deg
         try:
             phi = np.radians(360.0 * ra_adj / 24.0)
@@ -144,9 +182,27 @@ class PoleSolution(object):
             phi = math.radians(360.0 * ra_adj / 24.0)
             dx = rho * math.cos(phi)
             dy = rho * math.sin(phi)
-        self.x = self.Polaris.cx + dx
-        self.y = self.Polaris.cy - dy # y is flipped!
-        return self.x, self.y
+        x = star.cx + dx
+        y = star.cy - dy # y is flipped!
+        return x, y, self.get_rotation()
+
+    def compare(self, tgt):
+        if tgt.solved == False:
+            return False
+        x, y, r = self.get_pole_coords()
+        if abs(tgt.x - x) < 1.0 and abs(tgt.y - y) < 1.0 and abs(angle_diff(tgt.rotation, r)) < 1.0:
+            return True
+        return False
+
+    def to_jsonobj(self):
+        x, y, r = self.get_pole_coords()
+        obj = {}
+        obj.update({"x": x})
+        obj.update({"y": y})
+        obj.update({"r": r})
+        obj.update({"cnt": len(self.stars_matched)})
+        obj.update({"pix_per_deg": self.pix_per_deg})
+        return obj
 
 def dist_match(x, y):
     err_tol = x * DIST_TOL
@@ -170,6 +226,7 @@ def ang_normalize(x):
 def sort_score_func(x):
     return len(x.score)
 
+"""
 def test():
     test_input = [
     [397.18523026, 352.17618942, 3.00000000, 663.99998665 ],
@@ -187,18 +244,18 @@ def test():
     [666.57261848, 1701.49030685, 8.00000000, 8348.99997711 ],
     [1517.31705666, 1784.47270393, 3.00000000, 1722.00002670 ],
     [825.48303604, 1862.05902100, 2.33333325, 558.99996758 ]]
-    uidmgr = blobstar.BlobStarUidManager()
     stars = []
     for i in test_input:
-        stars.append(blobstar.BlobStar(uidmgr.generate(), i[0], i[1], i[2], i[3]))
+        stars.append(blobstar.BlobStar(i[0], i[1], i[2], i[3]))
     sol = PoleSolution(stars)
     if sol.solve():
         print("solution found!")
         print(sol.stars_matched)
-        x, y = sol.get_pole_coords()
-        print("%f, %f, %f" % (x, y, sol.rotation))
+        x, y, r = sol.get_pole_coords()
+        print("%f, %f, %f" % (x, y, r))
     else:
         print("no solution")
 
 if __name__ == "__main__":
     test()
+"""

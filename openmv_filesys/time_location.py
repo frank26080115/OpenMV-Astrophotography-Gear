@@ -1,11 +1,15 @@
-import pyb, uos, utime, math
+import micropython
+micropython.opt_level(2)
 
-SIDEREAL_DAY_SECONDS = 86164.09054
+import pyb, uos, utime, math
+import pole_movement
+
+SIDEREAL_DAY_SECONDS = micropython.const(86164.09054)
 
 # table pre-generated using data from https://britastro.org/node/17066
 # [0]   is the upper bound of the latitude, lower bound found in next entry
 # [1:3] are quadratic coefficients for that latitude
-REFRACTION_TABLE = [
+REFRACTION_TABLE = micropython.const([
 [90.0, 0.0000000000,  0.0000000000, 0.0000000000],
 [89.0, 0.0000000000, -0.0183333333, 1.6500000000],
 [75.0, 0.0001666667, -0.0433333333, 2.5833333333],
@@ -20,7 +24,7 @@ REFRACTION_TABLE = [
 [3.5,  0.5986111111, -6.6125000000, 27.7638888889],
 [1.5,  1.1222222222, -8.1833333333, 28.8111111111],
 [0.75, 1.4666666667, -8.7000000000, 28.9833333333],
-[0.25, 1.4333333333, -8.6833333333, 28.9833333333]]
+[0.25, 1.4333333333, -8.6833333333, 28.9833333333]])
 
 class TimeLocationManager(object):
     def __init__(self):
@@ -44,6 +48,12 @@ class TimeLocationManager(object):
 
         # at Greenwich (longitude = 0), the solar time that matches sidereal time = 00:00
         self.sidereal_sync_time = utc_to_epoch(2020, 8, 10, 20, 40, 46)
+
+        self.pole_move = pole_movement.PoleMovement()
+
+        self.tick()
+
+        self.readiness = False
 
     # call this function before getting or setting the time
     # this allows for the time to be kept still for various tests
@@ -70,12 +80,21 @@ class TimeLocationManager(object):
 
     def set_utc_time_epoch(self, s):
         self.start_sec = s - (self.latest_millis // 1000)
+        self.readiness = True
 
     def set_location(self, longitude, latitude):
         if longitude is not None:
             self.longitude = longitude
+            while self.longitude > 180.0:
+                self.longitude -= 360.0
+            while self.longitude < -180.0:
+                self.longitude += 360.0
         if latitude is not None:
             self.latitude  = latitude
+            while self.latitude > 90.0:
+                self.latitude -= 90.0
+            while self.latitude < -90.0:
+                self.latitude += 90.0
             i = 0
             tbl_len = len(REFRACTION_TABLE)
             etr = None
@@ -96,6 +115,9 @@ class TimeLocationManager(object):
             x_0 = etr[3]
             self.refraction = x_2 + x_1 + x_0
             self.refraction /= 60.0 # calculation was for minutes
+
+    def is_ready(self):
+        return self.readiness
 
     def get_sidereal_angle(self):
         x = self.get_sec()
@@ -125,6 +147,9 @@ class TimeLocationManager(object):
     def get_refraction(self):
         return self.refraction
 
+    def get_polaris(self):
+        return self.pole_move.calc_for_jdn(self.get_jdn())
+
 def utc_to_epoch(utc_yr, utc_month, utc_day, utc_hr, utc_min, utc_sec):
     s = utime.mktime((utc_yr, utc_month, utc_day, utc_hr, utc_min, utc_sec, 0, 0))
     return s
@@ -133,6 +158,7 @@ def jdn(y, m, d):
     # http://www.cs.utsa.edu/~cs1063/projects/Spring2011/Project1/jdn-explanation.html
     return d + (((153 * m) + 2) // 5) + (356 * y) + (y // 4) - (y // 100) + (y // 400) - 32045
 
+"""
 def test():
     mgr = TimeLocationManager()
     print("Start Time From File: " + str(mgr.start_time))
@@ -186,3 +212,4 @@ def test():
 
 if __name__ == "__main__":
     test()
+"""

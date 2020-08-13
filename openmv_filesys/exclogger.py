@@ -58,9 +58,11 @@ def log_exception(exc, time_str = "", to_print = True, to_file = True, fatal = F
                 continue
     if fatal:
         raise exc
+    return headstr + "\r\n" + s
 
+"""
 def testnest():
-    raise Exception("test")
+    f = open("2")
 
 def test():
     try:
@@ -71,3 +73,4 @@ def test():
 
 if __name__ == "__main__":
     test()
+"""

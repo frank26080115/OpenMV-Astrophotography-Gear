@@ -1,18 +1,20 @@
-import gc
+import micropython
+micropython.opt_level(2)
+
 import pyb, uos
 import image, sensor
 import array
+import gc
+import blobstar
 
+EXPO_TOO_LOW      = micropython.const(-1)
+EXPO_JUST_RIGHT   = micropython.const(0)
+EXPO_TOO_HIGH     = micropython.const(1)
+EXPO_TOO_NOISY    = micropython.const(2)
+EXPO_MOVEMENT     = micropython.const(3)
+EXPO_TOO_BIG      = micropython.const(4)
 
-EXPO_TOO_LOW      = -1
-EXPO_JUST_RIGHT   = 0
-EXPO_TOO_HIGH     = 1
-EXPO_TOO_NOISY    = 2
-EXPO_MOVEMENT     = 3
-EXPO_TOO_BIG      = 4
-
-def find_stars(img, hist = None, stats = None):
-    gc.collect()
+def find_stars(img, hist = None, stats = None, force_solve = False):
 
     # histogram and statistics might be computationally costly, use cached results if available
     if hist is None:
@@ -20,17 +22,24 @@ def find_stars(img, hist = None, stats = None):
     if stats is None:
         stats = hist.get_statistics()
 
-    # check the quality
-    if stats.mean() > 60:
-        return [], EXPO_TOO_HIGH
-    if stats.stdev() >= 7:
-        return [], EXPO_TOO_NOISY
-    if stats.max() < (64 * 3):
-        return [], EXPO_TOO_LOW
+    if force_solve == False:
+        # check the quality
+        if stats.mean() > 60:
+            return [], EXPO_TOO_HIGH
+        if stats.stdev() >= 7:
+            return [], EXPO_TOO_NOISY
+        if stats.max() < (64 * 3):
+            return [], EXPO_TOO_LOW
 
     # this threshold was tested in a photo editor first
     thresh = stats.mean() * 3
-    blobs = img.find_blobs([(thresh, 255)], merge = True)
+    gc.collect()
+    blobs = []
+    try:
+        blobs = img.find_blobs([(thresh, 255)], merge = True)
+    except MemoryError as exc:
+        exclogger.log_exception(exc, to_file = False)
+        micropython.mem_info(True)
     stars = []
     too_long = 0
     too_big  = 0
@@ -44,10 +53,11 @@ def find_stars(img, hist = None, stats = None):
             accept = False
         if accept:
             stars.append(blob_to_star(b, img, thresh))
-    if too_big > len(stars):
-        return stars, EXPO_TOO_BIG
-    if too_long > len(stars):
-        return stars, EXPO_MOVEMENT
+    if force_solve == False:
+        if too_big > len(stars):
+            return stars, EXPO_TOO_BIG
+        if too_long > len(stars):
+            return stars, EXPO_MOVEMENT
     return stars, EXPO_JUST_RIGHT
 
 def blob_to_star(b, img, thresh):
@@ -101,10 +111,10 @@ def blob_to_star(b, img, thresh):
     cy += ystart
     # approximate radius (should be dividing by 4 but it doesn't really matter)
     r = (w + h) / 3.0
-    return (cx, cy, r, brightness)
+    return blobstar.BlobStar(cx, cy, r, brightness)
 
+"""
 def demo_image(filepath, find_polaris = False):
-    gc.collect()
     print("opening %s" % filepath, end = "")
     img = image.Image(filepath, copy_to_fb = True)
     print(" done")
@@ -137,3 +147,4 @@ def demo_dir(dirpath = uos.getcwd(), find_polaris = False):
 
 if __name__ == "__main__":
     demo_dir()
+"""

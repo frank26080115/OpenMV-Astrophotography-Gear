@@ -1,10 +1,14 @@
+import micropython
+micropython.opt_level(2)
+
 import pyb, uos, uio, time
 import ubinascii
 import network
 import usocket as socket
+import exclogger
 
 class CaptivePortal(object):
-    def __init__(self, ssid = None, password = "1234567890", winc_mode = network.WINC.MODE_AP, winc_security = network.WINC.WEP):
+    def __init__(self, ssid = None, password = "1234567890", winc_mode = network.WINC.MODE_AP, winc_security = network.WINC.WEP, debug = False):
         self.winc_mode = winc_mode
         self.winc_security = winc_security
         self.wlan = network.WINC(mode = self.winc_mode)
@@ -31,7 +35,9 @@ class CaptivePortal(object):
         if self.ip == "0.0.0.0":
             self.ip = "192.168.1.1"
 
-        self.debug = False
+        self.debug = debug
+        if self.debug:
+            print("IP: " + self.ip)
 
         self.udps = None
         self.s = None
@@ -183,12 +189,14 @@ class CaptivePortal(object):
             if self.debug:
                 print("dns resoved %u bytes %s" % (len(packet), dominio))
             return True
+        except KeyboardInterrupt:
+            raise
         except OSError as e:
             print("dns OSError " + str(e))
             self.udps.close()
             self.udps = None
         except Exception as e:
-            print("dns Exception " + str(e))
+            exclogger.log_exception(e)
             pass
         return False
 
@@ -247,12 +255,14 @@ class CaptivePortal(object):
                 else:
                     self.handle_default(client_stream, req, headers, content)
             return True
+        except KeyboardInterrupt:
+            raise
         except OSError as e:
             print("http serve OSError " + str(e) + " " + str(e.args[0]))
             self.s.close()
             self.s = None
         except Exception as e:
-            print("http Exception " + str(e))
+            exclogger.log_exception(e)
             pass
         return False
 
@@ -316,10 +326,11 @@ def split_get_request(req):
     if '?' in request_page:
         request_page = request_url[:request_url.index('?')]
         request_urlparams = request_url[request_url.index('?') + 1:]
+        d = {}
         try:
-            d = {key: value for (key, value) in [x.split(b'=') for x in request_urlparams.split(b'&')]}
-        except:
-            d = {}
+            d = {key: value for (key, value) in [x.split('=') for x in request_urlparams.split('&')]}
+        except Exception as exc:
+            exclogger.log_exception(exc)
         request_urlparams = d
     return request_page, request_urlparams
 
@@ -328,13 +339,16 @@ def split_post_form(headers, content):
     if "content-type" in headers:
         if headers["content-type"] == "application/x-www-form-urlencoded":
             try:
-                d = {key: value for (key, value) in [x.split(b'=') for x in content.split(b'&')]}
-            except:
-                pass
+                d = {key: value for (key, value) in [x.split('=') for x in content.split('&')]}
+            except Exception as exc:
+                exclogger.log_exception(exc)
     return d
 
-def default_reply_header(content_type = "text/html"):
-    return "HTTP/1.0 200 OK\r\ncontent-type: %s\r\ncache-control: no-cache\r\n\r\n" % content_type
+def default_reply_header(content_type = "text/html", content_length = -1):
+    s = "HTTP/1.0 200 OK\r\ncontent-type: %s\r\ncache-control: no-cache\r\n" % content_type
+    if content_length >= 0:
+        s += "content_length: %u\r\n" % content_length
+    return s + "\r\n"
 
 MIME_TABLE = [ # https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_types/Common_types
 #["aac",    "audio/aac"],
@@ -420,6 +434,7 @@ def get_content_type(fname):
             return i[1]
     return 'application/octet-stream' # forces binary download
 
+"""
 def stream_img_start(conn):
     conn.send("HTTP/1.1 200 OK\r\n" \
               "content-type: multipart/x-mixed-replace;boundary=stream\r\n" \
@@ -443,10 +458,8 @@ def handle_test(client_stream, req, headers, content):
 
 if __name__ == "__main__":
     print("Starting CaptivePortal")
-    portal = CaptivePortal("moomoomilk", "1234567890", winc_mode = network.WINC.MODE_STA, winc_security = network.WINC.WPA_PSK)
-    portal.debug = False
+    portal = CaptivePortal("moomoomilk", "1234567890", winc_mode = network.WINC.MODE_STA, winc_security = network.WINC.WPA_PSK, debug = True)
     portal.install_handler("/test", handle_test)
-    print("IP: %s" % portal.ip)
     dbg_cnt = 0
     clock = time.clock()
     while True:
@@ -457,3 +470,4 @@ if __name__ == "__main__":
         if portal.debug or (dbg_cnt % 100) == 0:
             print("%u - %0.2f" % (dbg_cnt, fps))
             pass
+"""

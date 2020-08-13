@@ -1,19 +1,21 @@
+import micropython
+micropython.opt_level(2)
+
 import sensor, image, pyb, time
 
 class AstroCam(object):
 
     def __init__(self, pixfmt = sensor.GRAYSCALE):
         self.pixfmt = pixfmt
-        self.has_init = False
         self.gain = -2
-        self.shutter = 0
+        self.shutter = -2
         self.framesize = sensor.QQCIF
         self.flip = False
         self.fileseq = 1
         self.img = None
 
     def init(self, gain_db = 0, shutter_us = 500000, framesize = sensor.WQXGA2, force_reset = True, flip = False):
-        if force_reset or self.gain != gain_db or self.shutter != shutter_us or self.framesize != framesize or self.flip != flip or self.has_init == False:
+        if force_reset or self.gain != gain_db or self.shutter != shutter_us or self.framesize != framesize or self.flip != flip:
             sensor.reset()
             sensor.set_pixformat(self.pixfmt)
             sensor.set_framesize(framesize)
@@ -22,26 +24,33 @@ class AstroCam(object):
                 sensor.set_hmirror(True)
             self.flip = flip
             self.framesize = framesize
-            if shutter_us > 500000:
-                if shutter_us > 1000000:
-                    sensor.__write_reg(0x3037, 0x18)   # slow down PLL
-                    if shutter_us > 1500000:
-                        sensor.__write_reg(0x3036, 80) # slow down PLL
-                        # warning: doesn't work well, might crash
-                else:
-                    sensor.__write_reg(0x3037, 0x08)   # slow down PLL
-                pyb.delay(200)
-            sensor.set_auto_exposure(False, shutter_us)
+            if shutter_us < 0:
+                sensor.set_auto_exposure(True)
+            else:
+                if shutter_us > 500000:
+                    if shutter_us > 1000000:
+                        sensor.__write_reg(0x3037, 0x18)   # slow down PLL
+                        if shutter_us > 1500000:
+                            sensor.__write_reg(0x3036, 80) # slow down PLL
+                            # warning: doesn't work well, might crash
+                    else:
+                        sensor.__write_reg(0x3037, 0x08)   # slow down PLL
+                    pyb.delay(200)
+                sensor.set_auto_exposure(False, shutter_us)
             self.shutter = shutter_us
-            sensor.set_auto_gain(False, gain_db)
+            if gain_db < 0:
+                sensor.set_auto_gain(True)
+            else:
+                sensor.set_auto_gain(False, gain_db)
             self.gain = gain_db
             sensor.skip_frames(time = 2000)
-        self.has_init = True
+            self.snap_started = False
 
     def snapshot(self, filename = None):
-        if self.has_init == False:
-            self.init()
-        self.img = sensor.snapshot()
+        if self.snap_started == True:
+            self.img = self.snapshot_finish()
+        else:
+            self.img = sensor.snapshot()
         if filename == "auto":
             filename = "%u_%u_%u.jpg" % (self.fileseq, round(self.gain), self.shutter)
         self.fileseq += 1
@@ -49,6 +58,25 @@ class AstroCam(object):
             self.img.save(filename, quality = 100)
         return self.img
 
+    def snapshot_start(self):
+        if self.snap_started == True:
+            return
+        sensor.snapshot_start()
+        self.snap_started = True
+
+    def snapshot_check(self):
+        if self.snap_started == False:
+            return False
+        return sensor.snapshot_check()
+
+    def snapshot_finish(self):
+        if self.snap_started == False:
+            return None
+        self.img = sensor.snapshot_finish()
+        self.snap_started = False
+        return self.img
+
+"""
     def test_gather(self, shots = 2, gain_start = 0, gain_step = 16, gain_limit = 128, shutter_start = 500000, shutter_step = 250000, shutter_limit = 1500000):
         shot = 0
         rnd  = pyb.rng() % 1000
@@ -82,3 +110,4 @@ if __name__ == "__main__":
     cam = AstroCam()
     cam.test_view()
     #cam.test_gather()
+"""
