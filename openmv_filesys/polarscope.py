@@ -407,7 +407,7 @@ class PolarScope(object):
         gc.collect()
         self.diag_cnt += 1
         self.t = pyb.millis()
-        self.time_mgr.tick(latest_millis = t)
+        self.time_mgr.tick(latest_millis = self.t)
         self.tick_all, self.dur_all = self.diag_tick(self.t, self.tick_all, self.dur_all) # debug loop speed
         if self.portal is not None:
             self.portal.task()
@@ -443,12 +443,12 @@ class PolarScope(object):
                 # take the next frame with settings according to mode
                 if self.highspeed == False:
                     self.tick_ls, self.dur_ls = self.diag_tick(self.t, self.tick_ls, self.dur_ls) # debug loop speed
-                    self.tick_hs = t
+                    self.tick_hs = self.t
                     self.dur_hs = -1
                     self.cam.init(gain_db = self.settings["gain"], shutter_us = self.settings["shutter"], force_reset = False)
                 else:
                     self.tick_hs, self.dur_hs = self.diag_tick(self.t, self.tick_hs, self.dur_hs) # debug loop speed
-                    self.tick_ls = t
+                    self.tick_ls = self.t
                     self.dur_ls = -1
                     self.cam.init(gain_db = self.settings["gain_hs"], shutter_us = self.settings["shutter_hs"], force_reset = False)
             self.cam.snapshot_start()
