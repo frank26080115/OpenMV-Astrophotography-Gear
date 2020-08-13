@@ -1,13 +1,13 @@
-import micropython, sys, uos, uio, pyb
+import micropython, sys, uos, uio, pyb, gc
 
 def log_exception(exc, time_str = "", to_print = True, to_file = True, fatal = False):
 
     # use built-in exception formatter
-    f = uio.StringIO(2048)
-    sys.print_exception(exc,f)
-    f.seek(0)
-    s = f.read()
-    f.close()
+    with uio.StringIO(1024) as f:
+        sys.print_exception(exc,f)
+        f.seek(0)
+        s = f.read()
+    gc.collect()
 
     # use sys time if real time is not provided
     if time_str is None:

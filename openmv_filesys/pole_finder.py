@@ -73,7 +73,8 @@ class PoleSolution(object):
         # iterate through all posibilities, brightest first
         for i in brite_sorted:
             # we are guessing "i" is Polaris for this iteration
-            i.score = []
+            #i.score = []
+            i.score = 0
             i.rotation = 0
             i.rot_ang_sum = 0
             i.rot_dist_sum = 0
@@ -121,14 +122,17 @@ class PoleSolution(object):
                         # all previous (closer-to-Polaris) entries to be ignored on the next loop
                         idx_blobs_start = idx_blobs # doing this will prevent potential out-of-order matches
 
-                        i.score.append(STARS_NEAR_POLARIS[idx_tbl][0]) # save the name to the list of matches (score)
+                        #i.score.append(STARS_NEAR_POLARIS[idx_tbl][0]) # save the name to the list of matches (score)
+                        i.score += 1
                     idx_blobs += 1
                 idx_tbl += 1
         # end of the for loop that goes from brightest to dimmest
         # each entry of that list will now have a "score" (number of matches)
         # find the one that has the most matches
         score_sorted = sorted(brite_sorted, key = sort_score_func, reverse = True)
-        if len(score_sorted[0].score) < SCORE_REQUIRED:
+        #if len(score_sorted[0].score) < SCORE_REQUIRED:
+        self.star_list = None # garbage collect
+        if score_sorted[0].score < SCORE_REQUIRED:
             return False # not enough matches, no solution
 
         self.solved = True
@@ -200,7 +204,8 @@ class PoleSolution(object):
         obj.update({"x": x})
         obj.update({"y": y})
         obj.update({"r": r})
-        obj.update({"cnt": len(self.stars_matched)})
+        #obj.update({"cnt": len(self.stars_matched)})
+        obj.update({"cnt": self.stars_matched})
         obj.update({"pix_per_deg": self.pix_per_deg})
         return obj
 
@@ -224,7 +229,8 @@ def ang_normalize(x):
     return x
 
 def sort_score_func(x):
-    return len(x.score)
+    #return len(x.score)
+    return x.score
 
 """
 def test():

@@ -2,6 +2,7 @@ import micropython
 micropython.opt_level(2)
 
 import sensor, image, pyb, time
+import exclogger
 
 class AstroCam(object):
 
@@ -42,27 +43,38 @@ class AstroCam(object):
                 sensor.set_auto_gain(True)
             else:
                 sensor.set_auto_gain(False, gain_db)
-            self.gain = gain_db
-            sensor.skip_frames(time = 2000)
+            try:
+                sensor.skip_frames(time = 2000)
+            except RuntimeError as exc:
+                exclogger.log_exception(exc)
+                self.gain = -2
+                self.shutter = -2
             self.snap_started = False
 
     def snapshot(self, filename = None):
-        if self.snap_started == True:
-            self.img = self.snapshot_finish()
-        else:
-            self.img = sensor.snapshot()
-        if filename == "auto":
-            filename = "%u_%u_%u.jpg" % (self.fileseq, round(self.gain), self.shutter)
-        self.fileseq += 1
-        if filename is not None:
-            self.img.save(filename, quality = 100)
-        return self.img
+        try:
+            if self.snap_started == True:
+                self.img = self.snapshot_finish()
+            else:
+                self.img = sensor.snapshot()
+            if filename == "auto":
+                filename = "%u_%u_%u.jpg" % (self.fileseq, round(self.gain), self.shutter)
+            self.fileseq += 1
+            if filename is not None:
+                self.img.save(filename, quality = 100)
+            return self.img
+        except RuntimeError as exc:
+            exclogger.log_exception(exc)
+            return None
 
     def snapshot_start(self):
         if self.snap_started == True:
             return
-        sensor.snapshot_start()
-        self.snap_started = True
+        try:
+            sensor.snapshot_start()
+            self.snap_started = True
+        except RuntimeError as exc:
+            exclogger.log_exception(exc)
 
     def snapshot_check(self):
         if self.snap_started == False:
@@ -72,11 +84,14 @@ class AstroCam(object):
     def snapshot_finish(self):
         if self.snap_started == False:
             return None
-        self.img = sensor.snapshot_finish()
+        try:
+            self.img = sensor.snapshot_finish()
+        except RuntimeError as exc:
+            exclogger.log_exception(exc)
+            self.img = None
         self.snap_started = False
         return self.img
 
-"""
     def test_gather(self, shots = 2, gain_start = 0, gain_step = 16, gain_limit = 128, shutter_start = 500000, shutter_step = 250000, shutter_limit = 1500000):
         shot = 0
         rnd  = pyb.rng() % 1000
@@ -99,7 +114,7 @@ class AstroCam(object):
                         return
 
     def test_view(self):
-        self.init(gain_db = 100, shutter_us = 1400000, framesize = sensor.WQXGA2, force_reset = True, flip = True)
+        self.init(gain_db = 0, shutter_us = 10000, framesize = sensor.WQXGA2, force_reset = True, flip = True)
         clock = time.clock()
         while True:
             clock.tick()
@@ -110,4 +125,3 @@ if __name__ == "__main__":
     cam = AstroCam()
     cam.test_view()
     #cam.test_gather()
-"""

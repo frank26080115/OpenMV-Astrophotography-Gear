@@ -6,6 +6,7 @@ import image, sensor
 import array
 import gc
 import blobstar
+import exclogger
 
 EXPO_TOO_LOW      = micropython.const(-1)
 EXPO_JUST_RIGHT   = micropython.const(0)
@@ -45,9 +46,9 @@ def find_stars(img, hist = None, stats = None, force_solve = False):
     too_big  = 0
     for b in blobs:
         accept = True
-        if b.roundness() < 0.2 and b.area() > (5 * 5):
-            too_long += 1
-            accept = False
+        #if b.roundness() < 0.2 and b.area() > (5 * 5):
+        #    too_long += 1
+        #    accept = False
         if b.area() > (25 * 25):
             too_big += 1
             accept = False
@@ -96,7 +97,10 @@ def blob_to_star(b, img, thresh):
         sumn += x * buc
         sumd += buc
         x += 1
-    cx = sumn / sumd
+    if sumd > 0:
+        cx = sumn / sumd
+    else:
+        cx = 0
     cx += xstart
     # calculate weighted center for each axis
     y = 0
@@ -107,7 +111,10 @@ def blob_to_star(b, img, thresh):
         sumn += y * buc
         sumd += buc
         y += 1
-    cy = sumn / sumd
+    if sumd > 0:
+        cy = sumn / sumd
+    else:
+        cy = 0
     cy += ystart
     # approximate radius (should be dividing by 4 but it doesn't really matter)
     r = (w + h) / 3.0

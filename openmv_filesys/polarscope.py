@@ -44,6 +44,7 @@ class PolarScope(object):
         self.settings.update({"gain_hs":     48})
         self.settings.update({"shutter_hs":  500000})
         self.settings.update({"force_solve": False})
+        self.settings.update({"max_stars":   0})
         self.load_settings()
         self.time_mgr.readiness = False
 
@@ -61,8 +62,9 @@ class PolarScope(object):
         self.histogram = None
         self.img_stats = None
         self.stars = []
+        self.max_stars = 0
         self.solution = None
-        self.solutions = [None, None]
+        #self.solutions = [None, None]
         self.locked_solution = None
         if self.portal is not None:
             self.register_http_handlers()
@@ -127,6 +129,8 @@ class PolarScope(object):
             state.update({"solution": False})
         if self.stars is not None:
             state.update({"stars": blobstar.to_jsonobj(self.stars)})
+
+        state.update({"max_stars": self.max_stars})
 
         # diagnostic info
         state.update({"diag_cnt":        self.diag_cnt})
@@ -221,6 +225,8 @@ class PolarScope(object):
                     elif i == "latitude":
                         self.time_mgr.set_location(None, v)
                         self.settings[i] = self.time_mgr.latitude # normalized
+                    elif i == "max_stars":
+                        self.max_stars = v
                 else:
                     print("unknown setting \"%s\": \"%s\"" % (i, str(v)))
             self.save_settings()
@@ -274,15 +280,18 @@ class PolarScope(object):
         self.portal.install_handler("/memory",         self.handle_memory)
 
     def stable_solution(self):
-        if self.solutions[0] is not None and self.solutions[1] is not None and self.solution is not None:
-            if self.solutions[0].solved and self.solutions[1].solved and self.solution.solved:
+        #if self.solutions[0] is not None and self.solutions[1] is not None and self.solution is not None:
+        #    if self.solutions[0].solved and self.solutions[1].solved and self.solution.solved:
+        #        return self.solution
+        if self.solution is not None:
+            if self.solution.solved:
                 return self.solution
         return None
 
     def invalidate_solutions(self):
         self.solution     = None
-        self.solutions[0] = None
-        self.solutions[1] = None
+        #self.solutions[0] = None
+        #self.solutions[1] = None
         self.locked_solution = None
         self.highspeed       = False
 
@@ -301,16 +310,18 @@ class PolarScope(object):
             if self.solution.solve(self.time_mgr.get_polaris()):
                 self.solu_dur_ls = pyb.elapsed_millis(t) # debug solution speed
                 accept = True
+                """
                 if self.solutions[0] is not None:
                     if self.solutions[0].compare(self.solution) == False:
                         accept = False
                 if self.solutions[1] is not None:
                     if self.solutions[1].compare(self.solution) == False:
                         accept = False
+                """
                 if accept:
                     # pop off [1] and insert new solution into buffer
-                    self.solutions[1] = self.solutions[0]
-                    self.solutions[0] = self.solution
+                    #self.solutions[1] = self.solutions[0]
+                    #self.solutions[0] = self.solution
                     self.solution.get_pole_coords() # this caches x and y
                     if self.stable_solution() is not None:
                         self.locked_solution = [self.solution.Polaris.cx, self.solution.Polaris.cy, self.solution.x, self.solution.y, self.solution.get_rotation()]
@@ -364,11 +375,19 @@ class PolarScope(object):
         return True
 
     def solve(self):
+        if self.img is None:
+            return False
         self.histogram = self.img.get_histogram()
         self.img_stats = self.histogram.get_statistics()
+        gc.collect()
         stars, code = star_finder.find_stars(self.img, hist = self.histogram, stats = self.img_stats, force_solve = self.settings["force_solve"])
         self.expo_code = code
         self.stars = stars
+        if len(self.stars) > self.max_stars:
+            self.max_stars = len(self.stars)
+            #self.save_settings()
+            if self.debug:
+                print("max stars %u" % self.max_stars)
         if self.highspeed == False:
             return self.solve_full()
         else: # highspeed = True
@@ -414,8 +433,9 @@ class PolarScope(object):
             elif self.daymode:
                 self.cam.init(gain_db = -1, shutter_us = -1, force_reset = False)
                 self.img = img
-                self.histogram = self.img.get_histogram()
-                self.img_stats = self.histogram.get_statistics()
+                if self.img is not None:
+                    self.histogram = self.img.get_histogram()
+                    self.img_stats = self.histogram.get_statistics()
                 self.cam.snapshot_start()
                 return # this will skip solving
             else: # not day mode or simulate
