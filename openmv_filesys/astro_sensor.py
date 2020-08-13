@@ -1,12 +1,12 @@
 import micropython
 micropython.opt_level(2)
 
-import sensor, image, pyb, time
+import sensor, image, pyb, time, gc
 import exclogger
 
 class AstroCam(object):
 
-    def __init__(self, pixfmt = sensor.GRAYSCALE):
+    def __init__(self, pixfmt = sensor.GRAYSCALE, simulate = None):
         self.pixfmt = pixfmt
         self.gain = -2
         self.shutter = -2
@@ -15,7 +15,24 @@ class AstroCam(object):
         self.fileseq = 1
         self.img = None
 
+        self.simulate = False
+        if simulate is not None:
+            gc.collect()
+            print("about to load simulation file, checking memory")
+            micropython.mem_info(False)
+            print("loading simulation file ...", end="")
+            self.img = image.Image(simulate, copy_to_fb = True)
+            print(" done, alloc and converting ...", end="")
+            self.img = sensor.alloc_extra_fb(self.img.width(), self.img.height(), sensor.RGB565).replace(self.img).to_grayscale()
+            print(" done!")
+            self.simulate = True
+            self.snap_started = False
+
     def init(self, gain_db = 0, shutter_us = 500000, framesize = sensor.WQXGA2, force_reset = True, flip = False):
+        if self.simulate:
+            self.shutter = shutter_us
+            self.snap_started = False
+            return
         if force_reset or self.gain != gain_db or self.shutter != shutter_us or self.framesize != framesize or self.flip != flip:
             sensor.reset()
             sensor.set_pixformat(self.pixfmt)
@@ -52,6 +69,10 @@ class AstroCam(object):
             self.snap_started = False
 
     def snapshot(self, filename = None):
+        if self.simulate:
+            pyb.delay(self.shutter // 1000)
+            self.snap_started = False
+            return self.img
         try:
             if self.snap_started == True:
                 self.img = self.snapshot_finish()
@@ -70,6 +91,10 @@ class AstroCam(object):
     def snapshot_start(self):
         if self.snap_started == True:
             return
+        if self.simulate:
+            self.sim_t = pyb.millis()
+            self.snap_started = True
+            return
         try:
             sensor.snapshot_start()
             self.snap_started = True
@@ -79,11 +104,24 @@ class AstroCam(object):
     def snapshot_check(self):
         if self.snap_started == False:
             return False
+        if self.simulate:
+            dt = pyb.elapsed_millis(self.sim_t)
+            if dt > (self.shutter // 1000):
+                return True
+            else:
+                return False
         return sensor.snapshot_check()
 
     def snapshot_finish(self):
         if self.snap_started == False:
             return None
+        if self.snap_started == False:
+            return False
+        if self.simulate:
+            while self.snapshot_check() == False:
+                gc.collect()
+            self.snap_started = False
+            return self.img
         try:
             self.img = sensor.snapshot_finish()
         except RuntimeError as exc:

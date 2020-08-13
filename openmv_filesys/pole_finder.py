@@ -201,12 +201,14 @@ class PoleSolution(object):
     def to_jsonobj(self):
         x, y, r = self.get_pole_coords()
         obj = {}
-        obj.update({"x": x})
-        obj.update({"y": y})
+        obj.update({"cx": x})
+        obj.update({"cy": y})
         obj.update({"r": r})
         #obj.update({"cnt": len(self.stars_matched)})
         obj.update({"cnt": self.stars_matched})
         obj.update({"pix_per_deg": self.pix_per_deg})
+        obj.update({"px": self.Polaris.cx})
+        obj.update({"py": self.Polaris.cy})
         return obj
 
 def dist_match(x, y):

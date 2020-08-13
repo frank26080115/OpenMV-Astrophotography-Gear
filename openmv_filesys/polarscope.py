@@ -9,11 +9,11 @@ import sensor, image
 
 class PolarScope(object):
 
-    def __init__(self, debug = False):
+    def __init__(self, debug = False, simulate_file = None):
         self.highspeed = False
         self.daymode = False
         self.simulate = False
-        self.cam = astro_sensor.AstroCam()
+        self.cam = astro_sensor.AstroCam(simulate = simulate_file)
         self.cam.init(gain_db = 48, shutter_us = 1500000)
         self.time_mgr = time_location.TimeLocationManager()
 
@@ -119,7 +119,7 @@ class PolarScope(object):
             state.update({"expo_code": self.expo_code})
         stable_solution = self.stable_solution()
         if stable_solution is not None:
-            state.update({"solution": ujson.dumps(stable_solution.to_jsonobj())})
+            state.update({"solution": stable_solution.to_jsonobj()})
             state.update({"star_x": self.locked_solution[0]})
             state.update({"star_y": self.locked_solution[1]})
             state.update({"pole_x": self.locked_solution[2]})
@@ -178,18 +178,6 @@ class PolarScope(object):
         self.daymode = False
         if self.debug:
             print("go night mode")
-        self.reply_ok(client_stream)
-
-    def handle_simulate(self, client_stream, req, headers, content):
-        if self.debug:
-            print("handle_simulate")
-        self.start_simulation()
-        self.reply_ok(client_stream)
-
-    def handle_endsim(self, client_stream, req, headers, content):
-        if self.debug:
-            print("handle_endsim")
-        self.end_simulation()
         self.reply_ok(client_stream)
 
     def handle_updatesetting(self, client_stream, req, headers, content):
@@ -275,8 +263,6 @@ class PolarScope(object):
         self.portal.install_handler("/nightmode",      self.handle_nightmode)
         self.portal.install_handler("/getsettings",    self.handle_getsettings)
         self.portal.install_handler("/getstate",       self.handle_getstate)
-        self.portal.install_handler("/simulate",       self.handle_simulate)
-        self.portal.install_handler("/endsim",         self.handle_endsim)
         self.portal.install_handler("/memory",         self.handle_memory)
 
     def stable_solution(self):
@@ -393,16 +379,6 @@ class PolarScope(object):
         else: # highspeed = True
             return self.solve_fast()
 
-    def start_simulation(self):
-        if self.simulate == False:
-            self.img = None
-        self.simulate = True
-
-    def end_simulation(self):
-        if self.simulate and self.img is not None:
-            sensor.dealloc_extra_fb()
-        self.simulate = False
-
     def task(self):
         gc.collect()
         self.diag_cnt += 1
@@ -413,24 +389,11 @@ class PolarScope(object):
             self.portal.task()
         if self.cam.snapshot_check():
             # camera has finished an exposure
-            img = self.cam.snapshot_finish()
+            self.img = self.cam.snapshot_finish()
             self.frm_cnt += 1
 
-            if self.simulate:
-                # make the camera go fast in simulation mode
-                self.cam.init(gain_db = -1, shutter_us = -1, force_reset = False)
-                if self.img is None:
-                    gc.collect()
-                    print("about to load simulation file, checking memory")
-                    micropython.mem_info(True)
-                    print("loading simulation file ...", end="")
-                    self.img = image.Image("simulate.bmp", copy_to_fb = True)
-                    print(" done, alloc and converting ...", end="")
-                    self.img = sensor.alloc_extra_fb(self.img.width(), self.img.height(), sensor.RGB565).replace(self.img).to_grayscale()
-                    print(" done!")
-                    pass
             # day mode is just auto exposure for testing
-            elif self.daymode:
+            if self.daymode:
                 self.cam.init(gain_db = -1, shutter_us = -1, force_reset = False)
                 self.img = img
                 if self.img is not None:
@@ -438,24 +401,22 @@ class PolarScope(object):
                     self.img_stats = self.histogram.get_statistics()
                 self.cam.snapshot_start()
                 return # this will skip solving
-            else: # not day mode or simulate
-                self.img = img
-                # take the next frame with settings according to mode
-                if self.highspeed == False:
-                    self.tick_ls, self.dur_ls = self.diag_tick(self.t, self.tick_ls, self.dur_ls) # debug loop speed
-                    self.tick_hs = self.t
-                    self.dur_hs = -1
-                    self.cam.init(gain_db = self.settings["gain"], shutter_us = self.settings["shutter"], force_reset = False)
-                else:
-                    self.tick_hs, self.dur_hs = self.diag_tick(self.t, self.tick_hs, self.dur_hs) # debug loop speed
-                    self.tick_ls = self.t
-                    self.dur_ls = -1
-                    self.cam.init(gain_db = self.settings["gain_hs"], shutter_us = self.settings["shutter_hs"], force_reset = False)
+            # take the next frame with settings according to mode
+            if self.highspeed == False:
+                self.tick_ls, self.dur_ls = self.diag_tick(self.t, self.tick_ls, self.dur_ls) # debug loop speed
+                self.tick_hs = self.t
+                self.dur_hs = -1
+                self.cam.init(gain_db = self.settings["gain"], shutter_us = self.settings["shutter"], force_reset = False)
+            else:
+                self.tick_hs, self.dur_hs = self.diag_tick(self.t, self.tick_hs, self.dur_hs) # debug loop speed
+                self.tick_ls = self.t
+                self.dur_ls = -1
+                self.cam.init(gain_db = self.settings["gain_hs"], shutter_us = self.settings["shutter_hs"], force_reset = False)
             self.cam.snapshot_start()
             self.solve()
 
 def main():
-    polarscope = PolarScope(debug = True)
+    polarscope = PolarScope(debug = True, simulate_file = "simulate.bmp")
     while True:
         try:
             polarscope.task()
