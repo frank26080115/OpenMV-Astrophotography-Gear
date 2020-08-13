@@ -308,7 +308,7 @@ class PolarScope(object):
         if self.expo_code == star_finder.EXPO_JUST_RIGHT:
             self.solution = pole_finder.PoleSolution(self.stars)
             if self.solution.solve(self.time_mgr.get_polaris()):
-                self.solu_dur_ls = pyb.elapsed_millis(t) # debug solution speed
+                self.solu_dur_ls = pyb.elapsed_millis(self.t) # debug solution speed
                 accept = True
                 """
                 if self.solutions[0] is not None:
@@ -364,7 +364,7 @@ class PolarScope(object):
             self.locked_solution[2] = x
             self.locked_solution[3] = y
             self.locked_solution[4] = r
-            self.solu_dur_hs = pyb.elapsed_millis(t) # debug solution speed
+            self.solu_dur_hs = pyb.elapsed_millis(self.t) # debug solution speed
         else:
             destroy = True # lost the star for other reasons
 
@@ -406,9 +406,9 @@ class PolarScope(object):
     def task(self):
         gc.collect()
         self.diag_cnt += 1
-        t = pyb.millis()
+        self.t = pyb.millis()
         self.time_mgr.tick(latest_millis = t)
-        self.tick_all, self.dur_all = self.diag_tick(t, self.tick_all, self.dur_all) # debug loop speed
+        self.tick_all, self.dur_all = self.diag_tick(self.t, self.tick_all, self.dur_all) # debug loop speed
         if self.portal is not None:
             self.portal.task()
         if self.cam.snapshot_check():
@@ -442,12 +442,12 @@ class PolarScope(object):
                 self.img = img
                 # take the next frame with settings according to mode
                 if self.highspeed == False:
-                    self.tick_ls, self.dur_ls = self.diag_tick(t, self.tick_ls, self.dur_ls) # debug loop speed
+                    self.tick_ls, self.dur_ls = self.diag_tick(self.t, self.tick_ls, self.dur_ls) # debug loop speed
                     self.tick_hs = t
                     self.dur_hs = -1
                     self.cam.init(gain_db = self.settings["gain"], shutter_us = self.settings["shutter"], force_reset = False)
                 else:
-                    self.tick_hs, self.dur_hs = self.diag_tick(t, self.tick_hs, self.dur_hs) # debug loop speed
+                    self.tick_hs, self.dur_hs = self.diag_tick(self.t, self.tick_hs, self.dur_hs) # debug loop speed
                     self.tick_ls = t
                     self.dur_ls = -1
                     self.cam.init(gain_db = self.settings["gain_hs"], shutter_us = self.settings["shutter_hs"], force_reset = False)
