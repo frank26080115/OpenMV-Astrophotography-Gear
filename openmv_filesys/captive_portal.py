@@ -1,48 +1,59 @@
 import micropython
 micropython.opt_level(2)
 
-import pyb, uos, uio, time
+import pyb, uos, uio, time, gc
 import ubinascii
 import network
 import usocket as socket
 import exclogger
 
+STS_IDLE     = micropython.const(0)
+STS_SERVED   = micropython.const(1)
+STS_KICKED   = micropython.const(-1)
+
 class CaptivePortal(object):
     def __init__(self, ssid = None, password = "1234567890", winc_mode = network.WINC.MODE_AP, winc_security = network.WINC.WEP, debug = False):
         self.winc_mode = winc_mode
         self.winc_security = winc_security
+        self.password = password
+        self.ssid = ssid
+        self.debug = debug
+
+        self.start_wifi()
+
+        self.udps = None
+        self.s = None
+        self.handlers = {}
+        self.list_files()
+
+        self.last_http_time = -1
+
+    def start_wifi(self):
         self.wlan = network.WINC(mode = self.winc_mode)
 
         # generate a SSID if none is provided
-        if ssid is None:
-            ssid = "OpenMV-?"
-        if "?" in ssid: # question mark is replaced with a unique identifier
+        if self.ssid is None:
+            self.ssid = "OpenMV-?"
+        if "?" in self.ssid: # question mark is replaced with a unique identifier
             uidstr = ubinascii.hexlify(pyb.unique_id()).decode("ascii")
-            ssid = ssid.replace("?", uidstr)
-        self.ssid = ssid
+            self.ssid = self.ssid.replace("?", uidstr)
         # limit SSID length
         if len(self.ssid) > 7 + 8:
             self.ssid = self.ssid[0:(7 + 8)]
 
         if self.winc_mode == network.WINC.MODE_AP:
-            self.wlan.start_ap(self.ssid, key = password, security = network.WINC.WEP)
+            self.wlan.start_ap(self.ssid, key = self.password, security = network.WINC.WEP)
         else: # MODE_STA
             # ordinary station mode is provided to speed up testing
-            self.wlan.connect(self.ssid, key = password, security = self.winc_security)
+            self.wlan.connect(self.ssid, key = self.password, security = self.winc_security)
         self.ip = self.wlan.ifconfig()[0]
 
         # provide hardcoded IP address if the one obtained is invalid
         if self.ip == "0.0.0.0":
             self.ip = "192.168.1.1"
 
-        self.debug = debug
         if self.debug:
             print("IP: " + self.ip)
-
-        self.udps = None
-        self.s = None
-        self.handlers = {}
-        self.list_files()
 
     def start_dns(self):
         if self.winc_mode != network.WINC.MODE_AP:
@@ -63,7 +74,7 @@ class CaptivePortal(object):
         try:
             self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM) # TCP
             self.s.bind(('', 80))
-            self.s.listen(5)
+            self.s.listen(3)
             self.s.settimeout(0.1)
             self.need_kill = False
         except OSError as e:
@@ -136,35 +147,39 @@ class CaptivePortal(object):
 
         if f is not None:
             if self.debug:
-                print(", file \"%s\" as \"%s\" size %u" % (fname, content_type, fsize))
-            client_stream.write("HTTP/1.0 200 OK\r\ncontent-type: %s\r\ncache-control: no-cache\r\ncontent-length: %u\r\n\r\n" % (content_type, fsize))
-            # handle large files by reading one chunk at a time
-            while True:
-                x = f.read(1024)
-                if x is None:
-                    break
-                if len(x) > 0:
-                    client_stream.write(x)
-                else:
-                    break
-            f.close()
+                print(", file \"%s\" as \"%s\" size %u ..." % (fname, content_type, fsize), end="")
+            try:
+                client_stream.write("HTTP/1.0 200 OK\r\ncontent-type: %s\r\ncache-control: no-cache\r\ncontent-length: %u\r\n\r\n" % (content_type, fsize))
+                stream_file(client_stream, f)
+            except Exception as exc:
+                exclogger.log_exception(exc)
+
+            try:
+                f.close()
+            except Exception as exc:
+                exclogger.log_exception(exc, to_print = False, to_file = False)
+            if self.debug:
+                print(" done")
         else:
             if self.debug:
                 print(", error 404 \"%s\"" % request_page)
             client_stream.write("HTTP/1.0 404\r\ncontent-type: text/html\r\ncache-control: no-cache\r\n\r\n<html><h1>Error 404</h1><br /><h3>File Not Found</h3><br />%s</html>" % request_page)
 
-        client_stream.close()
+        try:
+            client_stream.close()
+        except Exception as exc:
+            exclogger.log_exception(exc, to_print = False, to_file = False)
 
     def task_dns(self):
         if self.winc_mode != network.WINC.MODE_AP:
-            return # no DNS server if we are not a soft-AP
+            return STS_IDLE # no DNS server if we are not a soft-AP
         # some code borrowed from https://github.com/amora-labs/micropython-captive-portal/blob/master/captive.py
         if self.udps is None:
             self.start_dns()
         try:
             data, addr = self.udps.recvfrom(1024)
             if len(data) <= 0:
-                return False
+                return STS_IDLE
             if self.debug:
                 print("dns rx[%s] %u" % (str(addr), len(data)))
             dominio = ''
@@ -198,7 +213,7 @@ class CaptivePortal(object):
         except Exception as e:
             exclogger.log_exception(e)
             pass
-        return False
+        return STS_IDLE
 
     def task_http(self):
         if self.s is None:
@@ -207,23 +222,28 @@ class CaptivePortal(object):
         try:
             res = self.s.accept()
             self.need_kill = True
-            self.s.settimeout(0.3) # trigger release when done
+            self.s.settimeout(10000)
         except OSError as e:
             #if self.need_kill:
             self.s.close()
             self.s = None
             self.start_http()
-            return False
+            return STS_IDLE
         if res is None:
-            return False
+            return STS_IDLE
         try:
             if self.debug:
                 print("http req[%s]: " % str(res[1]), end="")
+            self.last_http_time = pyb.millis()
             client_sock = res[0]
             client_addr = res[1]
             client_sock.settimeout(10)
             client_stream = client_sock
             req = socket_readline(client_stream)
+            if req is None:
+                if self.debug:
+                    print("None")
+                raise OSError("socket no data")
             if self.debug:
                 print(req)
             req_split = req.split(' ')
@@ -254,7 +274,13 @@ class CaptivePortal(object):
                     self.handlers[request_page](client_stream, req, headers, content)
                 else:
                     self.handle_default(client_stream, req, headers, content)
-            return True
+            self.last_http_time = pyb.millis()
+            try:
+                self.s.settimeout(0.3)
+                client_sock.settimeout(0.3)
+            except Exception as exc:
+                exclogger.log_exception(exc, to_print = False, to_file = False)
+            return STS_SERVED
         except KeyboardInterrupt:
             raise
         except OSError as e:
@@ -264,14 +290,43 @@ class CaptivePortal(object):
         except Exception as e:
             exclogger.log_exception(e)
             pass
-        return False
+        return STS_IDLE
 
     def task(self):
+        if self.last_http_time > 0 and pyb.elapsed_millis(self.last_http_time) > 10000:
+            self.kick()
+            return STS_KICKED
         x = self.task_dns()
         y = self.task_http()
-        if x or y:
-            return True
-        return False
+        if x == STS_SERVED or y == STS_SERVED:
+            return STS_SERVED
+        return STS_IDLE
+
+    def kick(self):
+        self.last_http_time = -1
+        if self.debug:
+            print("server being kicked")
+        if self.s is not None:
+            try:
+                self.s.close()
+            except Exception as exc:
+                exclogger.log_exception(exc, to_print = True, to_file = False)
+            finally:
+                self.s = None
+                self.need_kill = False
+        if self.winc_mode != network.WINC.MODE_AP and self.udps is not None:
+            try:
+                self.udps.close()
+            except Exception as exc:
+                exclogger.log_exception(exc, to_print = True, to_file = False)
+            finally:
+                self.udps = None
+        gc.collect()
+        try:
+            self.start_wifi()
+        except Exception as exc:
+            exclogger.log_exception(exc, fatal = True, reboot = False)
+        gc.collect()
 
 # usocket implementation is missing readline
 def socket_readline(sock):
@@ -317,6 +372,115 @@ def socket_readall(sock):
         if len(x) < chunk:
             return res
     return res
+
+def gen_page(conn, main_file, add_files = [], add_dir = None, debug = False):
+    total_size = 0
+    total_size += uos.stat(main_file)[6]
+    flist = []
+    # find all files required and add them to the list
+    # also estimate the content length
+    if add_dir is not None:
+        try:
+            lst = uos.listdir(add_dir)
+            for i in lst:
+                pt = add_dir + "/" + i
+                if pt not in add_files:
+                    add_files.append(pt)
+        except OSError as exc:
+            exclogger.log_exception(exc)
+    for i in add_files:
+        try:
+            total_size = uos.stat(i)[6] + 200
+            flist.append(i)
+        except OSError as exc:
+            exclogger.log_exception(exc)
+
+    if debug:
+        print("gen_page \"%s\" sz %u files %u ..." % (main_file, total_size, len(flist)), end="")
+
+    conn.write(default_reply_header(content_length = total_size))
+
+    sent = 0
+    seekpos = 0
+    with open(main_file, "rb") as f:
+        headstr = ""
+        while "</title>" not in headstr:
+            headstr += f.read(1).decode("ascii")
+            seekpos += 1
+            sent += 1
+        conn.write(headstr + "\r\n")
+        sent += 2
+    if debug:
+        print("-", end="")
+
+    # trying not to have more than one file open at once
+    for fn in flist:
+        try:
+            with open(fn, "rb") as f:
+                if fn.lower().endswith(".js"):
+                    s = "\r\n<script type=\"text/javascript\">\r\n"
+                    sent += len(s)
+                    conn.write(s)
+                    sent += stream_file(conn, f)
+                    s = "\r\n</script>\r\n"
+                    sent += len(s)
+                    conn.write(s)
+                elif fn.lower().endswith(".css"):
+                    s = "\r\n<style type=\"text/css\">\r\n"
+                    sent += len(s)
+                    conn.write(s)
+                    sent += stream_file(conn, f)
+                    s = "\r\n</style>\r\n"
+                    sent += len(s)
+                    conn.write(s)
+                else:
+                    raise Exception("unsupported file type")
+                if debug:
+                    print("=", end="")
+        except OSError as exc:
+            exclogger.log_exception(exc)
+
+    # send the rest of the file
+    with open(main_file, "rb") as f:
+        f.seek(seekpos)
+        sent += stream_file(conn, f)
+        if debug:
+            print("+", end="")
+
+    # pad the end
+    while sent < total_size - 2:
+        conn.write(" ")
+        sent += 1
+
+    if debug:
+        print(" done!")
+
+    conn.close()
+
+def stream_file(dest, f, bufsz = -1, buflim = 2048):
+    gc.collect()
+    if bufsz <= 0:
+        # handle large files by reading one chunk at a time
+        mf = gc.mem_free()
+        if mf > 0:
+            mf = mf / 4
+        if mf < 32:
+            mf = 32
+        if mf > buflim:
+            mf = buflim
+        mf = int(round(mf))
+    sent = 0
+    while True:
+        x = f.read(mf)
+        if x is None:
+            break
+        xlen = len(x)
+        sent += xlen
+        if xlen > 0:
+            dest.write(x)
+        else:
+            break
+    return sent
 
 def split_get_request(req):
     req_split = req.split(' ')

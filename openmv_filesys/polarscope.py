@@ -7,6 +7,11 @@ import pyb, uos, uio, gc, sys, time, math, ujson
 import network
 import sensor, image
 
+red_led   = pyb.LED(1)
+green_led = pyb.LED(2)
+blue_led  = pyb.LED(3)
+ir_leds   = pyb.LED(4)
+
 class PolarScope(object):
 
     def __init__(self, debug = False, simulate_file = None):
@@ -14,7 +19,7 @@ class PolarScope(object):
         self.daymode = False
         self.simulate = False
         self.cam = astro_sensor.AstroCam(simulate = simulate_file)
-        self.cam.init(gain_db = 48, shutter_us = 1500000)
+        self.cam.init(gain_db = 24, shutter_us = 1500000)
         self.time_mgr = time_location.TimeLocationManager()
 
         self.debug = debug
@@ -37,12 +42,14 @@ class PolarScope(object):
         self.settings.update({"longitude":   self.time_mgr.longitude})
         self.settings.update({"latitude":    self.time_mgr.latitude})
         self.settings.update({"time":        self.time_mgr.get_sec()})
-        self.settings.update({"center_x":    sensor.width() / 2})
-        self.settings.update({"center_y":    sensor.height() / 2})
-        self.settings.update({"gain":        sensor.get_gain_db()})
-        self.settings.update({"shutter":     sensor.get_exposure_us()})
+        self.settings.update({"center_x":    self.cam.width / 2})
+        self.settings.update({"center_y":    self.cam.height / 2})
+        self.settings.update({"gain":        self.cam.gain})
+        self.settings.update({"shutter":     self.cam.shutter})
+        self.settings.update({"thresh":      (0)})
         self.settings.update({"gain_hs":     48})
         self.settings.update({"shutter_hs":  500000})
+        self.settings.update({"thresh_hs":   (0)})
         self.settings.update({"force_solve": False})
         self.settings.update({"max_stars":   0})
         self.load_settings()
@@ -63,12 +70,28 @@ class PolarScope(object):
         self.img_stats = None
         self.stars = []
         self.max_stars = 0
+        self.mem_errs = 0
         self.solution = None
         #self.solutions = [None, None]
         self.locked_solution = None
         if self.portal is not None:
             self.register_http_handlers()
         self.cam.snapshot_start()
+
+    def try_parse_setting(self, v):
+        try: # micropython doesn't have "is_numeric"
+            v = v.lstrip().rstrip()
+            if v.lower() == "false":
+                v = False
+            elif v.lower() == "true":
+                v = True
+            elif "." in v:
+                v = float(v)
+            else:
+                v = int(v)
+        except Exception as exc:
+            exclogger.log_exception(exc, to_print = False, to_file = False)
+        return v
 
     def save_settings(self, filename = "settings.json"):
         if self.debug:
@@ -84,7 +107,7 @@ class PolarScope(object):
             for i in obj.keys():
                 v = obj[i]
                 if i in self.settings:
-                    self.settings[i] = v
+                    self.settings[i] = self.try_parse_setting(v)
                 else:
                     print("extra JSON setting \"%s\": \"%s\"" % (i, str(v)))
         except KeyboardInterrupt:
@@ -125,30 +148,33 @@ class PolarScope(object):
             state.update({"pole_x": self.locked_solution[2]})
             state.update({"pole_y": self.locked_solution[3]})
             state.update({"rotation": self.locked_solution[4]})
+            state.update({"refraction": self.time_mgr.get_refraction() * pole_finder.PIXELS_PER_DEGREE})
         else:
             state.update({"solution": False})
         if self.stars is not None:
             state.update({"stars": blobstar.to_jsonobj(self.stars)})
+        state.update({"polar_clock": self.time_mgr.get_angle()})
 
         state.update({"max_stars": self.max_stars})
 
         # diagnostic info
+        state.update({"frm_cnt":         self.frm_cnt})
         state.update({"diag_cnt":        self.diag_cnt})
-        state.update({"diag_frm_cnt":    self.frm_cnt})
         state.update({"diag_dur_all":    self.dur_all})
         state.update({"diag_dur_ls":     self.dur_ls})
         state.update({"diag_dur_hs":     self.dur_hs})
         state.update({"diag_dur_ls_sol": self.solu_dur_ls})
         state.update({"diag_dur_hs_sol": self.solu_dur_hs})
         if self.img_stats is not None:
-            state.update({"diag_img_mean":  self.img_stats.mean()})
-            state.update({"diag_img_stdev": self.img_stats.stdev()})
-            state.update({"diag_img_max":   self.img_stats.max()})
-            state.update({"diag_img_min":   self.img_stats.min()})
+            state.update({"img_mean":  self.img_stats.mean()})
+            state.update({"img_stdev": self.img_stats.stdev()})
+            state.update({"img_max":   self.img_stats.max()})
+            state.update({"img_min":   self.img_stats.min()})
 
         json_str = ujson.dumps(state)
         client_stream.write(captive_portal.default_reply_header(content_type = "application/json", content_length = len(json_str)) + json_str)
         client_stream.close()
+        red_led.on()
 
     def handle_getsettings(self, client_stream, req, headers, content):
         if self.debug:
@@ -158,15 +184,16 @@ class PolarScope(object):
         client_stream.close()
 
     def handle_highspeed(self, client_stream, req, headers, content):
-        if self.stable_solution() is not None:
-            self.highspeed = True
-            if self.debug:
-                print("go high speed")
-            self.reply_ok(client_stream)
-        else:
-            if self.debug:
-                print("can't go high speed")
-            self.reply_ok(client_stream, sts=False, err="no solution")
+        self.highspeed = True
+        if self.debug:
+            print("go high speed")
+        self.reply_ok(client_stream)
+
+    def handle_lowspeed(self, client_stream, req, headers, content):
+        self.highspeed = False
+        if self.debug:
+            print("go low speed")
+        self.reply_ok(client_stream)
 
     def handle_daymode(self, client_stream, req, headers, content):
         self.daymode = True
@@ -183,25 +210,16 @@ class PolarScope(object):
     def handle_updatesetting(self, client_stream, req, headers, content):
         if self.debug:
             print("handle_updatesetting", end="")
+        need_save = False
         try:
             request_page, request_urlparams = captive_portal.split_get_request(req)
             if self.debug:
                 print(" keys %u" % len(request_urlparams))
             for i in request_urlparams.keys():
                 v = request_urlparams[i]
+                v = self.try_parse_setting(v)
                 if i in self.settings:
-                    v = v.lstrip().rstrip()
-                    try: # micropython doesn't have "is_numeric"
-                        if v.lower() == "false":
-                            v = False
-                        elif v.lower() == "true":
-                            v = True
-                        elif "." in v:
-                            v = float(v)
-                        else:
-                            v = int(v)
-                    except:
-                        pass
+                    need_save = True
                     self.settings[i] = v
                     if self.debug:
                         print("setting \"%s\" value \"%s\"" % (i, str(v)))
@@ -215,9 +233,12 @@ class PolarScope(object):
                         self.settings[i] = self.time_mgr.latitude # normalized
                     elif i == "max_stars":
                         self.max_stars = v
+                elif i == "highspeed":
+                    self.highspeed = (v == True)
                 else:
                     print("unknown setting \"%s\": \"%s\"" % (i, str(v)))
-            self.save_settings()
+            if need_save:
+                self.save_settings()
             self.reply_ok(client_stream)
         except KeyboardInterrupt:
             raise
@@ -253,12 +274,21 @@ class PolarScope(object):
         micropython.mem_info(True)
         self.reply_ok(client_stream)
 
+    def handle_index(self, client_stream, req, headers, content):
+        captive_portal.gen_page(client_stream, "index.htm", add_files = ["web/jquery-ui-1.12.1-darkness.css", "web/jquery-3.5.1.min.js", "web/jquery-ui-1.12.1.min.js", "web/magellan.js"], add_dir = "web", debug = self.debug)
+
     def register_http_handlers(self):
         if self.portal is None:
             return
+        self.portal.install_handler("/",               self.handle_index)
+        self.portal.install_handler("/index.htm",      self.handle_index)
+        self.portal.install_handler("/index.html",     self.handle_index)
         self.portal.install_handler("/getimg",         self.handle_getimg)
+        self.portal.install_handler("/getimg.jpg",     self.handle_getimg)
+        self.portal.install_handler("/getimg.jpeg",    self.handle_getimg)
         self.portal.install_handler("/updatesetting",  self.handle_updatesetting)
         self.portal.install_handler("/highspeed",      self.handle_highspeed)
+        self.portal.install_handler("/lowspeed",       self.handle_lowspeed)
         self.portal.install_handler("/daymode",        self.handle_daymode)
         self.portal.install_handler("/nightmode",      self.handle_nightmode)
         self.portal.install_handler("/getsettings",    self.handle_getsettings)
@@ -279,7 +309,7 @@ class PolarScope(object):
         #self.solutions[0] = None
         #self.solutions[1] = None
         self.locked_solution = None
-        self.highspeed       = False
+        #self.highspeed       = False
 
     def diag_tick(self, now, before, dur):
         dt = now - before
@@ -312,7 +342,7 @@ class PolarScope(object):
                     if self.stable_solution() is not None:
                         self.locked_solution = [self.solution.Polaris.cx, self.solution.Polaris.cy, self.solution.x, self.solution.y, self.solution.get_rotation()]
                         if self.debug and prev_sol is None:
-                            print("new solution! matched %u" % self.solution.stars_matched)
+                            print("new solution! matched %u" % len(self.solution.stars_matched))
                     return True
                 else:
                     # too much movement, invalidate all solutions
@@ -329,28 +359,31 @@ class PolarScope(object):
 
     def solve_fast(self):
         destroy = False
-        if self.expo_code == star_finder.EXPO_JUST_RIGHT and len(self.stars) > 0 and self.locked_solution is not None and destroy == False:
-            # find the brightest star and assume it's Polaris
-            brite_sorted = blobstar.sort_brightness(self.stars)
-            bright_star = brite_sorted[0]
+        if self.expo_code == star_finder.EXPO_JUST_RIGHT and len(self.stars) > 0 and self.locked_solution is not None and self.solution is not None and destroy == False:
+            if self.solution.solved != False:
+                # find the brightest star and assume it's Polaris
+                brite_sorted = blobstar.sort_brightness(self.stars)
+                bright_star = brite_sorted[0]
 
-            # how much did it move?
-            dx = bright_star.cx - self.locked_solution[0]
-            dy = bright_star.cy - self.locked_solution[1]
+                # how much did it move?
+                dx = bright_star.cx - self.locked_solution[0]
+                dy = bright_star.cy - self.locked_solution[1]
 
-            # check if there's too much movement for one frame
-            lim = sensor.width() / 5
-            if abs(dx) > lim or abs(dy) > lim:
-                destroy = True
+                # check if there's too much movement for one frame
+                lim = sensor.width() / 5
+                if abs(dx) > lim or abs(dy) > lim:
+                    destroy = True
 
-            # update state for next frame comparison
-            self.locked_solution[0] += dx
-            self.locked_solution[1] += dy
-            x, y, r = self.solution.get_pole_coords_for(bright_star)
-            self.locked_solution[2] = x
-            self.locked_solution[3] = y
-            self.locked_solution[4] = r
-            self.solu_dur_hs = pyb.elapsed_millis(self.t) # debug solution speed
+                # update state for next frame comparison
+                self.locked_solution[0] += dx
+                self.locked_solution[1] += dy
+                x, y, r = self.solution.get_pole_coords_for(bright_star)
+                self.locked_solution[2] = x
+                self.locked_solution[3] = y
+                self.locked_solution[4] = r
+                self.solu_dur_hs = pyb.elapsed_millis(self.t) # debug solution speed
+            else:
+                destroy = True # lost the star for other reasons
         else:
             destroy = True # lost the star for other reasons
 
@@ -366,9 +399,14 @@ class PolarScope(object):
         self.histogram = self.img.get_histogram()
         self.img_stats = self.histogram.get_statistics()
         gc.collect()
-        stars, code = star_finder.find_stars(self.img, hist = self.histogram, stats = self.img_stats, force_solve = self.settings["force_solve"])
+        thresh_idx = "thresh"
+        if self.highspeed:
+            thresh_idx = "thresh_hs"
+        stars, code = star_finder.find_stars(self.img, hist = self.histogram, stats = self.img_stats, thresh = self.settings[thresh_idx], force_solve = self.settings["force_solve"])
         self.expo_code = code
         self.stars = stars
+        if self.expo_code == star_finder.EXPO_MEMORY_ERR:
+            self.mem_errs += 1
         if len(self.stars) > self.max_stars:
             self.max_stars = len(self.stars)
             #self.save_settings()
@@ -385,8 +423,16 @@ class PolarScope(object):
         self.t = pyb.millis()
         self.time_mgr.tick(latest_millis = self.t)
         self.tick_all, self.dur_all = self.diag_tick(self.t, self.tick_all, self.dur_all) # debug loop speed
+
+        if self.debug:
+            if (self.diag_cnt % 20) == 0:
+                print("tick %u" % self.diag_cnt)
+
         if self.portal is not None:
-            self.portal.task()
+            ret = self.portal.task()
+            if ret == captive_portal.STS_KICKED:
+                red_led.off()
+
         if self.cam.snapshot_check():
             # camera has finished an exposure
             self.img = self.cam.snapshot_finish()
@@ -400,6 +446,7 @@ class PolarScope(object):
                     self.histogram = self.img.get_histogram()
                     self.img_stats = self.histogram.get_statistics()
                 self.cam.snapshot_start()
+                green_led.toggle()
                 return # this will skip solving
             # take the next frame with settings according to mode
             if self.highspeed == False:
@@ -413,6 +460,7 @@ class PolarScope(object):
                 self.dur_ls = -1
                 self.cam.init(gain_db = self.settings["gain_hs"], shutter_us = self.settings["shutter_hs"], force_reset = False)
             self.cam.snapshot_start()
+            green_led.toggle()
             self.solve()
 
 def main():

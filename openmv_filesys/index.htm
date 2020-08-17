@@ -1,0 +1,567 @@
+<html>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="initial-scale=1" />
+<title>OpenMV PolarScope</title>
+
+<style type="text/css">
+body
+{
+    background-color: #000;
+    color: #EEE;
+    font-size: 10pt;
+}
+</style>
+
+<script type="text/javascript">
+
+var settings = null;
+var updateQueue = [];
+var updatePending = [];
+var prev_frm = -1;
+var needReloadSvgSize = false;
+var statusUpdateTimer;
+
+var ghost = null;
+var pre_ghost = null;
+var ghost_results = null;
+
+function loadSettings()
+{
+    $.ajax({
+        dataType: "json",
+        url: "getsettings",
+        data: null,
+        success: function(data) {
+            console.log("settings retrieved");
+            console.log(data);
+            settings = data;
+            try {
+                var multi = 10000.0;
+                document.getElementById("txt_location").value = (Math.round((settings["latitude"] + Number.EPSILON) * multi) / multi).toString() + " , " + (Math.round((settings["longitude"] + Number.EPSILON) * multi) / multi).toString();
+            }
+            catch (e) {
+                console.log("cannot parse location from settings: " + e.toString());
+            }
+            onLoadAll();
+        },
+        fail: function(jqxhr, textStatus, error) {
+            console.log("getsettings failed");
+            console.log(txtStatus);
+            console.log(error);
+            document.getElementById("loading").style.display        = "none";
+            document.getElementById("loading_failed").style.display = "block";
+            document.getElementById("showme").style.display         = "none";
+        },
+        error: function() {
+            console.log("getsettings error");
+            document.getElementById("loading").style.display        = "none";
+            document.getElementById("loading_failed").style.display = "block";
+            document.getElementById("showme").style.display         = "none";
+        }
+    });
+}
+
+function showPosition(position) {
+    console.log(position);
+    // this doesn't work without SSL
+}
+
+function startSendSettings()
+{
+    var i, ql = updateQueue.length;
+    var str = "";
+    for (i = 0; i < ql; i++)
+    {
+        var k = updateQueue[i];
+        try {
+            var ap = k + "=" + settings[k];
+            if (i != 0) {
+                str += "&";
+            }
+            str += ap;
+            if (updatePending.includes(k) == false) {
+                updatePending.push(k);
+            }
+        }
+        catch (e) {
+            
+        }
+    }
+    updateQueue = [];
+    onSettingErr = function () {
+        updatePending.forEach(function(ele) {
+            if (updateQueue.includes(ele) == false) {
+                updateQueue.push(ele);
+            }
+        });
+        updatePending = [];
+        startStatusUpdate();
+    };
+
+    var url = "/updatesettings?" + str;
+    console.log(str);
+
+    $.get({
+        url: url,
+        success: function() {
+            updatePending = [];
+            startStatusUpdate();
+        },
+        fail:  function () { onSettingErr(); },
+        error: function () { onSettingErr(); }
+    });
+}
+
+function startStatusUpdate() {
+    $.ajax({
+        dataType: "json",
+        url: "getstate",
+        success: endStatusUpdate,
+        fail: failStatusUpdate,
+        error: errorStatusUpdate,
+        timeout: 5000
+    });
+}
+
+function endStatusUpdate(obj) {
+    console.log("status: " + obj);
+
+    document.getElementById("connection_lost").style.display = "none";
+    document.getElementById("showme").style.display = "block";
+
+    var nextSts;
+    if (obj["highspeed"] == false) {
+        nextSts = settings["shutter"] / 2;
+    }
+    else {
+        nextSts = settings["shutter_hs"] / 2;
+    }
+    nextSts /= 1000;
+    setTimeout(() => { startStatusUpdate(); }, nextSts);
+    updateTime();
+
+    if (prev_frm == obj["frm_cnt"] && needReloadSvgSize == false) {
+        return;
+    }
+    prev_frm = obj["diag_frm_cnt"];
+
+    var stars = obj["stars"];
+    var star_cnt = stars.length;
+
+    var stats_str = "num of stars: " + star_cnt.toString() + "&nbsp;&nbsp;&nbsp;&nbsp;";
+
+    stats_str += "image mean: "  + Math.round(obj["img_mean"]).toString() + "/255    \t";
+    stats_str += "image stdev: " + Math.round(obj["img_stdev"]).toString() + "/255    \t";
+    stats_str += "image max: " + Math.round(obj["img_max"]).toString() + "/255    \t";
+    stats_str += "image min: " + Math.round(obj["img_min"]).toString() + "/255    \t";
+    stats_str += "exposure code: ";
+    var exposure_code = obj["expo_code"];
+    stats_str += getExposureCode(exposure_code);
+    while (stats_str.includes(" ")) {
+        stats_str = stats_str.replace(" ", "&nbsp;");
+    }
+    document.getElementById("div_histogram").innerHTML = stats_str;
+
+    ghost_results = math_getGhostResults(obj, ghost);
+    var canCalibrate = pre_ghost != null;
+    if (ghost_results != null)
+    {
+        if (ghost_results.cent_x != null && ghost_results.cent_x != 0)
+        {
+            if (ghost_results.cent_x < dataw * 0.33 || ghost_results.cent_x > dataw * 0.67) {
+                canCalibrate = false;
+            }
+            if (ghost_results.cent_y < datah * 0.33 || ghost_results.cent_y > datah * 0.67) {
+                canCalibrate = false;
+            }
+            if (math_isNear90Apart(ghost_results.angle, 15) == false) {
+                canCalibrate = false;
+            }
+        }
+        else {
+            canCalibrate = false;
+        }
+    }
+
+    var curCalDataEle = document.getElementById("div_curdata");
+    if (obj["solution"] && obj["star_x"] && obj["star_y"] && obj["pole_x"] && obj["pole_y"])
+    {
+        var s = "Polaris = (" + obj["star_x"] + ", " + obj["star_y"] + ")  ;  NCP = (" + obj["pole_x"] + ", " + obj["pole_y"] + ")";
+        if (canCalibrate == false && ghost != null) {
+            s += " ; cannot calibrate with this";
+        }
+        curCalDataEle.innerHTML = s;
+        pre_ghost = {star_x: obj["star_x"], star_y: obj["star_y"], pole_x: obj["pole_x"], pole_y: obj["pole_y"]};
+        $("#btn_regimg" ).button( "option", "disabled", false );
+    }
+    else
+    {
+        curCalDataEle.innerHTML = "nothing";
+        pre_ghost = null;
+        canCalibrate = false;
+        $("#btn_regimg" ).button( "option", "disabled", true );
+    }
+
+    var ghostDataEle = document.getElementById("div_caldata");
+    if (ghost != null)
+    {
+        ghostDataEle.innerHTML = "Polaris = (" + ghost.star_x + ", " + ghost.star_y + ")  ;  NCP = (" + ghost.pole_x + ", " + ghost.pole_y + ")";
+        $("#btn_clearregimg" ).button( "option", "disabled",  false);
+    }
+    else
+    {
+        ghostDataEle.innerHTML = "nothing";
+        canCalibrate = false;
+        $("#btn_clearregimg" ).button( "option", "disabled", true );
+    }
+
+    $("#btn_calibrate" ).button( "option", "disabled", canCalibrate == false );
+
+    var imgdiv = document.getElementById("viewme");
+    var zoom = 1;
+    if ($("#viewmode-2").prop("checked")) {
+        zoom = 2;
+    }
+    if ($("#viewmode-3").prop("checked")) {
+        zoom = 4;
+    }
+    if ($("#viewmode-4").prop("checked")) {
+        zoom = 8;
+    }
+    var svg = draw_svg(obj, imgdiv, zoom, needReloadSvgSize, false, null, ghost_results);
+    imgdiv.appendChild(svg);
+    needReloadSvgSize = false;
+}
+
+function updateTime() {
+    var newEpoch = Date.UTC(2000, 1, 1); 
+    date = new Date();
+    var nowEpoch = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), date.getUTCHours(), date.getUTCMinutes(), date.getUTCSeconds());
+    nowEpoch -= newEpoch;
+    nowEpoch = Math.round(nowEpoch / 1000.0);
+    document.getElementById("span_utc_time").innerHTML = date.toUTCString();
+    document.getElementById("span_utc_time_epoch").innerHTML = nowEpoch.toString();
+    return nowEpoch;
+}
+
+function errorStatusUpdate() {
+    console.log("getstate error\r\n");
+    document.getElementById("connection_lost").style.display = "block";
+    setTimeout(() => { startStatusUpdate(); }, 5000);
+    updateTime();
+}
+
+function failStatusUpdate(jqxhr, textStatus, error) {
+    console.log("getstate failed\r\n" + textStatus.toString() + "\r\n" + error.toString());
+    document.getElementById("connection_lost").style.display = "block";
+    setTimeout(() => { startStatusUpdate(); }, 5000);
+    updateTime();
+}
+
+function getExposureCode(exposure_code) {
+    if (exposure_code == 0) {
+        return "correct";
+    }
+    else if (exposure_code == -1) {
+        return "too dark";
+    }
+    else if (exposure_code == 1) {
+        return "too bright";
+    }
+    else if (exposure_code == 2) {
+        return "too noisy";
+    }
+    else if (exposure_code == 3) {
+        return "movement";
+    }
+    else if (exposure_code == 4) {
+        return "big blob";
+    }
+    else if (exposure_code == 5) {
+        return "too many stars";
+    }
+    else if (exposure_code == 6) {
+        return "INTERNAL MEMORY ERROR";
+    }
+    return "unknown";
+}
+
+function getLocation() {
+    var xele = document.getElementById("txt_location");
+    var x = xele.value;
+    var split;
+    if (x.includes(",")) {
+        split = x.split(",");
+    }
+    else if (x.includes(";")) {
+        split = x.split(";");
+    }
+    else if (x.includes("/")) {
+        split = x.split("/");
+    }
+    else if (x.includes("\t")) {
+        split = x.split("\t");
+    }
+    else {
+        xele.style.backgroundColor = "pink";
+        return false;
+    }
+    if (split.length != 2) {
+        xele.style.backgroundColor = "pink";
+        return false;
+    }
+    var s0 = split[0].trim().toUpperCase();
+    var s1 = split[1].trim().toUpperCase();
+    if ((s0.includes("N") || s0.includes("S")) && (s1.includes("E") || s1.includes("W"))) {
+        var s3 = s0;
+        s0 = s1;
+        s1 = s3;
+    }
+    var latitude  = magellan(s0).latitude();
+    var longitude = magellan(s1).longitude();
+    if (longitude == null || latitude == null) {
+        xele.style.backgroundColor = "pink";
+        return false;
+    }
+    xele.style.backgroundColor = "";
+    return [parseFloat(longitude.toDD()), parseFloat(latitude.toDD())];
+}
+
+function queueSettingsUpdate(key) {
+    if (updateQueue.includes(key) == false) {
+        updateQueue.push(key);
+        console.log("queueing setting update for " + key);
+    }
+}
+
+function makeSlider(id, minval, maxval, defval, stepval, slide_func)
+{
+    if (defval < minval) {
+        defval = minval;
+    }
+    if (defval > maxval) {
+        defval = maxval;
+    }
+
+    var handle = $( "#" + id + "_handle" );
+    $( "#" + id ).slider({
+      create: function() {
+        handle.text( $( this ).slider( "value" ) );
+      },
+      min: minval,
+      max: maxval,
+      step: stepval,
+      value: defval,
+      slide: function( event, ui ) {
+        handle.text( ui.value );
+        if (slide_func) {
+            slide_func(this, event, ui);
+        }
+      }
+    });
+}
+
+function onLoadAll()
+{
+    document.getElementById("loading").style.display = "none";
+    $( "#accordion" ).accordion({heightStyle: "content"});
+
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(showPosition);
+        // this doesn't work without SSL
+    }
+    settings["time"] = updateTime();
+    queueSettingsUpdate("time");
+
+    $( "#fldset_zoom  input" ).checkboxradio();
+    $( "#viewmode-1").prop("checked", true).checkboxradio("refresh");
+    $( "#fldset_speed input" ).checkboxradio();
+    $( "#speedmode-3").prop("checked", true).checkboxradio("refresh");
+
+    makeSlider("slider_gain_slow", 0, 128, settings["gain"], 8, function(obj, event, ui) {
+        console.log("slider_gain_slow: " + ui.value);
+    });
+    makeSlider("slider_shutter_slow", 0, 1500, settings["shutter"] / 1000, 100, function(obj, event, ui) {
+        console.log("slider_shutter_slow: " + ui.value);
+    });
+    makeSlider("slider_thresh_slow", 0, 255, settings["thresh"], 1, function(obj, event, ui) {
+        console.log("slider_thresh_slow: " + ui.value);
+    });
+    makeSlider("slider_gain_fast", 0, 128, settings["gain_hs"], 8, function(obj, event, ui) {
+        console.log("slider_gain_fast: " + ui.value);
+    });
+    makeSlider("slider_shutter_fast", 0, 1500, settings["shutter_hs"] / 1000, 100, function(obj, event, ui) {
+        console.log("slider_shutter_fast: " + ui.value);
+    });
+    makeSlider("slider_thresh_fast", 0, 255, settings["thresh_hs"], 1, function(obj, event, ui) {
+        console.log("slider_thresh_fast: " + ui.value);
+    });
+
+    $("#btn_time_update" ).button().click(function( event ) {
+        console.log("click btn_time_update");
+        settings["time"] = updateTime();
+        queueSettingsUpdate("time");
+    });
+
+    $("#btn_location_update" ).button().click(function( event ) {
+        console.log("click btn_location_update");
+        var x = getLocation();
+        if (x != false) {
+            console.log(x[0] + " ; " + x[1]);
+            settings["longitude"] = x[0];
+            settings["latitude"] = x[1];
+            document.getElementById("txt_location").style.backgroundColor = "#7FAF00";
+            settings["time"] = updateTime();
+            queueSettingsUpdate("time");
+            queueSettingsUpdate("longitude");
+            queueSettingsUpdate("latitude");
+        }
+    });
+
+    $("#btn_regimg" ).button().click(function( event ) {
+        console.log("click btn_regimg");
+        ghost = pre_ghost;
+        // calibrate button is enabled when the solution is checked against
+    });
+
+    $("#btn_clearregimg" ).button().click(function( event ) {
+        console.log("click btn_clearregimg");
+        ghost = null;
+        pre_ghost = null;
+        $("#btn_calibrate" ).button( "option", "disabled", true );
+        document.getElementById("div_caldata").innerHTML = "nothing";
+    });
+
+    $("#btn_calibrate" ).button().click(function( event ) {
+        console.log("click btn_calibrate");
+        if (ghost_results != null)
+        {
+            if (ghost_results.cent_x != 0 && ghost_results.cent_x != null && ghost_results.cent_y != 0 && ghost_results.cent_y != null)
+            {
+                if (math_isNear90Apart(ghost_results.angle, 15) == false)
+                {
+                    settings["center_x"] = ghost_results.cent_x;
+                    settings["center_y"] = ghost_results.cent_y;
+                    queueSettingsUpdate("center_x");
+                    queueSettingsUpdate("center_y");
+                    alert("calibration done!");
+                }
+                else
+                {
+                    alert("ERROR: angle for calibration is bad!");
+                }
+            }
+            else {
+                alert("ERROR: no solution for calibration!");
+            }
+        }
+        else {
+            alert("ERROR: no solution for calibration!");
+        }
+    });
+
+    document.getElementById("txt_location").onchange = function() {
+        getLocation(); // just to validate and colorize
+    };
+
+    $(window).on('resize', function(e) {
+        needReloadSvgSize = true;
+    });
+
+    setTimeout(() => { startStatusUpdate(); }, 1000);
+}
+
+loadSettings(); // this will trigger 
+
+</script>
+
+</head>
+<body>
+<div id="loading"><h2>OpenMV PolarScope</h2><br /><h2>Loading, Please Wait!</h2></div>
+<div id="loading_failed" style="display:none;"><h1>Loading FAILED! Please refresh the page!</h1></div>
+<div id="showme" style="display:none;">
+
+<div style="width:100%"><fieldset style="padding-top: 1em;"><legend>OpenMV PolarScope</legend><div id="viewme" style="width:100%; padding: 0 0 0 0; margin: 0 0 0 0;">&nbsp;&nbsp;Please wait for image...</div></fieldset></div>
+
+<div id="info"></div>
+
+<div id="connection_lost" class="ui-widget" style="display: none;"><div id="connection_lost_inner" class="ui-state-error ui-corner-all .ui-state-error-text" ><p>&nbsp;&nbsp;Connection LOST! Attempting to re-establish...</p></div></div>
+
+<div id="accordion">
+  <h3>View Mode</h3>
+  <div>
+    <div><fieldset id="fldset_zoom"><legend>Zoom</legend><form>
+    <label for="viewmode-1">1x</label>
+    <input type="radio" name="viewmode-1" id="viewmode-1" />
+    <label for="viewmode-2">2x</label>
+    <input type="radio" name="viewmode-1" id="viewmode-2" />
+    <label for="viewmode-3">4x</label>
+    <input type="radio" name="viewmode-1" id="viewmode-3" />
+    <label for="viewmode-4">8x</label>
+    <input type="radio" name="viewmode-1" id="viewmode-4" />
+    </form></fieldset></div>
+    <div><fieldset id="fldset_speed"><legend>Speed</legend><form>
+    <label for="speedmode-1">Slow (real image)</label>
+    <input type="radio" name="speedmode-1" id="speedmode-1" />
+    <label for="speedmode-2">Slow (where am I?)</label>
+    <input type="radio" name="speedmode-1" id="speedmode-2" />
+    <label for="speedmode-3">Normal</label>
+    <input type="radio" name="speedmode-1" id="speedmode-3" />
+    <label for="speedmode-4">Fast</label>
+    <input type="radio" name="speedmode-1" id="speedmode-4" />
+    </form></fieldset></div>
+    <p>The normal mode will identify Polaris and the position of the North Celestial Pole (NCP) by pattern-matching the stars around it. The fast mode will assume the brightest star is Polaris, and track the NCP using previous data, making it easy to make adjustments on your mount. The real image mode is used to check exposure and focus. The "where am I?" mode will attempt to identify other stars in the view by searching through a large star database. Zoom is only supported for the normal and fast modes. For the most precise alignment, please use the available zoom level buttons, not finger-pinch (use finger-pinch to check exposure and focus).</p>
+  </div>
+  <h3>Center Calibration</h3>
+  <div>
+    <p>The center of the camera view may not be perfectly aligned with the center-of-rotation of your star tracker. Two images of Polaris is required to calibrate the center-of-rotation. For the best result, the two images should be rotated about 90&deg; apart, you should NOT already be polar-aligned, and DO NOT start off pointed exactly on Polaris. Calibration will also not work if it's already perfectly calibrated.</p>
+    <p>To start, rotate your star tracker's Right-Ascension (RA) to a position towards the west. Register the data in "First Image Data" when you are satisfied. Then, rotate your star tracker's RA about 90&deg; towards the east. Click the "calibrate" button when you are satisfied.</p>
+    <p>Avoid using your hands to make these movements, use electronic control if possible. Do not move your tripod or adjust your mount during these movements. If the center-of-rotation is too far away from the center-of-view, you may need to adjust the mounting of the camera.</p>
+    <div><fieldset id="fldset_curdata"><legend>Current Image Data</legend>
+        <div id="div_curdata">nothing yet</div>
+    </fieldset></div>
+    <div><fieldset id="fldset_caldata"><legend>First Image Data</legend>
+        <div id="div_caldata">nothing yet</div>
+    </fieldset></div>
+    <div><button id="btn_regimg">Register Image Data</button>&nbsp;&nbsp;<button id="btn_calibrate">Calibrate</button>&nbsp;&nbsp;<button id="btn_clearregimg">Clear Data</button></div>
+  </div>
+  <h3>Time and Location</h3>
+  <div>
+    <div><fieldset><legend>Time and Date</legend><div><p>UTC Time: <span id="span_utc_time"></span></p><p>Epoch Seconds: <span id="span_utc_time_epoch"></span></p><p><button id="btn_time_update">Update</button></p></div></fieldset></div>
+    <div><fieldset><legend>Location</legend><div><p>type in or paste in coordinates</p><p>latitude, longitude</p><p>comma separated, multiple formats supported (automatically detected)</p><p><input type="text" name="txt_location" id="txt_location" style="width: 100%;" /><button id="btn_location_update">Update</button></p></div></fieldset></div>
+    <p>The time and date information is used to calculate the position of Polaris while compensating for the very slow wobble of the Earth's rotation axis. The location information is used to help determine the atmospheric refraction compensation required.</p>
+  </div>
+  <h3>Camera Exposure</h3>
+  <div>
+    <div><fieldset><legend>Statistics</legend>
+    <div id="div_histogram"></div>
+    </fieldset></div>
+    <div><fieldset><legend>Gain - Slow Mode: <span id="slider_gain_slow_handle"></span> dB</legend>
+        <div id="slider_gain_slow"></div>
+    </fieldset></div>
+    <div><fieldset><legend>Shutter - Slow Mode: <span id="slider_shutter_slow_handle"></span> ms</legend>
+        <div id="slider_shutter_slow"></div>
+    </fieldset></div>
+    <div><fieldset><legend>Star Threshold - Slow Mode: <span id="slider_thresh_slow_handle"></span>/255</legend>
+        <div id="slider_thresh_slow"></div>
+    </fieldset></div>
+    <div><fieldset><legend>Gain - Fast Mode: <span id="slider_gain_fast_handle"></span> dB</legend>
+        <div id="slider_gain_fast"></div>
+    </fieldset></div>
+    <div><fieldset><legend>Shutter - Fast Mode: <span id="slider_shutter_fast_handle"></span> ms</legend>
+        <div id="slider_shutter_fast"></div>
+    </fieldset></div>
+    <div><fieldset><legend>Star Threshold - Fast Mode: <span id="slider_thresh_fast_handle"></span>/255</legend>
+        <div id="slider_thresh_fast"></div>
+    </fieldset></div>
+  </div>
+  <h3>Debug</h3>
+  <div>
+    <div><fieldset id="fldset_debug_settings"></fieldset></div>
+    <div><fieldset id="fldset_debug_status"></fieldset></div>
+  </div>
+</div><!-- accordion -->
+</div><!-- showme -->
+</body>
+</html>

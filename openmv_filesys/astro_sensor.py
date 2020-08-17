@@ -18,8 +18,8 @@ class AstroCam(object):
         self.simulate = False
         if simulate is not None:
             gc.collect()
-            print("about to load simulation file, checking memory")
-            micropython.mem_info(False)
+            #print("about to load simulation file, checking memory")
+            #micropython.mem_info(False)
             print("loading simulation file ...", end="")
             self.img = image.Image(simulate, copy_to_fb = True)
             print(" done, alloc and converting ...", end="")
@@ -27,10 +27,13 @@ class AstroCam(object):
             print(" done!")
             self.simulate = True
             self.snap_started = False
+            self.width = self.img.width()
+            self.height = self.img.height()
 
     def init(self, gain_db = 0, shutter_us = 500000, framesize = sensor.WQXGA2, force_reset = True, flip = False):
         if self.simulate:
             self.shutter = shutter_us
+            self.gain = gain_db
             self.snap_started = False
             return
         if force_reset or self.gain != gain_db or self.shutter != shutter_us or self.framesize != framesize or self.flip != flip:
@@ -60,8 +63,11 @@ class AstroCam(object):
                 sensor.set_auto_gain(True)
             else:
                 sensor.set_auto_gain(False, gain_db)
+            self.gain = gain_db
             try:
                 sensor.skip_frames(time = 2000)
+                self.width = sensor.width()
+                self.height = sensor.height()
             except RuntimeError as exc:
                 exclogger.log_exception(exc)
                 self.gain = -2
@@ -152,7 +158,7 @@ class AstroCam(object):
                         return
 
     def test_view(self):
-        self.init(gain_db = 0, shutter_us = 10000, framesize = sensor.WQXGA2, force_reset = True, flip = True)
+        self.init(gain_db = 48, shutter_us = 1000000, framesize = sensor.WQXGA2, force_reset = True, flip = True)
         clock = time.clock()
         while True:
             clock.tick()

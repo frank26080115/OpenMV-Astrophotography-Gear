@@ -14,8 +14,10 @@ EXPO_TOO_HIGH     = micropython.const(1)
 EXPO_TOO_NOISY    = micropython.const(2)
 EXPO_MOVEMENT     = micropython.const(3)
 EXPO_TOO_BIG      = micropython.const(4)
+EXPO_TOO_MANY     = micropython.const(5)
+EXPO_MEMORY_ERR   = micropython.const(6)
 
-def find_stars(img, hist = None, stats = None, force_solve = False):
+def find_stars(img, hist = None, stats = None, thresh = 0, region = None, force_solve = False):
 
     # histogram and statistics might be computationally costly, use cached results if available
     if hist is None:
@@ -24,7 +26,9 @@ def find_stars(img, hist = None, stats = None, force_solve = False):
         stats = hist.get_statistics()
 
     if force_solve == False:
+        # force_solve is to test performance
         # check the quality
+        # this prevents the later steps from running out of memory due to false blobs
         if stats.mean() > 60:
             return [], EXPO_TOO_HIGH
         if stats.stdev() >= 7:
@@ -33,14 +37,26 @@ def find_stars(img, hist = None, stats = None, force_solve = False):
             return [], EXPO_TOO_LOW
 
     # this threshold was tested in a photo editor first
-    thresh = stats.mean() * 3
+    thresh_a = stats.mean() * 3
+    if thresh < thresh_a:
+        thresh = thresh_a
+
+    if region is None:
+        region = (0, 0, img.width(), img.height())
+
+    # custom firmware supports negative area for inverted area threshold
+    max_star_width = int(35)
+    area = int(max_star_width * max_star_width)
+    maxpix = int(round(((float(max_star_width) / 2.0) ** 2) * 3.14159))
+
     gc.collect()
-    blobs = []
     try:
-        blobs = img.find_blobs([(thresh, 255)], merge = True)
+        blobs = img.find_blobs([(thresh, 255)], merge = False, x_stride = 2, y_stride = 2, roi = region, area_threshold = -area, pixel_threshold = -maxpix, width_threshold = -max_star_width, height_threshold = -max_star_width)
     except MemoryError as exc:
+        print("MEMORY ERROR from find_blobs")
         exclogger.log_exception(exc, to_file = False)
-        micropython.mem_info(True)
+        #micropython.mem_info(True)
+        return [], EXPO_MEMORY_ERR
     stars = []
     too_long = 0
     too_big  = 0
@@ -49,6 +65,7 @@ def find_stars(img, hist = None, stats = None, force_solve = False):
         #if b.roundness() < 0.2 and b.area() > (5 * 5):
         #    too_long += 1
         #    accept = False
+        ## the reduced lightweight firmware cannot calculate roundness
         if b.area() > (25 * 25):
             too_big += 1
             accept = False
@@ -59,6 +76,13 @@ def find_stars(img, hist = None, stats = None, force_solve = False):
             return stars, EXPO_TOO_BIG
         if too_long > len(stars):
             return stars, EXPO_MOVEMENT
+        if len(stars) > 125:
+            # we have a database of around 20 stars
+            # only 4 are needed for a solution
+            # if you see 30, that's a really really good exposure but unlikely in all conditions
+            # above 150 you are likely to run into memory limits if it increases
+            # return this as a warning
+            return stars, EXPO_TOO_MANY
     return stars, EXPO_JUST_RIGHT
 
 def blob_to_star(b, img, thresh):

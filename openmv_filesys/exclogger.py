@@ -1,6 +1,6 @@
 import micropython, sys, uos, uio, pyb, gc
 
-def log_exception(exc, time_str = "", to_print = True, to_file = True, fatal = False):
+def log_exception(exc, time_str = "", to_print = True, to_file = True, fatal = False, reboot = False):
 
     # use built-in exception formatter
     with uio.StringIO(1024) as f:
@@ -56,6 +56,9 @@ def log_exception(exc, time_str = "", to_print = True, to_file = True, fatal = F
                 except OSError:
                     pass
                 continue
+    if reboot:
+        import machine
+        machine.reset()
     if fatal or "IDE interrupt" in s:
         raise exc
     return headstr + "\r\n" + s
