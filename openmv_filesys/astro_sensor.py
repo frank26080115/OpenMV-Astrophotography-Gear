@@ -158,7 +158,7 @@ class AstroCam(object):
                         return
 
     def test_view(self):
-        self.init(gain_db = 48, shutter_us = 1000000, framesize = sensor.WQXGA2, force_reset = True, flip = True)
+        self.init(gain_db = -1, shutter_us = -1, framesize = sensor.WQXGA2, force_reset = True, flip = True)
         clock = time.clock()
         while True:
             clock.tick()

@@ -463,7 +463,7 @@ def stream_file(dest, f, bufsz = -1, buflim = 2048):
         # handle large files by reading one chunk at a time
         mf = gc.mem_free()
         if mf > 0:
-            mf = mf / 4
+            mf = mf // 4
         if mf < 32:
             mf = 32
         if mf > buflim:
@@ -492,7 +492,20 @@ def split_get_request(req):
         request_urlparams = request_url[request_url.index('?') + 1:]
         d = {}
         try:
-            d = {key: value for (key, value) in [x.split('=') for x in request_urlparams.split('&')]}
+            pairs = request_urlparams.split('&')
+            for p in pairs:
+                if "=" in p:
+                    ei = p.index("=")
+                    k = p[0:ei].lstrip().rstrip()
+                    v = p[ei + 1:]
+                    if len(k) > 0:
+                        d.update({k: v})
+                elif p is not None:
+                    p = p.lstrip().rstrip()
+                    if len(p) > 0:
+                        d.update({p: None})
+        except ValueError as exc:
+            exclogger.log_exception(exc, to_print = False, to_file = False)
         except Exception as exc:
             exclogger.log_exception(exc)
         request_urlparams = d
@@ -503,7 +516,20 @@ def split_post_form(headers, content):
     if "content-type" in headers:
         if headers["content-type"] == "application/x-www-form-urlencoded":
             try:
-                d = {key: value for (key, value) in [x.split('=') for x in content.split('&')]}
+                pairs = content.split('&')
+                for p in pairs:
+                    if "=" in p:
+                        ei = p.index("=")
+                        k = p[0:ei].lstrip().rstrip()
+                        v = p[ei + 1:]
+                        if len(k) > 0:
+                            d.update({k: v})
+                    elif p is not None:
+                        p = p.lstrip().rstrip()
+                        if len(p) > 0:
+                            d.update({p: None})
+            except ValueError as exc:
+                exclogger.log_exception(exc, to_print = False, to_file = False)
             except Exception as exc:
                 exclogger.log_exception(exc)
     return d

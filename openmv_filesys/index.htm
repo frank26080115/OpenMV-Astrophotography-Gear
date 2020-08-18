@@ -15,19 +15,33 @@ body
 
 <script type="text/javascript">
 
+var dataw = 2592;
+var datah = 1944;
+
+var first = true;
 var settings = null;
 var updateQueue = [];
 var updatePending = [];
+var lastStatus = null;
 var prev_frm = -1;
-var needReloadSvgSize = false;
+var needUiRefresh = false;
 var statusUpdateTimer;
 
 var ghost = null;
 var pre_ghost = null;
 var ghost_results = null;
 
+var jpgdata = false;
+var prev_jpg = -1;
+
+var hotpixels = [];
+
 function loadSettings()
 {
+    if (platesolver_init !== undefined) {
+        platesolver_init();
+    }
+
     $.ajax({
         dataType: "json",
         url: "getsettings",
@@ -60,6 +74,34 @@ function loadSettings()
             document.getElementById("showme").style.display         = "none";
         }
     });
+}
+
+function startLoadJpeg(t)
+{
+    loadJpeg();
+    if (t < 500) {
+        t = 500;
+    }
+    setTimeout(() => { startStatusUpdate(); }, t);
+}
+
+function loadJpeg()
+{
+    var divele = document.getElementById("viewmejpeg");
+    var jpegele = document.createElement("img");
+    var d = get_draw_scale(1, false);
+    jpegele.setAttribute("id", "jpegele");
+    jpegele.setAttribute("src", "/getimg.jpg?t=" + updateTime()); // the query string forces the browser to not cache the request
+    var imgw = d[2];
+    var imgh = d[3];
+    jpegele.style.width = imgw + "px";
+    jpegele.style.height = imgh + "px";
+    jpegele.style.opacity = "1.0";
+    while (divele.firstChild) {
+        divele.removeChild(divele.firstChild);
+    }
+    divele.appendChild(jpegele);
+    jpgdata = true;
 }
 
 function showPosition(position) {
@@ -99,7 +141,7 @@ function startSendSettings()
         startStatusUpdate();
     };
 
-    var url = "/updatesettings?" + str;
+    var url = "/updatesetting?" + str;
     console.log(str);
 
     $.get({
@@ -114,9 +156,30 @@ function startSendSettings()
 }
 
 function startStatusUpdate() {
+    var qstr = "";
+    if ($( "#realmode-1").prop("checked")) {
+        qstr += "packjpeg=true&";
+    }
+    else {
+        qstr += "packjpeg=false&";
+        var divele = document.getElementById("viewmejpeg");
+        while (divele.firstChild) {
+            divele.removeChild(divele.firstChild);
+        }
+        jpgdata = false;
+    }
+    if ($( "#speedmode-2").prop("checked")) {
+        qstr += "highspeed=true&";
+    }
+    else {
+        qstr += "highspeed=false&";
+    }
+
+    qstr += "time=" + updateTime();
+
     $.ajax({
         dataType: "json",
-        url: "getstate",
+        url: "getstate?" + qstr,
         success: endStatusUpdate,
         fail: failStatusUpdate,
         error: errorStatusUpdate,
@@ -126,6 +189,13 @@ function startStatusUpdate() {
 
 function endStatusUpdate(obj) {
     console.log("status: " + obj);
+
+    if (obj == null || obj == false || obj == undefined) {
+        document.getElementById("connection_lost").style.display = "block";
+        setTimeout(() => { startStatusUpdate(); }, 5000);
+    }
+
+    lastStatus = obj;
 
     document.getElementById("connection_lost").style.display = "none";
     document.getElementById("showme").style.display = "block";
@@ -138,13 +208,52 @@ function endStatusUpdate(obj) {
         nextSts = settings["shutter_hs"] / 2;
     }
     nextSts /= 1000;
-    setTimeout(() => { startStatusUpdate(); }, nextSts);
+    if (nextSts < 500) {
+        nextSts = 500;
+    }
+
+    if (updateQueue.length > 0)
+    {
+        startSendSettings();
+    }
+    else if ($( "#realmode-1").prop("checked") && prev_jpg != obj["frm_cnt"])
+    {
+        prev_jpg = obj["frm_cnt"];
+        startLoadJpeg(nextSts);
+    }
+    else {
+        setTimeout(() => { startStatusUpdate(); }, nextSts);
+    }
+
+    if (first)
+    {
+        if (obj["highspeed"]) {
+            $( "#speedmode-1" ).prop("checked", false);
+            $( "#speedmode-2" ).prop("checked", true);
+        }
+        $( "#realmode-1" ).prop("checked", obj["packjpeg"]);
+        first = false;
+    }
+
     updateTime();
 
-    if (prev_frm == obj["frm_cnt"] && needReloadSvgSize == false) {
+    if (prev_frm == obj["frm_cnt"] && needUiRefresh == false) {
         return;
     }
     prev_frm = obj["diag_frm_cnt"];
+
+    refreshUi(obj);
+}
+
+function refreshUi(obj)
+{
+    if (obj == null) {
+        obj = lastStatus;
+    }
+    if (obj == null) {
+        return;
+    }
+    lastStatus = obj;
 
     var stars = obj["stars"];
     var star_cnt = stars.length;
@@ -163,33 +272,16 @@ function endStatusUpdate(obj) {
     }
     document.getElementById("div_histogram").innerHTML = stats_str;
 
-    ghost_results = math_getGhostResults(obj, ghost);
-    var canCalibrate = pre_ghost != null;
-    if (ghost_results != null)
-    {
-        if (ghost_results.cent_x != null && ghost_results.cent_x != 0)
-        {
-            if (ghost_results.cent_x < dataw * 0.33 || ghost_results.cent_x > dataw * 0.67) {
-                canCalibrate = false;
-            }
-            if (ghost_results.cent_y < datah * 0.33 || ghost_results.cent_y > datah * 0.67) {
-                canCalibrate = false;
-            }
-            if (math_isNear90Apart(ghost_results.angle, 15) == false) {
-                canCalibrate = false;
-            }
-        }
-        else {
-            canCalibrate = false;
-        }
-    }
+    var vg = validateGhost();
+    var canCalibrate = vg[0];
+    var reason = vg[1];
 
     var curCalDataEle = document.getElementById("div_curdata");
     if (obj["solution"] && obj["star_x"] && obj["star_y"] && obj["pole_x"] && obj["pole_y"])
     {
         var s = "Polaris = (" + obj["star_x"] + ", " + obj["star_y"] + ")  ;  NCP = (" + obj["pole_x"] + ", " + obj["pole_y"] + ")";
         if (canCalibrate == false && ghost != null) {
-            s += " ; cannot calibrate with this";
+            s += " ; cannot calibrate with this" + reason;
         }
         curCalDataEle.innerHTML = s;
         pre_ghost = {star_x: obj["star_x"], star_y: obj["star_y"], pole_x: obj["pole_x"], pole_y: obj["pole_y"]};
@@ -218,20 +310,42 @@ function endStatusUpdate(obj) {
 
     $("#btn_calibrate" ).button( "option", "disabled", canCalibrate == false );
 
-    var imgdiv = document.getElementById("viewme");
-    var zoom = 1;
-    if ($("#viewmode-2").prop("checked")) {
-        zoom = 2;
+    draw_svg(obj, get_zoom(), needUiRefresh, false, jpgdata, ghost_results);
+
+    needUiRefresh = false;
+}
+
+function validateGhost()
+{
+    ghost_results = math_getGhostResults(lastStatus, ghost);
+    var canCalibrate = pre_ghost != null;
+    var reason = "";
+    if (ghost_results != null)
+    {
+        if (ghost_results.cent_x != null && ghost_results.cent_x != 0)
+        {
+            if (ghost_results.cent_x < dataw * 0.33 || ghost_results.cent_x > dataw * 0.67) {
+                canCalibrate = false;
+                reason = ", too off-center";
+            }
+            if (ghost_results.cent_y < datah * 0.33 || ghost_results.cent_y > datah * 0.67) {
+                canCalibrate = false;
+                reason = ", too off-center";
+            }
+            if (math_isNear90Apart(ghost_results.angle, 15) == false) {
+                canCalibrate = false;
+                reason = ", angle not good";
+            }
+        }
+        else {
+            canCalibrate = false;
+            reason = ", calculation failed";
+        }
     }
-    if ($("#viewmode-3").prop("checked")) {
-        zoom = 4;
+    else {
+        reason = ", unable to calculate";
     }
-    if ($("#viewmode-4").prop("checked")) {
-        zoom = 8;
-    }
-    var svg = draw_svg(obj, imgdiv, zoom, needReloadSvgSize, false, null, ghost_results);
-    imgdiv.appendChild(svg);
-    needReloadSvgSize = false;
+    return [canCalibrate, reason];
 }
 
 function updateTime() {
@@ -249,14 +363,12 @@ function errorStatusUpdate() {
     console.log("getstate error\r\n");
     document.getElementById("connection_lost").style.display = "block";
     setTimeout(() => { startStatusUpdate(); }, 5000);
-    updateTime();
 }
 
 function failStatusUpdate(jqxhr, textStatus, error) {
     console.log("getstate failed\r\n" + textStatus.toString() + "\r\n" + error.toString());
     document.getElementById("connection_lost").style.display = "block";
     setTimeout(() => { startStatusUpdate(); }, 5000);
-    updateTime();
 }
 
 function getExposureCode(exposure_code) {
@@ -367,41 +479,73 @@ function onLoadAll()
     document.getElementById("loading").style.display = "none";
     $( "#accordion" ).accordion({heightStyle: "content"});
 
-    if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(showPosition);
-        // this doesn't work without SSL
-    }
+    //if (navigator.geolocation) {
+    //    navigator.geolocation.getCurrentPosition(showPosition);
+    //    // this doesn't work without SSL
+    //}
     settings["time"] = updateTime();
     queueSettingsUpdate("time");
 
     $( "#fldset_zoom  input" ).checkboxradio();
     $( "#viewmode-1").prop("checked", true).checkboxradio("refresh");
     $( "#fldset_speed input" ).checkboxradio();
-    $( "#speedmode-3").prop("checked", true).checkboxradio("refresh");
+    $( "#speedmode-1").prop("checked", true).checkboxradio("refresh");
+    $( "#chkrefraction-1" ).checkboxradio().prop("checked", settings["use_refraction"]).on("change", function () {
+        var x = $( "#chkrefraction-1").prop("checked");
+        if (settings["use_refraction"] !== x) {
+            settings["use_refraction"] = x;
+            queueSettingsUpdate("use_refraction");
+        }
+        refreshUi(null);
+    });
+    $( "#realmode-1" ).checkboxradio().on("change", function () {
+        var x = $( "#realmode-1").prop("checked");
+        console.log("realmode click " + x);
+        if (x) {
+            $( "#viewmode-4").prop("checked", false).checkboxradio("refresh");
+            $( "#viewmode-3").prop("checked", false).checkboxradio("refresh");
+            $( "#viewmode-2").prop("checked", false).checkboxradio("refresh");
+            $( "#viewmode-1").prop("checked", true).checkboxradio("refresh");
+        }
+        refreshUi(null);
+    });;
 
     makeSlider("slider_gain_slow", 0, 128, settings["gain"], 8, function(obj, event, ui) {
         console.log("slider_gain_slow: " + ui.value);
+        settings["gain"] = ui.value;
+        queueSettingsUpdate("gain");
     });
     makeSlider("slider_shutter_slow", 0, 1500, settings["shutter"] / 1000, 100, function(obj, event, ui) {
         console.log("slider_shutter_slow: " + ui.value);
+        settings["shutter"] = ui.value * 1000;
+        queueSettingsUpdate("shutter");
     });
     makeSlider("slider_thresh_slow", 0, 255, settings["thresh"], 1, function(obj, event, ui) {
         console.log("slider_thresh_slow: " + ui.value);
+        settings["thresh"] = ui.value;
+        queueSettingsUpdate("thresh");
     });
     makeSlider("slider_gain_fast", 0, 128, settings["gain_hs"], 8, function(obj, event, ui) {
         console.log("slider_gain_fast: " + ui.value);
+        settings["gain_hs"] = ui.value;
+        queueSettingsUpdate("gain_hs");
     });
     makeSlider("slider_shutter_fast", 0, 1500, settings["shutter_hs"] / 1000, 100, function(obj, event, ui) {
         console.log("slider_shutter_fast: " + ui.value);
+        settings["shutter_hs"] = ui.value * 1000;
+        queueSettingsUpdate("shutter_hs");
     });
     makeSlider("slider_thresh_fast", 0, 255, settings["thresh_hs"], 1, function(obj, event, ui) {
         console.log("slider_thresh_fast: " + ui.value);
+        settings["thresh_hs"] = ui.value;
+        queueSettingsUpdate("thresh_hs");
     });
 
     $("#btn_time_update" ).button().click(function( event ) {
         console.log("click btn_time_update");
         settings["time"] = updateTime();
         queueSettingsUpdate("time");
+        refreshUi(null);
     });
 
     $("#btn_location_update" ).button().click(function( event ) {
@@ -417,12 +561,41 @@ function onLoadAll()
             queueSettingsUpdate("longitude");
             queueSettingsUpdate("latitude");
         }
+        refreshUi(null);
     });
 
     $("#btn_regimg" ).button().click(function( event ) {
         console.log("click btn_regimg");
         ghost = pre_ghost;
+
+        var demo = true;
+        if (demo)
+        {
+            var needGood = Math.random() < 0.5;
+            var tries = 0;
+            while (tries < 50)
+            {
+                var v = math_getVector([ghost.star_x, ghost.star_y], [ghost.pole_x, ghost.pole_y]);
+                ghost.star_x = Math.round((dataw * 0.2) + (Math.random() * dataw * 0.6));
+                ghost.star_y = Math.round((datah * 0.2) + (Math.random() * datah * 0.6));
+                var p = math_movePointTowards([ghost.star_x, ghost.star_y], [v[0], v[1] + (90.0 * (-1.5 + (Math.random() * 3.0)))]);
+                ghost.pole_x = Math.round(p[0]);
+                ghost.pole_y = Math.round(p[1]);
+                if (needGood) {
+                    var vg = validateGhost();
+                    if (vg[0]) {
+                        break;
+                    }
+                }
+                else if (needGood == false && ghost.pole_x > 0 && ghost.pole_x < dataw && ghost.pole_y > 0 && ghost.pole_y < datah) {
+                    break;
+                }
+                tries += 1;
+            }
+        }
+
         // calibrate button is enabled when the solution is checked against
+        refreshUi(null);
     });
 
     $("#btn_clearregimg" ).button().click(function( event ) {
@@ -431,6 +604,7 @@ function onLoadAll()
         pre_ghost = null;
         $("#btn_calibrate" ).button( "option", "disabled", true );
         document.getElementById("div_caldata").innerHTML = "nothing";
+        refreshUi(null);
     });
 
     $("#btn_calibrate" ).button().click(function( event ) {
@@ -439,7 +613,7 @@ function onLoadAll()
         {
             if (ghost_results.cent_x != 0 && ghost_results.cent_x != null && ghost_results.cent_y != 0 && ghost_results.cent_y != null)
             {
-                if (math_isNear90Apart(ghost_results.angle, 15) == false)
+                if (math_isNear90Apart(ghost_results.angle, 15))
                 {
                     settings["center_x"] = ghost_results.cent_x;
                     settings["center_y"] = ghost_results.cent_y;
@@ -459,6 +633,27 @@ function onLoadAll()
         else {
             alert("ERROR: no solution for calibration!");
         }
+        refreshUi(null);
+    });
+
+    $("#btn_hotpixels").button().click(function( event ) {
+        hotpixels = [];
+        if (lastStatus != null) {
+            var stars = lastStatus["stars"];
+            stars.forEach(function(ele, idx) {
+                hotpixels.push([ele["cx"], ele["cy"]]);
+            });
+        }
+        var divele = document.getElementById("hotpixel_list");
+        hotpixels.forEach(function(ele, idx) {
+            divele.innerHTML += ele[0] + ", " + ele[1] + "<br />";
+        });
+    });
+
+    $("#btn_forgethotpixels").button().click(function( event ) {
+        hotpixels = [];
+        var divele = document.getElementById("hotpixel_list");
+        divele.innerHTML = "";
     });
 
     document.getElementById("txt_location").onchange = function() {
@@ -466,23 +661,22 @@ function onLoadAll()
     };
 
     $(window).on('resize', function(e) {
-        needReloadSvgSize = true;
+        needUiRefresh = true;
     });
 
     setTimeout(() => { startStatusUpdate(); }, 1000);
 }
 
-loadSettings(); // this will trigger 
-
 </script>
 
 </head>
-<body>
+<body onload="loadSettings();">
 <div id="loading"><h2>OpenMV PolarScope</h2><br /><h2>Loading, Please Wait!</h2></div>
 <div id="loading_failed" style="display:none;"><h1>Loading FAILED! Please refresh the page!</h1></div>
 <div id="showme" style="display:none;">
 
-<div style="width:100%"><fieldset style="padding-top: 1em;"><legend>OpenMV PolarScope</legend><div id="viewme" style="width:100%; padding: 0 0 0 0; margin: 0 0 0 0;">&nbsp;&nbsp;Please wait for image...</div></fieldset></div>
+<div style="width:100%"><fieldset style="padding-top: 1em;"><legend>OpenMV PolarScope</legend><div id="viewme" style="display: inline-block; width:100%; padding: 0 0 0 0; margin: 0 0 0 0;"><div id="viewmejpeg" style="position: relative; z-index: 1"></div><div id="viewmesvg" style="position: relative; z-index: 2; top: 0; left: 0;">&nbsp;&nbsp;Please wait for image...</div>
+</div></fieldset></div>
 
 <div id="info"></div>
 
@@ -502,20 +696,25 @@ loadSettings(); // this will trigger
     <input type="radio" name="viewmode-1" id="viewmode-4" />
     </form></fieldset></div>
     <div><fieldset id="fldset_speed"><legend>Speed</legend><form>
-    <label for="speedmode-1">Slow (real image)</label>
+    <label for="speedmode-1">Normal</label>
     <input type="radio" name="speedmode-1" id="speedmode-1" />
-    <label for="speedmode-2">Slow (where am I?)</label>
+    <label for="speedmode-2">Fast</label>
     <input type="radio" name="speedmode-1" id="speedmode-2" />
-    <label for="speedmode-3">Normal</label>
-    <input type="radio" name="speedmode-1" id="speedmode-3" />
-    <label for="speedmode-4">Fast</label>
-    <input type="radio" name="speedmode-1" id="speedmode-4" />
     </form></fieldset></div>
-    <p>The normal mode will identify Polaris and the position of the North Celestial Pole (NCP) by pattern-matching the stars around it. The fast mode will assume the brightest star is Polaris, and track the NCP using previous data, making it easy to make adjustments on your mount. The real image mode is used to check exposure and focus. The "where am I?" mode will attempt to identify other stars in the view by searching through a large star database. Zoom is only supported for the normal and fast modes. For the most precise alignment, please use the available zoom level buttons, not finger-pinch (use finger-pinch to check exposure and focus).</p>
+    <p><label for="realmode-1">Real Image</label>
+    <input type="checkbox" name="realmode-1" id="realmode-1" /></p>
+    <p>The normal mode will identify Polaris and the position of the North Celestial Pole (NCP) by pattern-matching the stars around it. The fast mode will assume the brightest star is Polaris, and track the NCP using previous data, making it easy to make adjustments on your mount. The real image mode is used to check exposure and focus. For the most precise alignment, please use the available zoom level buttons, not finger-pinch (use finger-pinch to check exposure and focus).</p>
+  </div>
+  <h3>Plate Solve</h3>
+  <div>
+    <p>This camera has a database of about 2740 stars that are within 45&deg; of Polaris, and can attempt to identify about 500 of them (one that are bright, B-mag &lt;= 5). Clicking the button below will attempt to identify the star closest to the crosshair. If it has been identified, you can try navigating a sky map with the identified star.</p>
+    <p>This algorithm can be painfully slow, but it is searching from Polaris and outwards. Thus, the closer you point towards Polaris, you can stop the calculations earlier.</p>
+    <p><button id="btn_platesolve">Plate Solve</button><button id="btn_platesolvehalt">Stop</button></p>
+    <div><fieldset><legend>Solution</legend><div id="div_platesolvesolution"></div></fieldset></div>
   </div>
   <h3>Center Calibration</h3>
   <div>
-    <p>The center of the camera view may not be perfectly aligned with the center-of-rotation of your star tracker. Two images of Polaris is required to calibrate the center-of-rotation. For the best result, the two images should be rotated about 90&deg; apart, you should NOT already be polar-aligned, and DO NOT start off pointed exactly on Polaris. Calibration will also not work if it's already perfectly calibrated.</p>
+    <p>The center of the camera view may not be perfectly aligned with the center-of-rotation of your star tracker. Two images of Polaris is required to calibrate the center-of-rotation. For the best result, the two images should be rotated about 90&deg; apart.</p>
     <p>To start, rotate your star tracker's Right-Ascension (RA) to a position towards the west. Register the data in "First Image Data" when you are satisfied. Then, rotate your star tracker's RA about 90&deg; towards the east. Click the "calibrate" button when you are satisfied.</p>
     <p>Avoid using your hands to make these movements, use electronic control if possible. Do not move your tripod or adjust your mount during these movements. If the center-of-rotation is too far away from the center-of-view, you may need to adjust the mounting of the camera.</p>
     <div><fieldset id="fldset_curdata"><legend>Current Image Data</legend>
@@ -528,9 +727,11 @@ loadSettings(); // this will trigger
   </div>
   <h3>Time and Location</h3>
   <div>
-    <div><fieldset><legend>Time and Date</legend><div><p>UTC Time: <span id="span_utc_time"></span></p><p>Epoch Seconds: <span id="span_utc_time_epoch"></span></p><p><button id="btn_time_update">Update</button></p></div></fieldset></div>
+    <div><fieldset><legend>Time and Date</legend><div><p>UTC Time: <span id="span_utc_time"></span></p><p>Epoch Seconds: <span id="span_utc_time_epoch"></span></p><p style="display: none;"><button id="btn_time_update">Update</button></p></div></fieldset></div>
     <div><fieldset><legend>Location</legend><div><p>type in or paste in coordinates</p><p>latitude, longitude</p><p>comma separated, multiple formats supported (automatically detected)</p><p><input type="text" name="txt_location" id="txt_location" style="width: 100%;" /><button id="btn_location_update">Update</button></p></div></fieldset></div>
     <p>The time and date information is used to calculate the position of Polaris while compensating for the very slow wobble of the Earth's rotation axis. The location information is used to help determine the atmospheric refraction compensation required.</p>
+    <p><label for="chkrefraction-1">Apply Refraction Compensation?</label>
+    <input type="checkbox" name="chkrefraction-1" id="chkrefraction-1"></p>
   </div>
   <h3>Camera Exposure</h3>
   <div>
@@ -556,10 +757,13 @@ loadSettings(); // this will trigger
         <div id="slider_thresh_fast"></div>
     </fieldset></div>
   </div>
-  <h3>Debug</h3>
+  <h3>Hot Pixels</h3>
   <div>
-    <div><fieldset id="fldset_debug_settings"></fieldset></div>
-    <div><fieldset id="fldset_debug_status"></fieldset></div>
+    <p>If the camera gets too hot, there will be pixels that appear to be stuck as white. These stuck pixels will be falsely detected as stars. You will notice these pixels when you see stars that do not move even though you are moving the camera around.</p>
+    <p>It is possible to memorize which pixels are stuck so that they are removed from the list of stars. To do so: <ol><li>turn up the gain and shutter time slightly</li><li>cover up the camera completely</li><li>click the "capture hot pixels" button</li><li>restore your original settings</li></ol></p>
+    <p>If a hot pixel is near where an important star exists, then rotate the camera.</p>
+    <p><button id="btn_hotpixels">Capture Hot Pixels</button><button id="btn_forgethotpixels">Forget Hot Pixels</button></p>
+    <p><fieldset><legend>Hot Pixel List</legend><div id="hotpixel_list"></div></fieldset></p>
   </div>
 </div><!-- accordion -->
 </div><!-- showme -->

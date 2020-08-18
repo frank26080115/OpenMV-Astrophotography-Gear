@@ -71,6 +71,7 @@ function math_getPerpendicularBisectLineForTwoPoints(p1, p2)
 {
     var midpoint = math_getMidpointFromTwoPoints(p1, p2);
     var angle = math_getSlopeAngleFromTwoPoints(p1, p2);
+    angle += 90.0;
     var angr = math_degrees2radians(angle);
     var rho = 100.0;
     var dx = rho * Math.cos(angr);
@@ -127,8 +128,9 @@ function math_calcRotationCenterFromTwoPointPairs(pp1, pp2)
     var midpoint2 = math_getMidpointFromTwoPoints(pp1[1], pp2[1]);
     var bisect1 = math_getPerpendicularBisectLineForTwoPoints(pp1[0], pp2[0]);
     var bisect2 = math_getPerpendicularBisectLineForTwoPoints(pp1[1], pp2[1]);
+    var anglediff = math_getAngleDiff(math_getSlopeAngleFromTwoPoints(bisect1[0], bisect1[1]), math_getSlopeAngleFromTwoPoints(bisect2[0], bisect2[1]));
     var result = checkLineIntersection(bisect1[0][0], bisect1[0][1], bisect1[1][0], bisect1[1][1], bisect2[0][0], bisect2[0][1], bisect2[1][0], bisect2[1][1])
-    return [[result.x, result.y], midpoint1, midpoint2, bisect1[2], bisect2[2]];
+    return [[result.x, result.y], midpoint1, midpoint2, bisect1[2], bisect2[2], anglediff];
 }
 
 function math_getGhostResults(obj, ghost)
@@ -149,7 +151,7 @@ function math_getGhostResults(obj, ghost)
     res.mp1_y = calc[1][1];
     res.mp2_x = calc[2][0];
     res.mp2_y = calc[2][1];
-    res.angle
+    res.angle = calc[5];
     return res;
 }
 

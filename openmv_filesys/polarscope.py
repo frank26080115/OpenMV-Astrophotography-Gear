@@ -3,7 +3,8 @@ micropython.opt_level(2)
 
 import blobstar, astro_sensor, time_location, captive_portal, pole_finder, star_finder, pole_movement
 import exclogger, fakestream
-import pyb, uos, uio, gc, sys, time, math, ujson
+import pyb, uos, uio, gc, sys
+import time, math, ujson, ubinascii
 import network
 import sensor, image
 
@@ -19,7 +20,7 @@ class PolarScope(object):
         self.daymode = False
         self.simulate = False
         self.cam = astro_sensor.AstroCam(simulate = simulate_file)
-        self.cam.init(gain_db = 24, shutter_us = 1500000)
+        self.cam.init(gain_db = -1, shutter_us = 250000)
         self.time_mgr = time_location.TimeLocationManager()
 
         self.debug = debug
@@ -36,6 +37,7 @@ class PolarScope(object):
         self.dur_hs      = -1
         self.solu_dur_ls = -1
         self.solu_dur_hs = -1
+        self.snap_millis = 0
 
         self.settings = {}
         self.settings.update({"name":        "PolarScope-?"})
@@ -50,6 +52,7 @@ class PolarScope(object):
         self.settings.update({"gain_hs":     48})
         self.settings.update({"shutter_hs":  500000})
         self.settings.update({"thresh_hs":   (0)})
+        self.settings.update({"use_refraction": False})
         self.settings.update({"force_solve": False})
         self.settings.update({"max_stars":   0})
         self.load_settings()
@@ -65,11 +68,14 @@ class PolarScope(object):
             self.portal = None
 
         self.img = None
+        self.img_compressed = None
+        self.extra_fb = None
         self.expo_code = 0
         self.histogram = None
         self.img_stats = None
         self.stars = []
         self.max_stars = 0
+        self.packjpeg = False
         self.mem_errs = 0
         self.solution = None
         #self.solutions = [None, None]
@@ -77,6 +83,7 @@ class PolarScope(object):
         if self.portal is not None:
             self.register_http_handlers()
         self.cam.snapshot_start()
+        self.snap_millis = pyb.millis()
 
     def try_parse_setting(self, v):
         try: # micropython doesn't have "is_numeric"
@@ -134,9 +141,11 @@ class PolarScope(object):
     def handle_getstate(self, client_stream, req, headers, content):
         if self.debug:
             print("handle_getstate")
+        self.handle_query(client_stream, req, reply = False, save = False)
         state = {}
         state.update({"time": self.time_mgr.get_sec()})
         state.update({"highspeed": self.highspeed})
+        state.update({"packjpeg": self.packjpeg})
         state.update({"daymode": self.daymode})
         if self.img is not None:
             state.update({"expo_code": self.expo_code})
@@ -210,10 +219,13 @@ class PolarScope(object):
     def handle_updatesetting(self, client_stream, req, headers, content):
         if self.debug:
             print("handle_updatesetting", end="")
+        self.handle_query(client_stream, req, reply = True)
+
+    def handle_query(self, client_stream, req, reply = True, save = True):
         need_save = False
         try:
             request_page, request_urlparams = captive_portal.split_get_request(req)
-            if self.debug:
+            if self.debug and reply:
                 print(" keys %u" % len(request_urlparams))
             for i in request_urlparams.keys():
                 v = request_urlparams[i]
@@ -221,7 +233,7 @@ class PolarScope(object):
                 if i in self.settings:
                     need_save = True
                     self.settings[i] = v
-                    if self.debug:
+                    if self.debug and (reply or save):
                         print("setting \"%s\" value \"%s\"" % (i, str(v)))
                     if i == "time":
                         self.time_mgr.set_utc_time_epoch(v)
@@ -235,33 +247,40 @@ class PolarScope(object):
                         self.max_stars = v
                 elif i == "highspeed":
                     self.highspeed = (v == True)
+                elif i == "packjpeg":
+                    self.packjpeg = (v == True)
+                elif i == "save":
+                    save = (v == True)
+                    need_save = True
                 else:
                     print("unknown setting \"%s\": \"%s\"" % (i, str(v)))
-            if need_save:
+            if need_save and save:
                 self.save_settings()
-            self.reply_ok(client_stream)
+            if reply:
+                self.reply_ok(client_stream)
         except KeyboardInterrupt:
             raise
         except Exception as exc:
             s = exclogger.log_exception(exc)
-            self.reply_ok(client_stream, sts=False, err=s)
+            if reply:
+                self.reply_ok(client_stream, sts=False, err=s)
 
     def handle_getimg(self, client_stream, req, headers, content):
         if self.debug:
             print("handle_getimg", end="")
         try:
-            if self.img is None:
+            if self.img_compressed is None:
                 client_stream.write(captive_portal.default_reply_header(content_type = "image/jpeg", content_length = 0))
                 client_stream.close()
                 if self.debug:
                     print(" no image")
                 return
-            cimage = self.img.compressed(quality=50)
-            client_stream.write(captive_portal.default_reply_header(content_type = "image/jpeg", content_length = cimage.size()))
-            client_stream.write(cimage)
+            sz = self.img_compressed.size()
+            client_stream.write(captive_portal.default_reply_header(content_type = "image/jpeg", content_length = sz))
+            sent = client_stream.write(self.img_compressed)
             client_stream.close()
             if self.debug:
-                print(" sent %u" % cimage.size())
+                print(" sent %u" % sent)
         except KeyboardInterrupt:
             raise
         except Exception as exc:
@@ -276,6 +295,27 @@ class PolarScope(object):
 
     def handle_index(self, client_stream, req, headers, content):
         captive_portal.gen_page(client_stream, "index.htm", add_files = ["web/jquery-ui-1.12.1-darkness.css", "web/jquery-3.5.1.min.js", "web/jquery-ui-1.12.1.min.js", "web/magellan.js"], add_dir = "web", debug = self.debug)
+
+    def compress_img(self):
+        if self.img is None:
+            self.img_compressed = None
+            return
+        try:
+            if self.img.height() == self.cam.height:
+                if self.extra_fb is None:
+                    self.extra_fb = sensor.alloc_extra_fb(self.cam.width // 2, self.cam.height // 2, sensor.GRAYSCALE)
+                if self.debug:
+                    print("compressing (%u %u) ..." % (self.img.height(), self.img.size()), end="")
+                gc.collect()
+                self.img_compressed = self.img.scale(x_scale = 0.5, y_scale = 0.5, copy_to_fb = self.extra_fb).compress(quality=50)
+                if self.debug:
+                    print("done (%u %u)" % (self.img_compressed.height(), self.img_compressed.size()))
+        except MemoryError as exc:
+            exclogger.log_exception(exc, to_file = False)
+            pass
+        except Exception as exc:
+            exclogger.log_exception(exc)
+            pass
 
     def register_http_handlers(self):
         if self.portal is None:
@@ -426,7 +466,7 @@ class PolarScope(object):
 
         if self.debug:
             if (self.diag_cnt % 20) == 0:
-                print("tick %u" % self.diag_cnt)
+                print("tick %u %u" % (self.diag_cnt, self.frm_cnt))
 
         if self.portal is not None:
             ret = self.portal.task()
@@ -441,10 +481,12 @@ class PolarScope(object):
             # day mode is just auto exposure for testing
             if self.daymode:
                 self.cam.init(gain_db = -1, shutter_us = -1, force_reset = False)
-                self.img = img
+                self.snap_millis = pyb.millis()
                 if self.img is not None:
                     self.histogram = self.img.get_histogram()
                     self.img_stats = self.histogram.get_statistics()
+                    if self.packjpeg:
+                        self.compress_img()
                 self.cam.snapshot_start()
                 green_led.toggle()
                 return # this will skip solving
@@ -459,12 +501,31 @@ class PolarScope(object):
                 self.tick_ls = self.t
                 self.dur_ls = -1
                 self.cam.init(gain_db = self.settings["gain_hs"], shutter_us = self.settings["shutter_hs"], force_reset = False)
-            self.cam.snapshot_start()
+            if self.packjpeg == False:
+                self.cam.snapshot_start()
+                self.snap_millis = pyb.millis()
             green_led.toggle()
             self.solve()
+            if self.packjpeg:
+                self.compress_img()
+                self.cam.snapshot_start()
+                self.snap_millis = pyb.millis()
+        else:
+            if pyb.elapsed_millis(self.snap_millis) > 5000:
+                if self.debug:
+                    print("warning: camera timeout")
+                if self.daymode:
+                    self.cam.init(gain_db = -1, shutter_us = -1, force_reset = True)
+                elif self.highspeed == False:
+                    self.cam.init(gain_db = self.settings["gain"], shutter_us = self.settings["shutter"], force_reset = True)
+                else:
+                    self.cam.init(gain_db = self.settings["gain_hs"], shutter_us = self.settings["shutter_hs"], force_reset = True)
+                self.cam.snapshot_start()
+                self.snap_millis = pyb.millis()
 
 def main():
     polarscope = PolarScope(debug = True, simulate_file = "simulate.bmp")
+    #polarscope = PolarScope(debug = True)
     while True:
         try:
             polarscope.task()
