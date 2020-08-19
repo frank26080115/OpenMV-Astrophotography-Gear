@@ -74,7 +74,7 @@ class CaptivePortal(object):
         try:
             self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM) # TCP
             self.s.bind(('', 80))
-            self.s.listen(3)
+            self.s.listen(1)
             self.s.settimeout(0.1)
             self.need_kill = False
         except OSError as e:
@@ -322,10 +322,11 @@ class CaptivePortal(object):
             finally:
                 self.udps = None
         gc.collect()
-        try:
-            self.start_wifi()
-        except Exception as exc:
-            exclogger.log_exception(exc, fatal = True, reboot = False)
+        self.wlan.closeall()
+        #try:
+        #    self.start_wifi()
+        #except Exception as exc:
+        #    exclogger.log_exception(exc, fatal = True, reboot = False)
         gc.collect()
 
 # usocket implementation is missing readline

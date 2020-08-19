@@ -76,6 +76,8 @@ class PolarScope(object):
         self.stars = []
         self.max_stars = 0
         self.packjpeg = False
+        self.zoom = 1
+        self.prevzoom = 1
         self.mem_errs = 0
         self.solution = None
         #self.solutions = [None, None]
@@ -249,6 +251,12 @@ class PolarScope(object):
                     self.highspeed = (v == True)
                 elif i == "packjpeg":
                     self.packjpeg = (v == True)
+                    if self.zoom != self.prevzoom and self.packjpeg:
+                        self.compress_img()
+                elif i == "zoom":
+                    self.zoom = v
+                    if self.zoom != self.prevzoom and self.packjpeg:
+                        self.compress_img()
                 elif i == "save":
                     save = (v == True)
                     need_save = True
@@ -301,15 +309,31 @@ class PolarScope(object):
             self.img_compressed = None
             return
         try:
-            if self.img.height() == self.cam.height:
-                if self.extra_fb is None:
-                    self.extra_fb = sensor.alloc_extra_fb(self.cam.width // 2, self.cam.height // 2, sensor.GRAYSCALE)
-                if self.debug:
-                    print("compressing (%u %u) ..." % (self.img.height(), self.img.size()), end="")
-                gc.collect()
+            if self.extra_fb is None:
+                self.extra_fb = sensor.alloc_extra_fb(self.cam.width // 2, self.cam.height // 2, sensor.GRAYSCALE)
+            if self.debug:
+                print("compressing (%u %u) ..." % (self.img.height(), self.img.size()), end="")
+            gc.collect()
+            if self.zoom <= 1:
                 self.img_compressed = self.img.scale(x_scale = 0.5, y_scale = 0.5, copy_to_fb = self.extra_fb).compress(quality=50)
-                if self.debug:
-                    print("done (%u %u)" % (self.img_compressed.height(), self.img_compressed.size()))
+            else:
+                iw = int(math.floor(self.cam.width / self.zoom))
+                ih = int(math.floor(self.cam.height / self.zoom))
+                iwh = int(round(iw / 2.0))
+                ihh = int(round(ih / 2.0))
+                roi = (int(math.floor(self.settings["center_x"] - iwh)), int(math.floor(self.settings["center_y"] - ihh)), iw, ih)
+                while roi[0] < 0:
+                    roi[0] += 1
+                while roi[1] < 0:
+                    roi[1] += 1
+                while roi[0] + roi[2] > self.cam.width:
+                    roi[0] -= 1
+                while roi[1] + roi[3] > self.cam.height:
+                    roi[1] -= 1
+                self.img_compressed = self.img.crop(roi, copy_to_fb = self.extra_fb).compress(quality=50)
+            self.prevzoom = self.zoom
+            if self.debug:
+                print("done (%u %u)" % (self.img_compressed.height(), self.img_compressed.size()))
         except MemoryError as exc:
             exclogger.log_exception(exc, to_file = False)
             pass

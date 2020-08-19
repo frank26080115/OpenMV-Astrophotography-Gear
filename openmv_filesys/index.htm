@@ -36,10 +36,17 @@ var prev_jpg = -1;
 
 var hotpixels = [];
 
-function loadSettings()
+var loadTries = 0;
+
+function loadSettings(t)
 {
     if (platesolver_init !== undefined) {
         platesolver_init();
+    }
+
+    if (t == 0) {
+        setTimeout(() => { loadSettings(1); }, 500);
+        return;
     }
 
     $.ajax({
@@ -57,23 +64,36 @@ function loadSettings()
             catch (e) {
                 console.log("cannot parse location from settings: " + e.toString());
             }
+            document.getElementById("loading").style.display        = "none";
+            document.getElementById("loading_failed").style.display = "none";
+            document.getElementById("loading_almost").style.display = "block";
             onLoadAll();
         },
         fail: function(jqxhr, textStatus, error) {
             console.log("getsettings failed");
             console.log(txtStatus);
             console.log(error);
-            document.getElementById("loading").style.display        = "none";
-            document.getElementById("loading_failed").style.display = "block";
-            document.getElementById("showme").style.display         = "none";
+            loadSettingsFailed();
         },
         error: function() {
             console.log("getsettings error");
-            document.getElementById("loading").style.display        = "none";
-            document.getElementById("loading_failed").style.display = "block";
-            document.getElementById("showme").style.display         = "none";
+            loadSettingsFailed();
         }
     });
+}
+
+function loadSettingsFailed()
+{
+    loadTries += 1;
+    if (loadTries > 3) {
+        document.getElementById("loading").style.display        = "none";
+        document.getElementById("loading_failed").style.display = "block";
+        document.getElementById("showme").style.display         = "none";
+    }
+    else {
+        document.getElementById("load_tries").innerHTML = "retry # " + loadTries;
+        loadSettings(0);
+    }
 }
 
 function startLoadJpeg(t)
@@ -84,6 +104,20 @@ function startLoadJpeg(t)
     }
     setTimeout(() => { startStatusUpdate(); }, t);
 }
+
+/*
+I did attempt to use AJAX to load the JPEG but it doesn't work
+The AJAX would actually complete but it would give an error
+It has trouble parsing the binary data as text
+The data is available but there's no way to convert it into base64
+
+Also I've attempted to send over the JPEG data as base64
+but this requires a lot more memory on the microcontroller
+and streaming it in chunks is extremely slow
+
+So for now, the best solution is to just use a plain <img> tag
+with a URL that prevents caching
+*/
 
 function loadJpeg()
 {
@@ -174,6 +208,7 @@ function startStatusUpdate() {
     else {
         qstr += "highspeed=false&";
     }
+    qstr += "zoom=" + get_zoom().toString() + "&";
 
     qstr += "time=" + updateTime();
 
@@ -197,6 +232,7 @@ function endStatusUpdate(obj) {
 
     lastStatus = obj;
 
+    document.getElementById("loading_almost").style.display = "none";
     document.getElementById("connection_lost").style.display = "none";
     document.getElementById("showme").style.display = "block";
 
@@ -254,6 +290,13 @@ function refreshUi(obj)
         return;
     }
     lastStatus = obj;
+
+    if (obj["expo_code"] === 6) {
+        document.getElementById("memory_error").style.display = "block";
+    }
+    else {
+        document.getElementById("memory_error").style.display = "none";
+    }
 
     var stars = obj["stars"];
     var star_cnt = stars.length;
@@ -324,6 +367,7 @@ function validateGhost()
     {
         if (ghost_results.cent_x != null && ghost_results.cent_x != 0)
         {
+            // being too off-center will make plate-solving much harder
             if (ghost_results.cent_x < dataw * 0.33 || ghost_results.cent_x > dataw * 0.67) {
                 canCalibrate = false;
                 reason = ", too off-center";
@@ -332,6 +376,10 @@ function validateGhost()
                 canCalibrate = false;
                 reason = ", too off-center";
             }
+
+            // we want the angle to be close to perpendicular
+            // if there lines where parallel then there would be no solution
+            // perfectly perpendicular lines would give a very accurate solution
             if (math_isNear90Apart(ghost_results.angle, 15) == false) {
                 canCalibrate = false;
                 reason = ", angle not good";
@@ -362,12 +410,14 @@ function updateTime() {
 function errorStatusUpdate() {
     console.log("getstate error\r\n");
     document.getElementById("connection_lost").style.display = "block";
+    document.getElementById("showme").style.display          = "block";
     setTimeout(() => { startStatusUpdate(); }, 5000);
 }
 
 function failStatusUpdate(jqxhr, textStatus, error) {
     console.log("getstate failed\r\n" + textStatus.toString() + "\r\n" + error.toString());
     document.getElementById("connection_lost").style.display = "block";
+    document.getElementById("showme").style.display          = "block";
     setTimeout(() => { startStatusUpdate(); }, 5000);
 }
 
@@ -402,6 +452,8 @@ function getExposureCode(exposure_code) {
 function getLocation() {
     var xele = document.getElementById("txt_location");
     var x = xele.value;
+
+    // split the user input into two halves
     var split;
     if (x.includes(",")) {
         split = x.split(",");
@@ -423,6 +475,8 @@ function getLocation() {
         xele.style.backgroundColor = "pink";
         return false;
     }
+
+    // we expect the two numbers to be in a specific order, but putting a direction could change that order
     var s0 = split[0].trim().toUpperCase();
     var s1 = split[1].trim().toUpperCase();
     if ((s0.includes("N") || s0.includes("S")) && (s1.includes("E") || s1.includes("W"))) {
@@ -430,6 +484,8 @@ function getLocation() {
         s0 = s1;
         s1 = s3;
     }
+
+    // let magellan take care of the rest of the parsing
     var latitude  = magellan(s0).latitude();
     var longitude = magellan(s1).longitude();
     if (longitude == null || latitude == null) {
@@ -483,8 +539,9 @@ function onLoadAll()
     //    navigator.geolocation.getCurrentPosition(showPosition);
     //    // this doesn't work without SSL
     //}
-    settings["time"] = updateTime();
-    queueSettingsUpdate("time");
+
+    //settings["time"] = updateTime();
+    //queueSettingsUpdate("time");
 
     $( "#fldset_zoom  input" ).checkboxradio();
     $( "#viewmode-1").prop("checked", true).checkboxradio("refresh");
@@ -501,12 +558,12 @@ function onLoadAll()
     $( "#realmode-1" ).checkboxradio().on("change", function () {
         var x = $( "#realmode-1").prop("checked");
         console.log("realmode click " + x);
-        if (x) {
-            $( "#viewmode-4").prop("checked", false).checkboxradio("refresh");
-            $( "#viewmode-3").prop("checked", false).checkboxradio("refresh");
-            $( "#viewmode-2").prop("checked", false).checkboxradio("refresh");
-            $( "#viewmode-1").prop("checked", true).checkboxradio("refresh");
-        }
+        //if (x) {
+        //    $( "#viewmode-4").prop("checked", false).checkboxradio("refresh");
+        //    $( "#viewmode-3").prop("checked", false).checkboxradio("refresh");
+        //    $( "#viewmode-2").prop("checked", false).checkboxradio("refresh");
+        //    $( "#viewmode-1").prop("checked", true).checkboxradio("refresh");
+        //}
         refreshUi(null);
     });;
 
@@ -598,7 +655,7 @@ function onLoadAll()
         refreshUi(null);
     });
 
-    $("#btn_clearregimg" ).button().click(function( event ) {
+    $("#btn_clearregimg").button().click(function( event ) {
         console.log("click btn_clearregimg");
         ghost = null;
         pre_ghost = null;
@@ -607,7 +664,7 @@ function onLoadAll()
         refreshUi(null);
     });
 
-    $("#btn_calibrate" ).button().click(function( event ) {
+    $("#btn_calibrate").button().click(function( event ) {
         console.log("click btn_calibrate");
         if (ghost_results != null)
         {
@@ -638,16 +695,30 @@ function onLoadAll()
 
     $("#btn_hotpixels").button().click(function( event ) {
         hotpixels = [];
+        var pixstr = "";
         if (lastStatus != null) {
             var stars = lastStatus["stars"];
             stars.forEach(function(ele, idx) {
                 hotpixels.push([ele["cx"], ele["cy"]]);
             });
         }
+        else {
+            pixstr = "Error: no data from camera";
+        }
         var divele = document.getElementById("hotpixel_list");
-        hotpixels.forEach(function(ele, idx) {
-            divele.innerHTML += ele[0] + ", " + ele[1] + "<br />";
-        });
+        if (hotpixels.length > 0)
+        {
+            pixstr += "<ol>";
+            hotpixels.forEach(function(ele, idx) {
+                pixstr += "<li>( " + (Math.round(ele[0] * 10.0) / 10.0) + " , " + (Math.round(ele[1] * 10.0) / 10.0) + " )</li>";
+            });
+            pixstr += "</ol>";
+        }
+        else
+        {
+            pixstr = "No hot-pixels detected by camera";
+        }
+        divele.innerHTML = pixstr;
     });
 
     $("#btn_forgethotpixels").button().click(function( event ) {
@@ -661,7 +732,7 @@ function onLoadAll()
     };
 
     $(window).on('resize', function(e) {
-        needUiRefresh = true;
+        needUiRefresh = true; // this will force a re-scaling of the drawn view
     });
 
     setTimeout(() => { startStatusUpdate(); }, 1000);
@@ -670,17 +741,17 @@ function onLoadAll()
 </script>
 
 </head>
-<body onload="loadSettings();">
-<div id="loading"><h2>OpenMV PolarScope</h2><br /><h2>Loading, Please Wait!</h2></div>
-<div id="loading_failed" style="display:none;"><h1>Loading FAILED! Please refresh the page!</h1></div>
+<body onload="loadSettings(0);">
+<div id="loading"><h2>OpenMV PolarScope</h2><br /><h2>Loading, Please Wait! <span id="load_tries"></span></h2></div>
+<div id="loading_failed" style="display:none;"><h1>Loading FAILED! Please refresh the page.</h1></div>
+<div id="loading_almost" style="display:none;"><h2>OpenMV PolarScope</h2><br /><h2>Settings loaded! Waiting for star data...</h2></div>
 <div id="showme" style="display:none;">
 
 <div style="width:100%"><fieldset style="padding-top: 1em;"><legend>OpenMV PolarScope</legend><div id="viewme" style="display: inline-block; width:100%; padding: 0 0 0 0; margin: 0 0 0 0;"><div id="viewmejpeg" style="position: relative; z-index: 1"></div><div id="viewmesvg" style="position: relative; z-index: 2; top: 0; left: 0;">&nbsp;&nbsp;Please wait for image...</div>
 </div></fieldset></div>
 
-<div id="info"></div>
-
 <div id="connection_lost" class="ui-widget" style="display: none;"><div id="connection_lost_inner" class="ui-state-error ui-corner-all .ui-state-error-text" ><p>&nbsp;&nbsp;Connection LOST! Attempting to re-establish...</p></div></div>
+<div id="memory_error" class="ui-widget" style="display: none;"><div id="memory_error_inner" class="ui-state-error ui-corner-all .ui-state-error-text" ><p>&nbsp;&nbsp;INTERNAL MEMORY ERROR! Please check the camera exposure settings!</p></div></div>
 
 <div id="accordion">
   <h3>View Mode</h3>
@@ -703,7 +774,9 @@ function onLoadAll()
     </form></fieldset></div>
     <p><label for="realmode-1">Real Image</label>
     <input type="checkbox" name="realmode-1" id="realmode-1" /></p>
-    <p>The normal mode will identify Polaris and the position of the North Celestial Pole (NCP) by pattern-matching the stars around it. The fast mode will assume the brightest star is Polaris, and track the NCP using previous data, making it easy to make adjustments on your mount. The real image mode is used to check exposure and focus. For the most precise alignment, please use the available zoom level buttons, not finger-pinch (use finger-pinch to check exposure and focus).</p>
+    <p>The normal mode will identify Polaris and the position of the North Celestial Pole (NCP) by pattern-matching the stars around it. The fast mode will assume the brightest star is Polaris, and track the NCP using previous data, making it easy to make adjustments on your mount.</p>
+    <p>The real image mode is used to check exposure and focus. Note that the image is processed at a high resolution (for precise polar alignment) but is transmitted at a low quality (for faster WiFi file transfer speed).</p>
+    <p>For the most precise alignment, please use the available zoom level buttons, not finger-pinch.</p>
   </div>
   <h3>Plate Solve</h3>
   <div>
@@ -761,6 +834,7 @@ function onLoadAll()
   <div>
     <p>If the camera gets too hot, there will be pixels that appear to be stuck as white. These stuck pixels will be falsely detected as stars. You will notice these pixels when you see stars that do not move even though you are moving the camera around.</p>
     <p>It is possible to memorize which pixels are stuck so that they are removed from the list of stars. To do so: <ol><li>turn up the gain and shutter time slightly</li><li>cover up the camera completely</li><li>click the "capture hot pixels" button</li><li>restore your original settings</li></ol></p>
+    <p>Think of this as taking a "dark frame" but not really the same thing.</p>
     <p>If a hot pixel is near where an important star exists, then rotate the camera.</p>
     <p><button id="btn_hotpixels">Capture Hot Pixels</button><button id="btn_forgethotpixels">Forget Hot Pixels</button></p>
     <p><fieldset><legend>Hot Pixel List</legend><div id="hotpixel_list"></div></fieldset></p>

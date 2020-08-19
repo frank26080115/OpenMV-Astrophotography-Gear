@@ -5,7 +5,7 @@ function math_radians2degrees(x)
 
 function math_degrees2radians(x)
 {
-    return x * (Math.PI / 180.0);
+    return x * Math.PI / 180.0;
 }
 
 function math_normalizeAngleDegrees(x)
@@ -48,6 +48,10 @@ function math_getAngleDiff(a1, a2)
 
 function math_isNear90Apart(x, tol)
 {
+    if (x == null) {
+        return false;
+    }
+
     var d = Math.abs(math_getAngleDiff(x, 90));
     if (d <= tol) {
         return true;
@@ -87,9 +91,7 @@ function checkLineIntersection(line1StartX, line1StartY, line1EndX, line1EndY, l
     // if the lines intersect, the result contains the x and y of the intersection (treating the lines as infinite) and booleans for whether line segment 1 or line segment 2 contain the point
     var denominator, a, b, numerator1, numerator2, result = {
         x: null,
-        y: null,
-        onLine1: false,
-        onLine2: false
+        y: null
     };
     denominator = ((line2EndY - line2StartY) * (line1EndX - line1StartX)) - ((line2EndX - line2StartX) * (line1EndY - line1StartY));
     if (denominator == 0) {
@@ -105,20 +107,6 @@ function checkLineIntersection(line1StartX, line1StartY, line1EndX, line1EndY, l
     // if we cast these lines infinitely in both directions, they intersect here:
     result.x = line1StartX + (a * (line1EndX - line1StartX));
     result.y = line1StartY + (a * (line1EndY - line1StartY));
-/*
-        // it is worth noting that this should be the same as:
-        x = line2StartX + (b * (line2EndX - line2StartX));
-        y = line2StartX + (b * (line2EndY - line2StartY));
-        */
-    // if line1 is a segment and line2 is infinite, they intersect if:
-    if (a > 0 && a < 1) {
-        result.onLine1 = true;
-    }
-    // if line2 is a segment and line1 is infinite, they intersect if:
-    if (b > 0 && b < 1) {
-        result.onLine2 = true;
-    }
-    // if line1 and line2 are segments, they intersect if both of the above are true
     return result;
 }
 
@@ -129,7 +117,25 @@ function math_calcRotationCenterFromTwoPointPairs(pp1, pp2)
     var bisect1 = math_getPerpendicularBisectLineForTwoPoints(pp1[0], pp2[0]);
     var bisect2 = math_getPerpendicularBisectLineForTwoPoints(pp1[1], pp2[1]);
     var anglediff = math_getAngleDiff(math_getSlopeAngleFromTwoPoints(bisect1[0], bisect1[1]), math_getSlopeAngleFromTwoPoints(bisect2[0], bisect2[1]));
-    var result = checkLineIntersection(bisect1[0][0], bisect1[0][1], bisect1[1][0], bisect1[1][1], bisect2[0][0], bisect2[0][1], bisect2[1][0], bisect2[1][1])
+    var result = checkLineIntersection(bisect1[0][0], bisect1[0][1], bisect1[1][0], bisect1[1][1], bisect2[0][0], bisect2[0][1], bisect2[1][0], bisect2[1][1]);
+
+    if (result.x != null && result.x != 0 && result.y != null && result.y != 0)
+    {
+        // validate angles
+        var vect1 = math_getVector(pp1[0], midpoint1);
+        var vect2 = math_getVector(pp2[0], midpoint2);
+        var vect3 = math_getVector([result.x, result.y], midpoint1);
+        var vect4 = math_getVector([result.x, result.y], midpoint2);
+        // this validation only works if the lines are long enough
+        var maglim = 10.0;
+        if (vect1[0] >= maglim && vect2[0] >= maglim && vect3[0] >= maglim && vect4[0] >= maglim)
+        {
+            if (math_isNear90Apart(math_getAngleDiff(vect1[1], vect3[1]), 1) == false || math_isNear90Apart(math_getAngleDiff(vect2[1], vect4[1]), 1) == false) {
+                anglediff = null;
+            }
+        }
+    }
+
     return [[result.x, result.y], midpoint1, midpoint2, bisect1[2], bisect2[2], anglediff];
 }
 
@@ -166,4 +172,25 @@ function math_movePointTowards(p, v)
     var dx = v[0] * Math.cos(phi);
     var dy = v[0] * Math.sin(phi);
     return math_movePoint(p, dx, dy);
+}
+
+function math_mapStarRadius(r, minr, maxr, imgh)
+{
+    var imgr = imgh * 0.01;
+    if (imgr < 4) {
+        imgr = 4;
+    }
+    var d1 = maxr - minr;
+    var d2 = imgr - 2;
+    r -= minr;
+    r *= d2;
+    r /= d1;
+    r += 2;
+    if (r > imgr) {
+        return imgr;
+    }
+    else if (r < 2) {
+        return 2;
+    }
+    return r;
 }

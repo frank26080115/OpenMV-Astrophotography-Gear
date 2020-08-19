@@ -4,6 +4,8 @@ function get_draw_scale(zoom, scale_vert)
     var imgw = wrapdiv.clientWidth;
     var imgh = Math.round((imgw / dataw) * datah);
     var imgscale = dataw / imgw;
+
+    // scale_vert will make the image fit to the vertical space
     if (scale_vert)
     {
         var reduce = 0;
@@ -14,6 +16,8 @@ function get_draw_scale(zoom, scale_vert)
             imgscale = dataw / imgw;
         }
     }
+
+    // apply the zoom level
     imgscale /= zoom;
     return [dataw, datah, imgw, imgh, imgscale];
 }
@@ -42,6 +46,8 @@ function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, ghost_results)
     var jpegdiv = document.getElementById("viewmejpeg");
     var jpegele = document.getElementById("imgjpeg");
 
+    var hasjpg = (jpgdata === false || jpgdata === null || jpgdata === undefined) == false;
+
     var stars = obj["stars"];
 
     if (zoom <= 1) {
@@ -65,9 +71,32 @@ function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, ghost_results)
     var cent_y = settings["center_y"] / imgscale;
     var offset_x = 0, offset_y = 0;
 
-    if (zoom > 1) {
+    if (zoom > 1)
+    {
         offset_x = cent_x - (imgw / 2);
         offset_y = cent_y - (imgh / 2);
+        var testxd = imgw / (2 * zoom);
+        var testyd = imgh / (2 * zoom);
+        while (true)
+        {
+            var ch_x = cent_x - offset_x;
+            var ch_y = cent_y - offset_y;
+            if (ch_x - testxd < 0) {
+                offset_x -= 1;
+            }
+            else if (ch_x + testxd > imgw) {
+                offset_x += 1;
+            }
+            else if (ch_y - testyd < 0) {
+                offset_y -= 1;
+            }
+            else if (ch_y + testyd > imgh) {
+                offset_y += 1;
+            }
+            else {
+                break;
+            }
+        }
     }
 
     // start the canvas with correct size
@@ -85,7 +114,7 @@ function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, ghost_results)
 
     if (jpegele != null && jpegele != undefined)
     {
-        if (jpgdata !== false && jpgdata !== null && jpgdata !== undefined) {
+        if (hasjpg) {
             jpegele.style.width = imgw + "px";
             jpegele.style.height = imgh + "px";
             jpegele.style.opacity = "1.0";
@@ -106,7 +135,7 @@ function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, ghost_results)
     svgele.setAttribute("xmlns", "http://www.w3.org/2000/svg");
     svgele.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
 
-    if (jpgdata === false || jpgdata === null || jpgdata === undefined) {
+    if (hasjpg == false) {
         // draw a background rectangle that represents the background colour
         var bgrect = document.createElementNS(svgNS, "rect");
         bgrect.setAttribute("width", imgw);
@@ -118,19 +147,24 @@ function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, ghost_results)
         svgele.appendChild(bgrect);
     }
 
-    // draw each star
-    var maxr = 0;
+    var maxr = 0; // find the biggest star, used for other things later
+    var minr = 9999;
     stars.forEach(function(ele, idx) {
         if (ele["r"] > maxr) {
             maxr = ele["r"];
         }
+        if (ele["r"] < minr) {
+            minr = ele["r"];
+        }
     });
-    if (jpgdata === false || jpgdata === null || jpgdata === undefined)
+
+    if (hasjpg == false)
     {
+        // draw each star
         stars.forEach(function(ele, idx) {
             var cx = ele["cx"];
             var cy = ele["cy"];
-            
+
             var ishot = false;
             hotpixels.forEach(function(ele, idx) {
                 var v = math_getVector([cx, cy], ele);
@@ -143,13 +177,14 @@ function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, ghost_results)
                 cirele = document.createElementNS(svgNS, "circle");
                 cirele.setAttribute("cx", Math.round((cx / imgscale) - offset_x));
                 cirele.setAttribute("cy", Math.round((cy / imgscale) - offset_y));
-                cirele.setAttribute("r", Math.round(ele["r"]));
+                cirele.setAttribute("r", math_mapStarRadius(ele["r"], minr, maxr, imgh));
                 cirele.setAttribute("style", "fill:rgb(255,255,255);stroke:none;");
                 svgele.appendChild(cirele);
             }
         });
     }
 
+    // draw crosshair on center-of-rotation
     var cline = document.createElementNS(svgNS, "line");
     cline.setAttribute("x1", Math.round(cent_x - offset_x));
     cline.setAttribute("x2", Math.round(cent_x - offset_x));
@@ -165,13 +200,15 @@ function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, ghost_results)
     cline.setAttribute("style", "stroke:yellow;stroke-width:1");
     svgele.appendChild(cline);
 
+    var hassol = false;
+
     if (obj["solution"])
     {
         if (obj["star_x"] && obj["star_y"] && obj["pole_x"] && obj["pole_y"])
         {
             // we need to draw the matched stars even though the stars have already been draw
             // this will prevent hot pixels from hiding an important star
-            if ((jpgdata === false || jpgdata === null || jpgdata === undefined) && hotpixels.length > 0)
+            if (hasjpg == false && hotpixels.length > 0)
             {
                 var solstars = obj["solution"]["matches"];
                 solstars.forEach(function(ele, idx) {
@@ -180,7 +217,7 @@ function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, ghost_results)
                     var cirele = document.createElementNS(svgNS, "circle");
                     cirele.setAttribute("cx", Math.round((cx / imgscale) - offset_x));
                     cirele.setAttribute("cy", Math.round((cy / imgscale) - offset_y));
-                    cirele.setAttribute("r", Math.round(ele["r"]));
+                    cirele.setAttribute("r", math_mapStarRadius(ele["r"], minr, maxr, imgh));
                     cirele.setAttribute("style", "fill:rgb(255,255,255);stroke:none;");
                     svgele.appendChild(cirele);
                 });
@@ -189,33 +226,36 @@ function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, ghost_results)
             var sc_x = obj["star_x"];
             var sc_y = obj["star_y"];
 
-            var notinview = (sc_x < 0 || sc_x > imgw || sc_y < 0 || sc_y > imgh);
+            var notinview = (((sc_x / imgscale) - offset_x) < 0 || ((sc_x / imgscale) - offset_x) > imgw || ((sc_y / imgscale) - offset_y) < 0 || ((sc_y / imgscale) - offset_y) > imgh);
 
             if (hotpixels.length > 0 && notinview == false)
             {
+                // just in case hot-pixel filtering removed Polaris
                 cirele = document.createElementNS(svgNS, "circle");
                 cirele.setAttribute("cx", Math.round((sc_x / imgscale) - offset_x));
                 cirele.setAttribute("cy", Math.round((sc_y / imgscale) - offset_y));
-                cirele.setAttribute("r", maxr);
+                cirele.setAttribute("r", math_mapStarRadius(maxr, minr, maxr, imgh));
                 cirele.setAttribute("style", "fill:white;stroke:none;");
                 svgele.appendChild(cirele);
             }
 
+            // identify Polaris with a green dot
             cirele = document.createElementNS(svgNS, "circle");
             cirele.setAttribute("cx", Math.round((sc_x / imgscale) - offset_x));
             cirele.setAttribute("cy", Math.round((sc_y / imgscale) - offset_y));
             cirele.setAttribute("r", 5);
-            cirele.setAttribute("style", "fill:green;stroke:none;");
+            cirele.setAttribute("style", "fill:lime;stroke:none;");
             svgele.appendChild(cirele);
 
-            if (notinview)
+            if (zoom > 1 && notinview)
             {
+                // draw a line from the crosshair to Polaris if Polaris is not in view
                 var tline = document.createElementNS(svgNS, "line");
                 tline.setAttribute("x1", Math.round(cent_x - offset_x));
-                tline.setAttribute("x2", Math.round(sc_x - offset_x));
+                tline.setAttribute("x2", Math.round((sc_x / imgscale) - offset_x));
                 tline.setAttribute("y1", Math.round(cent_y - offset_y));
-                tline.setAttribute("y2", Math.round(sc_y - offset_y));
-                tline.setAttribute("style", "stroke:green;stroke-width:1");
+                tline.setAttribute("y2", Math.round((sc_y / imgscale) - offset_y));
+                tline.setAttribute("style", "stroke:lime;stroke-width:1");
                 svgele.appendChild(tline);
             }
 
@@ -229,18 +269,22 @@ function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, ghost_results)
 
             if ($( "#chkrefraction-1").prop("checked"))
             {
+                // if we need to shift the target to compenssate for refraction
+                // then we need to account for the camera rotation vs the polar clock
                 var refractionRotation = obj["rotation"] - obj["polar_clock"];
+                // with this rotation accounted for, we know which direction to shift the target
                 var movedP = math_movePointTowards([px, py], [obj["refraction"] / imgscale, refractionRotation + 90.0]);
                 px = movedP[0];
                 py = movedP[1];
             }
 
+            // this draws a cool looking cross hair with a 1-pixel space in the middle for aiming
             var points = (px - 1).toString() + "," + (py - 1).toString() + " ";
             points += (px - 1).toString() + "," + (py - 1 - len).toString() + " ";
             points += (px - cor).toString() + "," + (py - cor).toString() + " ";
             points += (px - 1 - len).toString() + "," + (py - 1).toString() + " ";
             poly.setAttribute("points", points.trim());
-            poly.setAttribute("style", "fill:rgb(255,0,0);stroke:none;");
+            poly.setAttribute("style", "fill:red;stroke:none;");
             svgele.appendChild(poly);
             poly = document.createElementNS(svgNS, "polygon");
             points = (px + 1).toString() + "," + (py - 1).toString() + " ";
@@ -248,7 +292,7 @@ function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, ghost_results)
             points += (px + cor).toString() + "," + (py - cor).toString() + " ";
             points += (px + 1 + len).toString() + "," + (py - 1).toString() + " ";
             poly.setAttribute("points", points.trim());
-            poly.setAttribute("style", "fill:rgb(255,0,0);stroke:none;");
+            poly.setAttribute("style", "fill:red;stroke:none;");
             svgele.appendChild(poly);
             poly = document.createElementNS(svgNS, "polygon");
             points = (px + 1).toString() + "," + (py + 1).toString() + " ";
@@ -256,7 +300,7 @@ function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, ghost_results)
             points += (px + cor).toString() + "," + (py + cor).toString() + " ";
             points += (px + 1 + len).toString() + "," + (py + 1).toString() + " ";
             poly.setAttribute("points", points.trim());
-            poly.setAttribute("style", "fill:rgb(255,0,0);stroke:none;");
+            poly.setAttribute("style", "fill:red;stroke:none;");
             svgele.appendChild(poly);
             poly = document.createElementNS(svgNS, "polygon");
             points = (px - 1).toString() + "," + (py + 1).toString() + " ";
@@ -264,9 +308,10 @@ function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, ghost_results)
             points += (px - cor).toString() + "," + (py + cor).toString() + " ";
             points += (px - 1 - len).toString() + "," + (py + 1).toString() + " ";
             poly.setAttribute("points", points.trim());
-            poly.setAttribute("style", "fill:rgb(255,0,0);stroke:none;");
+            poly.setAttribute("style", "fill:red;stroke:none;");
             svgele.appendChild(poly);
 
+            // if the NCP is out-of-view, draw a line towards it
             if (px < 0 || px > imgw || py < 0 || py > imgh)
             {
                 var tline = document.createElementNS(svgNS, "line");
@@ -282,6 +327,7 @@ function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, ghost_results)
             {
                 if (ghost_results.cent_x != null && ghost_results.cent_x != 0 && ghost_results.cent_y != null && ghost_results.cent_y != 0)
                 {
+                    // this draws the intersection lines for the calibration
                     var gline = document.createElementNS(svgNS, "line");
                     gline.setAttribute("x1", Math.round((ghost_results.cent_x / imgscale) - offset_x));
                     gline.setAttribute("x2", Math.round((ghost_results.mp1_x  / imgscale) - offset_x));
@@ -315,8 +361,9 @@ function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, ghost_results)
         }
     }
 
-    if (ghost !== null && ghost !== false)
+    if (ghost != null && ghost != false)
     {
+        // this draws the ghost star positions
         var gcir = document.createElementNS(svgNS, "circle");
         gcir.setAttribute("cx", Math.round((ghost.star_x / imgscale) - offset_x));
         gcir.setAttribute("cy", Math.round((ghost.star_y / imgscale) - offset_y));
