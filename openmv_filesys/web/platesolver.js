@@ -143,23 +143,19 @@ function platesolve_tick()
             {
                 var vect = math_getVector([platesolve_statemachine.center_star.cx, platesolve_statemachine.center_star.cy], [platesolve_statemachine.far_stars[fidx].cx, platesolve_statemachine.far_stars[fidx].cy]);
                 var err_dist = Math.abs(vect[0] - checklist[nidx].dist);
-                if (err_dist < 70)
+                var expected_pos = math_movePointTowards([platesolve_statemachine.center_star.cx, platesolve_statemachine.center_star.cy], [checklist[nidx].dist, checklist[nidx].ang - rot]);
+                var err_vect = math_getVector([platesolve_statemachine.far_stars[fidx].cx, platesolve_statemachine.far_stars[fidx].cy], expected_pos);
+                if (err_vect[0] < 50)
                 {
-                    var err_ang = Math.abs(math_getAngleDiff(vect[1] + rot, checklist[nidx].ang));
-                    if (err_ang < 1.2) // angle match can be pretty tight as distortion doesn't come into play, but rounding error does
-                    {
-                        score += 1;
-                        var expected_pos = math_movePointTowards([platesolve_statemachine.center_star.cx, platesolve_statemachine.center_star.cy], [checklist[nidx].dist, checklist[nidx].ang - rot]);
-                        var err_vect = math_getVector([platesolve_statemachine.far_stars[fidx].cx, platesolve_statemachine.far_stars[fidx].cy], expected_pos);
-                        err_sum += err_vect[0];
-                        if (platesolve_statemachine.far_stars[fidx].b < min_brite) {
-                            min_brite = platesolve_statemachine.far_stars[fidx].b;
-                        }
-                        if (vect[0] > max_dist) {
-                            max_dist = vect[0];
-                        }
-                        score_list.push(platesolve_statemachine.far_stars[fidx]);
+                    score += 1;
+                    err_sum += err_vect[0];
+                    if (platesolve_statemachine.far_stars[fidx].b < min_brite) {
+                        min_brite = platesolve_statemachine.far_stars[fidx].b;
                     }
+                    if (vect[0] > max_dist) {
+                        max_dist = vect[0];
+                    }
+                    score_list.push(platesolve_statemachine.far_stars[fidx]);
                 }
             }
         }
