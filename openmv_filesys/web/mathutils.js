@@ -194,3 +194,15 @@ function math_mapStarRadius(r, minr, maxr, imgh)
     }
     return r;
 }
+
+function math_getRefraction(lat, pressure, temperature)
+{
+    var x = math_degrees2radians(lat + (10.3 / (lat + 5.11)));
+    x = 1.02 / Math.tan(x);
+    var tempcomp = (pressure / 101) * (283 / (273 + temperature));
+    var arcmin = x * tempcomp;
+    if (arcmin < 0) {
+        arcmin = 0;
+    }
+    return [arcmin / 60.0, arcmin];
+}

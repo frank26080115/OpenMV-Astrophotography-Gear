@@ -13,6 +13,8 @@ try:
 except:
     pass
 
+import time_location
+
 PIXELS_PER_DEGREE = micropython.const(875.677409 / 2.9063) # calibrated from camera but doesn't really change the math
 POLARIS_2000 = micropython.const([2, 31, 51.56, 89, 15, 51.5]) # obtained from Stellarium
 POLARIS_2020 = micropython.const([2, 57, 39.08, 89, 20, 57.4]) # obtained from Stellarium
@@ -34,8 +36,8 @@ class PoleMovement(object):
         ra2020, dec2020 = conv_ra_dec(POLARIS_2020)
         self.x2000, self.y2000 = vector(ra2000, dec2000)
         self.x2020, self.y2020 = vector(ra2020, dec2020)
-        self.jdn2000 = jdn(2000, 1, 1)
-        self.jdn2020 = jdn(2020, 1, 1)
+        self.jdn2000 = time_location.jdn(2000, 1, 1)
+        self.jdn2020 = time_location.jdn(2020, 1, 1)
         dx = self.x2020 - self.x2000
         dy = self.y2020 - self.y2000
         days = self.jdn2020 - self.jdn2000
@@ -43,7 +45,7 @@ class PoleMovement(object):
         self.dyr = dy / days
 
     def calc_for_date(self, year, month, day):
-        jdn_now = jdn(year, month, day)
+        jdn_now = time_location.jdn(year, month, day)
         return self.calc_for_jdn(jdn_now)
 
     def calc_for_jdn(self, x):
@@ -83,10 +85,6 @@ def star_coord(x, y):
     ang /= 360.0
     ang *= 24.0
     return ang, mag
-
-def jdn(y, m, d):
-    # http://www.cs.utsa.edu/~cs1063/projects/Spring2011/Project1/jdn-explanation.html
-    return d + (((153 * m) + 2) // 5) + (356 * y) + (y // 4) - (y // 100) + (y // 400) - 32045
 
 """
 if __name__ == "__main__":

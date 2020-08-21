@@ -6,26 +6,6 @@ import pole_movement
 
 SIDEREAL_DAY_SECONDS = micropython.const(86164.09054)
 
-# table pre-generated using data from https://britastro.org/node/17066
-# [0]   is the upper bound of the latitude, lower bound found in next entry
-# [1:3] are quadratic coefficients for that latitude
-REFRACTION_TABLE = micropython.const([
-[90.0, 0.0000000000,  0.0000000000, 0.0000000000],
-[89.0, 0.0000000000, -0.0183333333, 1.6500000000],
-[75.0, 0.0001666667, -0.0433333333, 2.5833333333],
-[65.0, 0.0002500000, -0.0541666667, 2.9333333333],
-[55.0, 0.0004166667, -0.0725000000, 3.4333333333],
-[45.0, 0.0010000000, -0.1250000000, 4.6000000000],
-[35.0, 0.0022500000, -0.2125000000, 6.1000000000],
-[25.0, 0.0080000000, -0.5000000000, 9.5500000000],
-[17.5, 0.0093333333, -0.5466666667, 9.9500000000],
-[12.5, 0.0536666667, -1.6550000000, 16.6000000000],
-[7.5,  0.1965277778, -3.7979166667, 23.7430555556],
-[3.5,  0.5986111111, -6.6125000000, 27.7638888889],
-[1.5,  1.1222222222, -8.1833333333, 28.8111111111],
-[0.75, 1.4666666667, -8.7000000000, 28.9833333333],
-[0.25, 1.4333333333, -8.6833333333, 28.9833333333]])
-
 class TimeLocationManager(object):
     def __init__(self):
         # scan all files to get an estimated date
@@ -95,26 +75,6 @@ class TimeLocationManager(object):
                 self.latitude -= 90.0
             while self.latitude < -90.0:
                 self.latitude += 90.0
-            i = 0
-            tbl_len = len(REFRACTION_TABLE)
-            etr = None
-            # find the best entry in the table
-            while i < tbl_len:
-                if latitude <= REFRACTION_TABLE[i][0]:
-                    if i < tbl_len - 1:
-                        if latitude > REFRACTION_TABLE[i + 1][0]:
-                            etr = REFRACTION_TABLE[i]
-                            break
-                    else:
-                        etr = REFRACTION_TABLE[i]
-                        break
-                i += 1
-            # quadratic coeff
-            x_2 = etr[1] * (latitude ** 2)
-            x_1 = etr[2] * latitude
-            x_0 = etr[3]
-            self.refraction = x_2 + x_1 + x_0
-            self.refraction /= 60.0 # calculation was for minutes
 
     def is_ready(self):
         return self.readiness
@@ -144,9 +104,6 @@ class TimeLocationManager(object):
             x -= 360.0
         return x
 
-    def get_refraction(self):
-        return self.refraction
-
     def get_polaris(self):
         return self.pole_move.calc_for_jdn(self.get_jdn())
 
@@ -170,20 +127,6 @@ def test():
         print("tick " + str(mgr.get_time()))
         pyb.delay(1001)
         i += 1
-    print("=============")
-    print("Refraction Test")
-    lat = 90
-    lat_step = 10
-    while lat >= -1:
-        mgr.set_location(mgr.longitude, lat)
-        print("%0.2f = %0.8f" % (lat, mgr.get_refraction()))
-        lat -= lat_step
-        if lat <= 20:
-            lat_step = 5
-        if lat <= 5:
-            lat_step = 1
-        if lat <= 2:
-            lat_step = 0.5
     print("=============")
     print("Time Test")
     i = 0

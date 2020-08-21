@@ -267,13 +267,13 @@ function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, ghost_results)
                 len = maxr;
             }
 
-            if ($( "#chkrefraction-1").prop("checked"))
+            if ($( "#chkrefraction-1").prop("checked") && refraction != null && refraction != false)
             {
                 // if we need to shift the target to compenssate for refraction
                 // then we need to account for the camera rotation vs the polar clock
                 var refractionRotation = obj["rotation"] - obj["polar_clock"];
                 // with this rotation accounted for, we know which direction to shift the target
-                var movedP = math_movePointTowards([px, py], [obj["refraction"] / imgscale, refractionRotation + 90.0]);
+                var movedP = math_movePointTowards([px, py], [refraction[0] * obj["pix_per_deg"] / imgscale, refractionRotation + 90.0]);
                 px = movedP[0];
                 py = movedP[1];
             }
@@ -357,6 +357,46 @@ function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, ghost_results)
                     gline.setAttribute("style", "stroke:blue;stroke-width:1");
                     svgele.appendChild(gline);
                 }
+            }
+
+            var drawLevel = true;
+            var levelRotation = obj["rotation"] - obj["polar_clock"];
+            if (drawLevel)
+            {
+                var rad = 30;
+                cirele = document.createElementNS(svgNS, "circle");
+                cirele.setAttribute("cx", rad + 1);
+                cirele.setAttribute("cy", rad + 1);
+                cirele.setAttribute("r", rad);
+                cirele.setAttribute("style", "fill:none;stroke:lime;stroke-width:1");
+                svgele.appendChild(cirele);
+                var pp = math_movePointTowards([rad + 1, rad + 1], [rad - 2, levelRotation]);
+                cline = document.createElementNS(svgNS, "line");
+                cline.setAttribute("x1", pp[0]);
+                cline.setAttribute("y1", pp[1]);
+                pp = math_movePointTowards([rad + 1, rad + 1], [rad - 2, levelRotation + 180]);
+                cline.setAttribute("x2", pp[0]);
+                cline.setAttribute("y2", pp[1]);
+                cline.setAttribute("style", "stroke:lime;stroke-width:1");
+                svgele.appendChild(cline);
+                pp = math_movePointTowards([rad + 1, rad + 1], [21.21, levelRotation + 45])
+                cline = document.createElementNS(svgNS, "line");
+                cline.setAttribute("x1", pp[0]);
+                cline.setAttribute("y1", pp[1]);
+                pp = math_movePointTowards([rad + 1, rad + 1], [21.21, levelRotation + (180 - 45)]);
+                cline.setAttribute("x2", pp[0]);
+                cline.setAttribute("y2", pp[1]);
+                cline.setAttribute("style", "stroke:lime;stroke-width:1");
+                svgele.appendChild(cline);
+                pp = math_movePointTowards([rad + 1, rad + 1], [16.77, levelRotation - 63.43])
+                cline = document.createElementNS(svgNS, "line");
+                cline.setAttribute("x1", pp[0]);
+                cline.setAttribute("y1", pp[1]);
+                pp = math_movePointTowards([rad + 1, rad + 1], [16.77, levelRotation - (180 - 63.43)]);
+                cline.setAttribute("x2", pp[0]);
+                cline.setAttribute("y2", pp[1]);
+                cline.setAttribute("style", "stroke:lime;stroke-width:1");
+                svgele.appendChild(cline);
             }
         }
     }

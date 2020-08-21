@@ -2,7 +2,7 @@ import micropython
 micropython.opt_level(2)
 
 import pyb, uos, uio, time, gc
-import ubinascii
+import ubinascii, ujson
 import network
 import usocket as socket
 import exclogger
@@ -12,12 +12,10 @@ STS_SERVED   = micropython.const(1)
 STS_KICKED   = micropython.const(-1)
 
 class CaptivePortal(object):
-    def __init__(self, ssid = None, password = "1234567890", winc_mode = network.WINC.MODE_AP, winc_security = network.WINC.WEP, debug = False):
-        self.winc_mode = winc_mode
-        self.winc_security = winc_security
-        self.password = password
-        self.ssid = ssid
+    def __init__(self, debug = False):
         self.debug = debug
+
+        self.wlan = None
 
         self.start_wifi()
 
@@ -29,31 +27,125 @@ class CaptivePortal(object):
         self.last_http_time = -1
 
     def start_wifi(self):
-        self.wlan = network.WINC(mode = self.winc_mode)
+        obj = None
+        valid = False
+        try:
+            with open("wifi_settings.json", mode="rb") as f:
+                obj = ujson.load(f)
+                valid = True
+        except KeyboardInterrupt:
+            raise
+        except OSError as exc:
+            valid = False
+            exclogger.log_exception(exc)
+        except Exception as exc:
+            valid = False
+            exclogger.log_exception(exc)
+        if obj is not None:
+            if "ssid" in obj:
+                self.ssid = obj["ssid"]
+                self.password = ""
+                self.winc_security = network.WINC.OPEN
+                self.winc_mode = network.WINC.MODE_STA
+            else:
+                valid = False
+            if "password" in obj:
+                self.password = obj["password"]
+                if len(self.password) > 0:
+                    self.winc_security = network.WINC.WPA_PSK
+                else:
+                    self.winc_security = network.WINC.OPEN
+            if "security" in obj:
+                secstr = obj["security"].lower()
+                if "open" in secstr:
+                    self.winc_security = network.WINC.OPEN
+                elif "wpa" in secstr:
+                    self.winc_security = network.WINC.WPA_PSK
+                elif "psk" in secstr:
+                    self.winc_security = network.WINC.WPA_PSK
+                elif "wep" in secstr:
+                    self.winc_security = network.WINC.WEP
+            if "mode" in obj:
+                modestr = obj["mode"].lower()
+                if "soft" in modestr and "ap" in modestr:
+                    self.winc_mode = network.WINC.MODE_AP
+                elif "remote" in modestr:
+                    self.winc_mode = network.WINC.MODE_AP
+                elif "access" in modestr and "point" in modestr:
+                    self.winc_mode = network.WINC.MODE_AP
+        else:
+            valid = False
 
-        # generate a SSID if none is provided
-        if self.ssid is None:
-            self.ssid = "OpenMV-?"
+        if valid == False:
+            self.ssid = "PolarScope-?"
+            self.password = "1234567890"
+            self.winc_security = network.WINC.WEP
+            self.winc_mode = network.WINC.MODE_AP
+
         if "?" in self.ssid: # question mark is replaced with a unique identifier
             uidstr = ubinascii.hexlify(pyb.unique_id()).decode("ascii")
             self.ssid = self.ssid.replace("?", uidstr)
-        # limit SSID length
-        if len(self.ssid) > 7 + 8:
-            self.ssid = self.ssid[0:(7 + 8)]
+        if self.winc_mode == network.WINC.MODE_AP:
+            # limit SSID length
+            if len(self.ssid) > 7 + 8:
+                self.ssid = self.ssid[0:(7 + 8)]
+
+        if valid == False:
+            # write out a template for the JSON file
+            obj = {}
+            obj.update({"ssid": self.ssid})
+            obj.update({"password": self.password})
+            obj.update({"security": "wep"})
+            obj.update({"mode": "soft ap"})
+            try:
+                with open("wifi_settings_template.json", mode="wb+") as f:
+                    ujson.dump(obj, f)
+            except Exception as exc:
+                exclogger.log_exception(exc)
+
+        if self.wlan is None:
+            try:
+                self.wlan = network.WINC(mode = self.winc_mode)
+            except OSError:
+                self.wlan = None
+
+        if self.wlan is None:
+            self.wifi_timestamp = pyb.millis()
+            return
 
         if self.winc_mode == network.WINC.MODE_AP:
-            self.wlan.start_ap(self.ssid, key = self.password, security = network.WINC.WEP)
-        else: # MODE_STA
-            # ordinary station mode is provided to speed up testing
+            if self.winc_security == network.WINC.WPA_PSK:
+                self.winc_security = network.WINC.WEP
+            self.wlan.start_ap(self.ssid, key = self.password, security = self.winc_security)
+            self.ip = self.wlan.ifconfig()[0]
+            if self.ip == "0.0.0.0":
+                self.ip = "192.168.1.1"
+        else:
             self.wlan.connect(self.ssid, key = self.password, security = self.winc_security)
-        self.ip = self.wlan.ifconfig()[0]
+            self.ip = "0.0.0.0"
+            self.wifi_timestamp = pyb.millis()
 
-        # provide hardcoded IP address if the one obtained is invalid
-        if self.ip == "0.0.0.0":
-            self.ip = "192.168.1.1"
+    def task_conn(self):
+        if self.wlan is None:
+            if pyb.elapsed_millis(self.wifi_timestamp) > 2000:
+                self.start_wifi()
+            return False
 
-        if self.debug:
-            print("IP: " + self.ip)
+        if self.winc_mode == network.WINC.MODE_STA:
+            if self.wlan.isconnected():
+                ip = self.wlan.ifconfig()[0]
+                if self.ip != ip:
+                    self.ip = ip
+                    print("Connected! IP: " + self.ip)
+                return True
+            else:
+                self.ip = "0.0.0.0"
+                if pyb.elapsed_millis(self.wifi_timestamp) > 2000:
+                    self.start_wifi()
+                return False
+        else: # AP mode, no need to check connection
+            return True
+        return False
 
     def start_dns(self):
         if self.winc_mode != network.WINC.MODE_AP:
@@ -293,6 +385,7 @@ class CaptivePortal(object):
         return STS_IDLE
 
     def task(self):
+        self.task_conn()
         if self.last_http_time > 0 and pyb.elapsed_millis(self.last_http_time) > 10000:
             self.kick()
             return STS_KICKED

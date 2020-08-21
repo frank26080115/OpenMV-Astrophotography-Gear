@@ -38,6 +38,8 @@ var hotpixels = [];
 
 var loadTries = 0;
 
+var refraction = null;
+
 function loadSettings(t)
 {
     if (platesolver_init !== undefined) {
@@ -166,6 +168,9 @@ function startSendSettings()
     }
     updateQueue = [];
     onSettingErr = function () {
+        // setting saving failed
+        // so queue them back up again
+        // only re-send when status update is successful
         updatePending.forEach(function(ele) {
             if (updateQueue.includes(ele) == false) {
                 updateQueue.push(ele);
@@ -503,6 +508,69 @@ function queueSettingsUpdate(key) {
     }
 }
 
+function computeRefraction() {
+    if ($( "#chkrefraction-1").prop("checked") == false) {
+        document.getElementById("refraction_info").innerHTML = "";
+        refraction = null;
+        return;
+    }
+    var loc = getLocation();
+    if (loc == false) {
+        document.getElementById("refraction_info").innerHTML = "Unable to calculate refraction due to invalid location coordinates";
+        refraction = null;
+        return;
+    }
+    refraction = math_getRefraction(loc[1], $("#slider_pressure").slider("option", "value") / 10.0, $("#slider_temperature").slider("option", "value"));
+    var fmtRefraction = "" + refraction[0];
+    while (true) {
+        var i, c = 0;
+        for (i = 0; i < fmtRefraction.length; i++) {
+            if (fmtRefraction[i] != '0') {
+                c += 1;
+            }
+        }
+        if (c < 3) {
+            break;
+        }
+        if (fmtRefraction.length < 8) {
+            break;
+        }
+        fmtRefraction = fmtRefraction.substring(0, fmtRefraction.length - 1);
+    }
+    var txtinfo = "Calculated Refraction: " + fmtRefraction + "&deg; = " + (Math.round(refraction[1] * 100.0) / 100.0) + " arcmin";
+    if (lastStatus != null && lastStatus != false) {
+        if (lastStatus["solution"]) {
+            txtinfo += " = " + (Math.round(lastStatus["pix_per_deg"] * refraction[0] * 10.0) / 10.0) + " camera pixels";
+        }
+    }
+    document.getElementById("refraction_info").innerHTML = txtinfo;
+}
+
+function demoGhost()
+{
+    var needGood = Math.random() < 0.5;
+    var tries = 0;
+    while (tries < 50)
+    {
+        var v = math_getVector([ghost.star_x, ghost.star_y], [ghost.pole_x, ghost.pole_y]);
+        ghost.star_x = Math.round((dataw * 0.2) + (Math.random() * dataw * 0.6));
+        ghost.star_y = Math.round((datah * 0.2) + (Math.random() * datah * 0.6));
+        var p = math_movePointTowards([ghost.star_x, ghost.star_y], [v[0], v[1] + (90.0 * (-1.5 + (Math.random() * 3.0)))]);
+        ghost.pole_x = Math.round(p[0]);
+        ghost.pole_y = Math.round(p[1]);
+        if (needGood) {
+            var vg = validateGhost();
+            if (vg[0]) {
+                break;
+            }
+        }
+        else if (needGood == false && ghost.pole_x > 0 && ghost.pole_x < dataw && ghost.pole_y > 0 && ghost.pole_y < datah) {
+            break;
+        }
+        tries += 1;
+    }
+}
+
 function makeSlider(id, minval, maxval, defval, stepval, slide_func)
 {
     if (defval < minval) {
@@ -548,13 +616,26 @@ function onLoadAll()
     $( "#fldset_speed input" ).checkboxradio();
     $( "#speedmode-1").prop("checked", true).checkboxradio("refresh");
     $( "#chkrefraction-1" ).checkboxradio().prop("checked", settings["use_refraction"]).on("change", function () {
-        var x = $( "#chkrefraction-1").prop("checked");
-        if (settings["use_refraction"] !== x) {
-            settings["use_refraction"] = x;
+        var x = getLocation();
+        var y = $( "#chkrefraction-1").prop("checked");
+        if (x == false && y == true) {
+            $( "#chkrefraction-1").prop("checked", false).checkboxradio("refresh");
+            alert("ERROR: Proper location coordinates required for refraction calculations");
+            return;
+        }
+        if (settings["use_refraction"] !== y) {
+            settings["use_refraction"] = y;
             queueSettingsUpdate("use_refraction");
         }
+        if (y) {
+            computeRefraction();
+        }
+        else {
+            document.getElementById("refraction_info").innerHTML = "";
+        }
         refreshUi(null);
-    });
+    }).checkboxradio("refresh");
+
     $( "#realmode-1" ).checkboxradio().on("change", function () {
         var x = $( "#realmode-1").prop("checked");
         console.log("realmode click " + x);
@@ -597,6 +678,21 @@ function onLoadAll()
         settings["thresh_hs"] = ui.value;
         queueSettingsUpdate("thresh_hs");
     });
+    makeSlider("slider_pressure", 500, 1100, 1010, 1, function(obj, event, ui) {
+        console.log("slider_pressure: " + ui.value);
+        var x = ui.value / 10;
+        document.getElementById("span_pressure").innerHTML = x + " kPa";
+        computeRefraction();
+        refreshUi(null);
+    });
+    document.getElementById("span_pressure").innerHTML = "101 kPa";
+    makeSlider("slider_temperature", -50, 50, 10, 1, function(obj, event, ui) {
+        console.log("slider_temperature: " + ui.value);
+        document.getElementById("span_temperature").innerHTML = ui.value + "&deg;C";
+        computeRefraction();
+        refreshUi(null);
+    });
+    document.getElementById("span_temperature").innerHTML = "10&deg;C";
 
     $("#btn_time_update" ).button().click(function( event ) {
         console.log("click btn_time_update");
@@ -628,27 +724,7 @@ function onLoadAll()
         var demo = true;
         if (demo)
         {
-            var needGood = Math.random() < 0.5;
-            var tries = 0;
-            while (tries < 50)
-            {
-                var v = math_getVector([ghost.star_x, ghost.star_y], [ghost.pole_x, ghost.pole_y]);
-                ghost.star_x = Math.round((dataw * 0.2) + (Math.random() * dataw * 0.6));
-                ghost.star_y = Math.round((datah * 0.2) + (Math.random() * datah * 0.6));
-                var p = math_movePointTowards([ghost.star_x, ghost.star_y], [v[0], v[1] + (90.0 * (-1.5 + (Math.random() * 3.0)))]);
-                ghost.pole_x = Math.round(p[0]);
-                ghost.pole_y = Math.round(p[1]);
-                if (needGood) {
-                    var vg = validateGhost();
-                    if (vg[0]) {
-                        break;
-                    }
-                }
-                else if (needGood == false && ghost.pole_x > 0 && ghost.pole_x < dataw && ghost.pole_y > 0 && ghost.pole_y < datah) {
-                    break;
-                }
-                tries += 1;
-            }
+            demoGhost();
         }
 
         // calibrate button is enabled when the solution is checked against
@@ -699,7 +775,10 @@ function onLoadAll()
         if (lastStatus != null) {
             var stars = lastStatus["stars"];
             stars.forEach(function(ele, idx) {
-                hotpixels.push([ele["cx"], ele["cy"]]);
+                if (ele["brightness"] % 2 == 1) // odd number means contains saturated pixel
+                {
+                    hotpixels.push([ele["cx"], ele["cy"]]);
+                }
             });
         }
         else {
@@ -729,11 +808,15 @@ function onLoadAll()
 
     document.getElementById("txt_location").onchange = function() {
         getLocation(); // just to validate and colorize
+        computeRefraction();
+        refreshUi(null);
     };
 
     $(window).on('resize', function(e) {
         needUiRefresh = true; // this will force a re-scaling of the drawn view
     });
+
+    computeRefraction();
 
     setTimeout(() => { startStatusUpdate(); }, 1000);
 }
@@ -801,10 +884,15 @@ function onLoadAll()
   <h3>Time and Location</h3>
   <div>
     <div><fieldset><legend>Time and Date</legend><div><p>UTC Time: <span id="span_utc_time"></span></p><p>Epoch Seconds: <span id="span_utc_time_epoch"></span></p><p style="display: none;"><button id="btn_time_update">Update</button></p></div></fieldset></div>
-    <div><fieldset><legend>Location</legend><div><p>type in or paste in coordinates</p><p>latitude, longitude</p><p>comma separated, multiple formats supported (automatically detected)</p><p><input type="text" name="txt_location" id="txt_location" style="width: 100%;" /><button id="btn_location_update">Update</button></p></div></fieldset></div>
+    <div><fieldset><legend>Location</legend><div><p>type in or paste in coordinates</p><p>latitude, longitude</p><p>comma separated, multiple formats supported (automatically detected)</p><p><input type="text" name="txt_location" id="txt_location" style="width: 100%;" /><button id="btn_location_update">Save</button></p></div></fieldset></div>
     <p>The time and date information is used to calculate the position of Polaris while compensating for the very slow wobble of the Earth's rotation axis. The location information is used to help determine the atmospheric refraction compensation required.</p>
+    <div><fieldset><legend>Atmosphere Conditions</legend><div><p>Pressure and temperature does affect the air's index of refraction, by very little amounts. Default values are 101 kPa and 10&deg;C.</p>
+        <p><fieldset><legend>Pressure: <span id="span_pressure"></span></legend><div id="slider_pressure"></div></fieldset></p>
+        <p><fieldset><legend>Temperature: <span id="span_temperature"></span></legend><div id="slider_temperature"></div></fieldset></p>
+    <p></p></div></fieldset></div>
     <p><label for="chkrefraction-1">Apply Refraction Compensation?</label>
     <input type="checkbox" name="chkrefraction-1" id="chkrefraction-1"></p>
+    <p id="refraction_info"></p>
   </div>
   <h3>Camera Exposure</h3>
   <div>

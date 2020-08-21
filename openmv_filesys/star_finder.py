@@ -99,6 +99,7 @@ def blob_to_star(b, img, thresh):
     x = xstart
     xlim = x + w
     brightness = 0
+    maxbrite = 0
     # iterate the ROI
     while x < xlim:
         y = ystart
@@ -110,6 +111,8 @@ def blob_to_star(b, img, thresh):
                 xbucket[x - xstart] += p
                 ybucket[y - ystart] += p
                 brightness += p
+                if p > maxbrite:
+                    maxbrite = p
             y += 1
         x += 1
     # calculate weighted center for each axis
@@ -142,6 +145,14 @@ def blob_to_star(b, img, thresh):
     cy += ystart
     # approximate radius (should be dividing by 4 but it doesn't really matter)
     r = (w + h) / 3.0
+    # if the star has a saturated pixel, it could be a hot-pixel
+    # make the brightness even or odd to signal as such
+    if maxbrite >= 254:
+        if (brightness % 2) == 0:
+            brightness += 1
+    else:
+        if (brightness % 2) != 0:
+            brightness += 1
     return blobstar.BlobStar(cx, cy, r, brightness)
 
 """

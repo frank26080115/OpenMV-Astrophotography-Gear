@@ -40,7 +40,6 @@ class PolarScope(object):
         self.snap_millis = 0
 
         self.settings = {}
-        self.settings.update({"name":        "PolarScope-?"})
         self.settings.update({"longitude":   self.time_mgr.longitude})
         self.settings.update({"latitude":    self.time_mgr.latitude})
         self.settings.update({"time":        self.time_mgr.get_sec()})
@@ -58,14 +57,7 @@ class PolarScope(object):
         self.load_settings()
         self.time_mgr.readiness = False
 
-        try:
-            if debug == False:
-                self.portal = captive_portal.CaptivePortal(ssid = self.settings["name"])
-            else:
-                self.portal = captive_portal.CaptivePortal("moomoomilk", "1234567890", winc_mode = network.WINC.MODE_STA, winc_security = network.WINC.WPA_PSK, debug = True)
-        except OSError:
-            print("shield not connected")
-            self.portal = None
+        self.portal = captive_portal.CaptivePortal()
 
         self.img = None
         self.img_compressed = None
@@ -159,7 +151,7 @@ class PolarScope(object):
             state.update({"pole_x": self.locked_solution[2]})
             state.update({"pole_y": self.locked_solution[3]})
             state.update({"rotation": self.locked_solution[4]})
-            state.update({"refraction": self.time_mgr.get_refraction() * pole_finder.PIXELS_PER_DEGREE})
+            state.update({"pix_per_deg": stable_solution.pix_per_deg})
         else:
             state.update({"solution": False})
         if self.stars is not None:
