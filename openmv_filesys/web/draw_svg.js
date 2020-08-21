@@ -165,13 +165,7 @@ function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, ghost_results)
             var cx = ele["cx"];
             var cy = ele["cy"];
 
-            var ishot = false;
-            hotpixels.forEach(function(ele, idx) {
-                var v = math_getVector([cx, cy], ele);
-                if (v[0] < 2) {
-                    ishot = true;
-                }
-            });
+            var ishot = checkHotPixel(ele);
             if (ishot == false)
             {
                 cirele = document.createElementNS(svgNS, "circle");

@@ -73,10 +73,10 @@ function platesolver_start()
     stars.forEach(function(ele, idx) {
         var vcx = settings["center_x"];
         var vcy = settings["center_y"];
-        var cx = ele["cx"];
-        var cy = ele["cy"];
-        var vc = math_getVector([vcx, vcy], [cx, cy]);
-        var s = { x: cx, y: cy, r: ele["r"], dist: vc[0], ang: vc[1] };
+        var ecx = ele["cx"];
+        var ecy = ele["cy"];
+        var vc = math_getVector([vcx, vcy], [ecx, ecy]);
+        var s = { cx: ecx, cy: ecy, r: ele["r"], b: ele["brightness"], dist: vc[0], ang: vc[1] };
         stars_cache.push(s);
     });
 
@@ -101,7 +101,7 @@ function platesolver_start()
     document.getElementById("div_platesolvesolution").innerHTML = "Working on it...";
     setTimeout(() => { platesolve_progress(); }, 1000);
 
-    console.log("platesolve center_star: (" + centerstar.x + ", " + centerstar.y + ")");
+    console.log("platesolve center_star: (" + centerstar.cx + ", " + centerstar.cy + ")");
 
     // make a list of stars that excludes the center star
     var farstars = [];
@@ -126,18 +126,22 @@ function platesolve_tick()
 
     var max_score = 0;
     var max_score_list = [];
+    var min_error = -1;
     var rot;
     for (rot = 0; rot < 360; rot += 1)
     {
         var score = 0;
         var score_list = [];
+        var err_sum = 0;
+        var min_brite = platesolve_statemachine.center_star.b;
+        var max_dist = 0;
         var nidx, nlen = checklist.length;
         for (nidx = 0; nidx < nlen; nidx++)
         {
             var fidx, flen = platesolve_statemachine.far_stars_cnt;
             for (fidx = 0; fidx < flen; fidx++)
             {
-                var vect = math_getVector([platesolve_statemachine.center_star.x, platesolve_statemachine.center_star.y], [platesolve_statemachine.far_stars[fidx].x, platesolve_statemachine.far_stars[fidx].y]);
+                var vect = math_getVector([platesolve_statemachine.center_star.cx, platesolve_statemachine.center_star.cy], [platesolve_statemachine.far_stars[fidx].cx, platesolve_statemachine.far_stars[fidx].cy]);
                 var err_dist = Math.abs(vect[0] - checklist[nidx].dist);
                 if (err_dist < 70)
                 {
@@ -145,23 +149,67 @@ function platesolve_tick()
                     if (err_ang < 1.2) // angle match can be pretty tight as distortion doesn't come into play, but rounding error does
                     {
                         score += 1;
-                        score_list.push(checklist[nidx].name);
+                        var expected_pos = math_movePointTowards([platesolve_statemachine.center_star.cx, platesolve_statemachine.center_star.cy], [checklist[nidx].dist, checklist[nidx].ang - rot]);
+                        var err_vect = math_getVector([platesolve_statemachine.far_stars[fidx].cx, platesolve_statemachine.far_stars[fidx].cy], expected_pos);
+                        err_sum += err_vect[0];
+                        if (platesolve_statemachine.far_stars[fidx].b < min_brite) {
+                            min_brite = platesolve_statemachine.far_stars[fidx].b;
+                        }
+                        if (vect[0] > max_dist) {
+                            max_dist = vect[0];
+                        }
+                        score_list.push(platesolve_statemachine.far_stars[fidx]);
                     }
                 }
             }
         }
-        if (score > max_score) {
-            max_score = score;
-            max_score_list = [];
-            score_list.forEach(function(ele, idx) {
-                var n = ele;
-                max_score_list.push(n);
+        err_sum /= score;
+        if (score >= max_score && (min_error < 0 || err_sum < min_error))
+        {
+            platesolve_statemachine.far_stars.forEach(function(ele,idx) {
+                var matched = false;
+                // was this used in the match?
+                score_list.forEach(function(ele2,idx2) {
+                    if (ele.cx == ele2.cx && ele.cy == ele2.cy) {
+                        matched = true;
+                    }
+                });
+
+                if (matched == false)
+                {
+                    // nope it was not used in the match
+                    // was this within the match area though?
+                    var vect = math_getVector([platesolve_statemachine.center_star.cx, platesolve_statemachine.center_star.cy], [ele.cx, ele.cy]);
+                    if (vect[0] < max_dist)
+                    {
+                        // within match area
+                        // but was it brighter than some of the matches?
+                        if (ele.b > min_brite)
+                        {
+                            // it was brighter, so then, why didn't the database have something that matched it?
+                            // it could be a hot pixel
+                            var hot_pix = checkHotPixel(ele);
+
+                            // not a hot pixel, but brighter than some other stars, still within the matching area
+                            // yet, it didn't match anything in the database?
+                            // this becomes a penalty against the score
+                            if (hot_pix == false)
+                            {
+                                score -= 0.5;
+                            }
+                        }
+                    }
+                }
             });
+
+            if (score > max_score) {
+                max_score = score;
+            }
         }
     }
 
     if (max_score >= platesolve_scorereq) {
-        platesolve_statemachine.solutions.push({name: possibility.name, score: max_score, score_list: max_score_list});
+        platesolve_statemachine.solutions.push({name: possibility.name, score: max_score});
         document.getElementById("div_platesolvesolution").innerHTML += "[" + possibility.name + ": " + max_score + "]";
     }
 
@@ -191,7 +239,7 @@ function platesolve_finish()
     else
     {
         platesolve_statemachine.solutions.sort(function(a, b) { return b.score - a.score; });
-        var resstr = "TOP SOLUTION(s) ranked by score:<br /><ol>";
+        var resstr = "TOP POSSIBILITIES ranked by score:<br /><ol>";
         var minscore = platesolve_statemachine.solutions[0].score;
         var inccnt = 0;
         if (platesolve_statemachine.solutions.length >= 10) {

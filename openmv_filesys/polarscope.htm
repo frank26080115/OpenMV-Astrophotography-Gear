@@ -546,6 +546,26 @@ function computeRefraction() {
     document.getElementById("refraction_info").innerHTML = txtinfo;
 }
 
+function checkHotPixel(star) {
+    if (hotpixels == undefined) {
+        return false;
+    }
+    if (hotpixels == null || hotpixels == false) {
+        return false;
+    }
+    if (hotpixels.length <= 0) {
+        return false;
+    }
+    var i, cnt = hotpixels.length;
+    for (i = 0; i < cnt; i++) {
+        var v = math_getVector([star.cx, star.cy], hotpixels[i]);
+        if (v[0] < 2) {
+            return true;
+        }
+    }
+    return false;
+}
+
 function demoGhost()
 {
     var needGood = Math.random() < 0.5;
