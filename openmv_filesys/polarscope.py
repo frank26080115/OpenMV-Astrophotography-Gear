@@ -294,7 +294,7 @@ class PolarScope(object):
         self.reply_ok(client_stream)
 
     def handle_index(self, client_stream, req, headers, content):
-        captive_portal.gen_page(client_stream, "index.htm", add_files = ["web/jquery-ui-1.12.1-darkness.css", "web/jquery-3.5.1.min.js", "web/jquery-ui-1.12.1.min.js", "web/magellan.js"], add_dir = "web", debug = self.debug)
+        captive_portal.gen_page(client_stream, "polarscope.htm", add_files = ["web/jquery-ui-1.12.1-darkness.css", "web/jquery-3.5.1.min.js", "web/jquery-ui-1.12.1.min.js", "web/magellan.js"], add_dir = "web", debug = self.debug)
 
     def compress_img(self):
         if self.img is None:
