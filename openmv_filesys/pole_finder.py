@@ -21,32 +21,44 @@ except:
 # vector to a star from Polaris, magnitude in pixels
 # sorted by closest first
 STARS_NEAR_POLARIS = micropython.const([
-    ["HD 5914",         98.867180,  -10.647256],
-    ["* lam UMi",      479.008301, -118.529852],
-    ["HD 66368",       524.994808,  164.780381],
-    ["HD 213126",      534.725064,  -51.636087],
-    ["HD 6319",        654.323145,   12.759174],
-    ["HD 22701",       820.441622,   68.948647],
-    ["V* OV Cep",      875.677409,  129.407251], # 2.9063 arc degs from Polaris
-    ["V* UY UMi",      884.833301, -168.092577],
-    ["HD 203836",      896.804216,  -59.867339],
-    ["HD 114282",      914.532044, -160.757620],
-    ["HD 42855",       927.519046,  115.447469],
-    ["HD 135294",     1060.463568, -140.366796],
-    ["* 24 UMi",      1082.153394, -105.587018],
-    ["* del UMi",     1195.457555, -104.488215],
-    ["HD 107113",     1264.471354, -170.201903]])
+    ["HD 5914",         98.867180,  -10.647256, True],
+    ["* lam UMi",      479.008301, -118.529852, True],
+    ["HD 66368",       524.994808,  164.780381, True],
+    ["HD 213126",      534.725064,  -51.636087, True],
+    ["HD 6319",        654.323145,   12.759174, True],
+    ["HD 221525",      676.906523,  -21.909059, True],
+    ["HD 22701",       820.441622,   68.948647, True],
+    ["HD 224687",      829.461143,   -9.602170, True],
+    ["V* OV Cep",      875.677409,  129.407251, True], # 2.9063 arc degs from Polaris
+    ["HD 96870",       876.265358, -178.807660, False],
+    ["V* UY UMi",      884.833301, -168.092577, True],
+    ["HD 203836",      896.804216,  -59.867339, True],
+    ["HD 221488",      897.533794,  -18.299156, False],
+    ["HD 114282",      914.532044, -160.757620, True],
+    ["* 2 UMi",        924.487512,   12.313035, True],
+    ["HD 42855",       927.519046,  115.447469, False],
+    ["V* V377 Cep",    942.226371,  -18.793331, True],
+    ["V* V378 Cep",   1007.975111,  -16.059071, True],
+    ["HD 135294",     1060.463568, -140.366796, True],
+    ["HD 212774",     1063.289980,  -37.557174, False],
+    ["* 24 UMi",      1082.153394, -105.587018, True],
+    ["HD 212710",     1096.976152,  -37.222721, True],
+    ["HD 174878",     1146.140083,  -95.341928, True],
+    ["* del UMi",     1195.457555, -104.488215, True],
+    ["HD 107113",     1264.471354, -170.201903, True]])
 
 PIXELS_PER_DEGREE = micropython.const(875.677409 / 2.9063) # calculated using "OV Cep"
 DIST_TOL = micropython.const(0.03)    # percentage
 ANG_TOL  = micropython.const(1.0)     # degrees
-SCORE_REQUIRED = micropython.const(4) # must have this many stars that match their estimated coordinates
+SCORE_REQUIRED = micropython.const(6) # must have this many stars that match their estimated coordinates
+ENABLE_PENALTY = micropython.const(True)
 
 class PoleSolution(object):
-    def __init__(self, star_list, search_limit = 3):
+    def __init__(self, star_list, hot_pixels = [], search_limit = 3):
         self.solved = False
         self.star_list = star_list
         self.search_limit = search_limit
+        self.hot_pixels = hot_pixels
 
     def solve(self, polaris_ra_dec = (2.960856, 89.349278)):
 
@@ -73,7 +85,9 @@ class PoleSolution(object):
         # iterate through all posibilities, brightest first
         for i in brite_sorted:
             # we are guessing "i" is Polaris for this iteration
-            i.score = []
+            i.score_list = []
+            i.score = 0
+            i.penalty = 0
             i.rotation = 0
             i.rot_ang_sum = 0
             i.rot_dist_sum = 0
@@ -87,11 +101,21 @@ class PoleSolution(object):
             rot_ang = None # without a known reference angle, use the first angle we encounter to establish a reference angle
             # rot_ang is set after the match is made
 
+            # these are used for the penalizing later
+            max_dist = 0
+            min_brite = -1
+
             idx_tbl = 0
             idx_blobs_start = 1 # start at [1] because [0] is supposed to be Polaris
             len_tbl = len(STARS_NEAR_POLARIS)
             len_blobs = len(dist_sorted)
             while idx_tbl < len_tbl:
+
+                # skip stars that shouldn't be checked
+                if STARS_NEAR_POLARIS[idx_tbl][3] == False:
+                    idx_tbl += 1
+                    continue
+
                 idx_blobs = idx_blobs_start # previous blobs (closer-to-Polaris) will be ignored
                 while idx_blobs < len_blobs:
                     k = dist_sorted[idx_blobs]
@@ -114,6 +138,11 @@ class PoleSolution(object):
                         rot_ang = i.rot_ang_sum / i.rot_dist_sum
                         i.rotation = rot_ang
 
+                        if k.ref_star_dist > max_dist:
+                            max_dist = k.ref_star_dist # establishes maximum matching area
+                        if k.brightness < min_brite or min_brite < 0:
+                            min_brite = k.brightness # establishes minimum matching brightness
+
                         # measured vs supposed distances may be different, track the differences
                         # this will account for distortion and focus-breathing
                         i.pix_calibration.append(k.ref_star_dist / STARS_NEAR_POLARIS[idx_tbl][1])
@@ -121,23 +150,59 @@ class PoleSolution(object):
                         # all previous (closer-to-Polaris) entries to be ignored on the next loop
                         idx_blobs_start = idx_blobs # doing this will prevent potential out-of-order matches
 
-                        #i.score.append(STARS_NEAR_POLARIS[idx_tbl][0]) # save the name to the list of matches (score)
-                        i.score.append(k)
+                        #i.score_list.append(STARS_NEAR_POLARIS[idx_tbl][0]) # save the name to the list of matches (score)
+                        i.score_list.append(k)
                     idx_blobs += 1
                 idx_tbl += 1
+
+            # penalty function is optional
+            if ENABLE_PENALTY:
+                # go through all blobs again to see if we should penalize for mystery stars
+                # if a star is brighter than some of the stars we've been able to match against
+                # then it's a mystery star, and makes the solution less confident
+                idx_blobs = 1
+                while idx_blobs < len_blobs:
+                    k = dist_sorted[idx_blobs]
+                    if k.ref_star_dist < max_dist and k.brightness > min_brite:
+                        # within the area and also brighter than expected
+                        # does it match an entry in the table? (some of the table entries were ignored previously, so we have to do the whole check again)
+                        in_database = False
+                        idx_tbl = 0
+                        len_tbl = len(STARS_NEAR_POLARIS)
+                        while idx_tbl < len_tbl:
+                            if dist_match(k.ref_star_dist, STARS_NEAR_POLARIS[idx_tbl][1]) and angle_match(k.ref_star_angle, ang_normalize(STARS_NEAR_POLARIS[idx_tbl][2] - rot_ang)):
+                                in_database = True
+                                break
+                            idx_tbl += 1
+
+                        if in_database == False:
+                            is_hot = False
+                            # check if it's a hot pixel
+                            for hp in self.hot_pixels:
+                                d = math.sqrt(((k.cx - hp[0]) ** 2) + ((k.cy - hp[1]) ** 2))
+                                if d < 2.0:
+                                    is_hot = True
+                                    break
+                            if is_hot == False:
+                                i.penalty += 1
+                    idx_blobs += 1
+                # calculate score accounting for penalty
+                i.score = len(i.score_list) - i.penalty
+
         # end of the for loop that goes from brightest to dimmest
         # each entry of that list will now have a "score" (number of matches)
         # find the one that has the most matches
         score_sorted = sorted(brite_sorted, key = sort_score_func, reverse = True)
         self.star_list = None # garbage collect
-        if len(score_sorted[0].score) < SCORE_REQUIRED:
+        if score_sorted[0].score < SCORE_REQUIRED:
             return False # not enough matches, no solution
 
         self.solved = True
         # store the solution states
         self.Polaris = score_sorted[0]
         self.rotation = score_sorted[0].rotation
-        self.stars_matched = score_sorted[0].score # for debug purposes
+        self.stars_matched = score_sorted[0].score_list # for debug purposes
+        self.penalty = score_sorted[0].penalty
         dist_calibration = 0
         for i in score_sorted[0].pix_calibration:
             dist_calibration += i
@@ -229,7 +294,7 @@ def ang_normalize(x):
     return x
 
 def sort_score_func(x):
-    return len(x.score)
+    return x.score
 
 """
 def test():

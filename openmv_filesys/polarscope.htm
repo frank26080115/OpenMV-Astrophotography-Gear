@@ -792,6 +792,7 @@ function onLoadAll()
     $("#btn_hotpixels").button().click(function( event ) {
         hotpixels = [];
         var pixstr = "";
+        var settingsStr = "";
         if (lastStatus != null) {
             var stars = lastStatus["stars"];
             stars.forEach(function(ele, idx) {
@@ -811,8 +812,11 @@ function onLoadAll()
             pixstr += "<ol>";
             hotpixels.forEach(function(ele, idx) {
                 pixstr += "<li>( " + (Math.round(ele[0] * 10.0) / 10.0) + " , " + (Math.round(ele[1] * 10.0) / 10.0) + " )</li>";
+                settingsStr += (Math.round(ele[0] * 10.0) / 10.0) + "," + (Math.round(ele[1] * 10.0) / 10.0) + ";";
             });
             pixstr += "</ol>";
+            settings["hotpixels"] = settingsStr;
+            queueSettingsUpdate("hotpixels");
         }
         else
         {
@@ -825,6 +829,8 @@ function onLoadAll()
         hotpixels = [];
         var divele = document.getElementById("hotpixel_list");
         divele.innerHTML = "";
+        settings["hotpixels"] = "";
+        queueSettingsUpdate("hotpixels");
     });
 
     document.getElementById("txt_location").onchange = function() {

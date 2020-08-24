@@ -66,6 +66,7 @@ class PolarScope(object):
         self.histogram = None
         self.img_stats = None
         self.stars = []
+        self.hot_pixels = []
         self.max_stars = 0
         self.packjpeg = False
         self.zoom = 1
@@ -249,6 +250,8 @@ class PolarScope(object):
                     self.zoom = v
                     if self.zoom != self.prevzoom and self.packjpeg:
                         self.compress_img()
+                elif i == "hotpixels":
+                    self.hot_pixels = star_finder.decode_hotpixels(v)
                 elif i == "save":
                     save = (v == True)
                     need_save = True
@@ -365,7 +368,6 @@ class PolarScope(object):
         #self.solutions[0] = None
         #self.solutions[1] = None
         self.locked_solution = None
-        #self.highspeed       = False
 
     def diag_tick(self, now, before, dur):
         dt = now - before
@@ -378,7 +380,7 @@ class PolarScope(object):
     def solve_full(self):
         prev_sol = self.stable_solution()
         if self.expo_code == star_finder.EXPO_JUST_RIGHT:
-            self.solution = pole_finder.PoleSolution(self.stars)
+            self.solution = pole_finder.PoleSolution(self.stars, hot_pixels = self.hot_pixels)
             if self.solution.solve(self.time_mgr.get_polaris()):
                 self.solu_dur_ls = pyb.elapsed_millis(self.t) # debug solution speed
                 accept = True
@@ -398,7 +400,7 @@ class PolarScope(object):
                     if self.stable_solution() is not None:
                         self.locked_solution = [self.solution.Polaris.cx, self.solution.Polaris.cy, self.solution.x, self.solution.y, self.solution.get_rotation()]
                         if self.debug and prev_sol is None:
-                            print("new solution! matched %u" % len(self.solution.stars_matched))
+                            print("new solution! matched %u, penalty %u" % (len(self.solution.stars_matched), self.solution.penalty))
                     return True
                 else:
                     # too much movement, invalidate all solutions
@@ -414,7 +416,6 @@ class PolarScope(object):
             return False
 
     def solve_fast(self):
-        destroy = False
         if self.expo_code == star_finder.EXPO_JUST_RIGHT and len(self.stars) > 0 and self.locked_solution is not None and self.solution is not None and destroy == False:
             if self.solution.solved != False:
                 # find the brightest star and assume it's Polaris
@@ -425,11 +426,6 @@ class PolarScope(object):
                 dx = bright_star.cx - self.locked_solution[0]
                 dy = bright_star.cy - self.locked_solution[1]
 
-                # check if there's too much movement for one frame
-                lim = sensor.width() / 5
-                if abs(dx) > lim or abs(dy) > lim:
-                    destroy = True
-
                 # update state for next frame comparison
                 self.locked_solution[0] += dx
                 self.locked_solution[1] += dy
@@ -438,16 +434,9 @@ class PolarScope(object):
                 self.locked_solution[3] = y
                 self.locked_solution[4] = r
                 self.solu_dur_hs = pyb.elapsed_millis(self.t) # debug solution speed
-            else:
-                destroy = True # lost the star for other reasons
-        else:
-            destroy = True # lost the star for other reasons
 
-        # get out of this mode
-        if destroy:
-            self.invalidate_solutions()
-            return False
-        return True
+                return True
+        return False
 
     def solve(self):
         if self.img is None:

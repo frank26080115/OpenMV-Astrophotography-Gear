@@ -155,6 +155,24 @@ def blob_to_star(b, img, thresh):
             brightness += 1
     return blobstar.BlobStar(cx, cy, r, brightness)
 
+def decode_hotpixels(str):
+    res = []
+    split = str.split(";")
+    for i in split:
+        try:
+            istr = i.lstrip().rstrip()
+            isplit = i.split(",")
+            if len(isplit) != 2:
+                continue
+            # isnumeric doesn't exist so no checks available
+            # if it can't be parsed, it will throw an exception
+            x = float(isplit[0])
+            y = float(isplit[1])
+            res.append([x, y])
+        except Exception as exc:
+            exclogger.log_exception(exc, to_file = False)
+    return res
+
 """
 def demo_image(filepath, find_polaris = False):
     print("opening %s" % filepath, end = "")
