@@ -795,7 +795,8 @@ function onLoadAll()
         if (lastStatus != null) {
             var stars = lastStatus["stars"];
             stars.forEach(function(ele, idx) {
-                if (ele["brightness"] % 2 == 1) // odd number means contains saturated pixel
+                //if (ele["brightness"] % 2 == 1) // odd number means contains saturated pixel
+                // nevermind, a hot pixel isn't necessarily saturated
                 {
                     hotpixels.push([ele["cx"], ele["cy"]]);
                 }
