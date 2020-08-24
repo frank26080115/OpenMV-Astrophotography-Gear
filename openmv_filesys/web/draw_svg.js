@@ -1,3 +1,5 @@
+var svgNS = "http://www.w3.org/2000/svg";
+
 function get_draw_scale(zoom, scale_vert)
 {
     var wrapdiv = document.getElementById("viewme");
@@ -39,8 +41,6 @@ function get_zoom()
 
 function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, ghost_results)
 {
-    var svgNS = "http://www.w3.org/2000/svg";
-
     var wrapdiv = document.getElementById("viewme");
     var imgdiv = document.getElementById("viewmesvg");
     var jpegdiv = document.getElementById("viewmejpeg");
@@ -357,40 +357,7 @@ function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, ghost_results)
             var levelRotation = obj["rotation"] - obj["polar_clock"];
             if (drawLevel)
             {
-                var rad = 30;
-                cirele = document.createElementNS(svgNS, "circle");
-                cirele.setAttribute("cx", rad + 1);
-                cirele.setAttribute("cy", rad + 1);
-                cirele.setAttribute("r", rad);
-                cirele.setAttribute("style", "fill:none;stroke:lime;stroke-width:1");
-                svgele.appendChild(cirele);
-                var pp = math_movePointTowards([rad + 1, rad + 1], [rad - 2, levelRotation]);
-                cline = document.createElementNS(svgNS, "line");
-                cline.setAttribute("x1", pp[0]);
-                cline.setAttribute("y1", pp[1]);
-                pp = math_movePointTowards([rad + 1, rad + 1], [rad - 2, levelRotation + 180]);
-                cline.setAttribute("x2", pp[0]);
-                cline.setAttribute("y2", pp[1]);
-                cline.setAttribute("style", "stroke:lime;stroke-width:1");
-                svgele.appendChild(cline);
-                pp = math_movePointTowards([rad + 1, rad + 1], [21.21, levelRotation + 45])
-                cline = document.createElementNS(svgNS, "line");
-                cline.setAttribute("x1", pp[0]);
-                cline.setAttribute("y1", pp[1]);
-                pp = math_movePointTowards([rad + 1, rad + 1], [21.21, levelRotation + (180 - 45)]);
-                cline.setAttribute("x2", pp[0]);
-                cline.setAttribute("y2", pp[1]);
-                cline.setAttribute("style", "stroke:lime;stroke-width:1");
-                svgele.appendChild(cline);
-                pp = math_movePointTowards([rad + 1, rad + 1], [16.77, levelRotation - 63.43])
-                cline = document.createElementNS(svgNS, "line");
-                cline.setAttribute("x1", pp[0]);
-                cline.setAttribute("y1", pp[1]);
-                pp = math_movePointTowards([rad + 1, rad + 1], [16.77, levelRotation - (180 - 63.43)]);
-                cline.setAttribute("x2", pp[0]);
-                cline.setAttribute("y2", pp[1]);
-                cline.setAttribute("style", "stroke:lime;stroke-width:1");
-                svgele.appendChild(cline);
+                draw_level(30, [31, 31], levelRotation, svgele);
             }
         }
     }
@@ -416,4 +383,55 @@ function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, ghost_results)
     }
 
     imgdiv.appendChild(svgele);
+}
+
+function draw_level(rad, pos, rot, svgele)
+{
+    var pp;
+
+    var cirele = document.createElementNS(svgNS, "path");
+    var pp1 = math_movePointTowards(pos, [rad, rot]);
+    var pp2 = math_movePointTowards(pos, [rad, rot + 180]);
+    var pathstr = "M" + pp1[0] +  "," + pp1[1] + " " + "A" + rad + "," + rad + " " + rot + " 0 1 " + pp2[0] +  "," + pp2[1];
+    cirele.setAttribute("d", pathstr);
+    cirele.setAttribute("style", "fill:saddlebrown;stroke:none;");
+    svgele.appendChild(cirele);
+    cirele = document.createElementNS(svgNS, "path");
+    pathstr = "M" + pp1[0] +  "," + pp1[1] + " " + "A" + rad + "," + rad + " " + rot + " 0 0 " + pp2[0] +  "," + pp2[1];
+    cirele.setAttribute("d", pathstr);
+    cirele.setAttribute("style", "fill:darkblue;stroke:none;");
+    svgele.appendChild(cirele);
+    cirele = document.createElementNS(svgNS, "circle");
+    cirele.setAttribute("cx", rad + 1);
+    cirele.setAttribute("cy", rad + 1);
+    cirele.setAttribute("r", rad);
+    cirele.setAttribute("style", "fill:none;stroke:lime;stroke-width:1");
+    svgele.appendChild(cirele);
+    cline = document.createElementNS(svgNS, "line");
+    pp = math_movePointTowards([rad + 1, rad + 1], [rad - 2, rot]);
+    cline.setAttribute("x1", pp[0]);
+    cline.setAttribute("y1", pp[1]);
+    pp = math_movePointTowards([rad + 1, rad + 1], [rad - 2, rot + 180]);
+    cline.setAttribute("x2", pp[0]);
+    cline.setAttribute("y2", pp[1]);
+    cline.setAttribute("style", "stroke:lime;stroke-width:1");
+    svgele.appendChild(cline);
+    pp = math_movePointTowards([rad + 1, rad + 1], [21.21, rot + 45])
+    cline = document.createElementNS(svgNS, "line");
+    cline.setAttribute("x1", pp[0]);
+    cline.setAttribute("y1", pp[1]);
+    pp = math_movePointTowards([rad + 1, rad + 1], [21.21, rot + (180 - 45)]);
+    cline.setAttribute("x2", pp[0]);
+    cline.setAttribute("y2", pp[1]);
+    cline.setAttribute("style", "stroke:green;stroke-width:1");
+    svgele.appendChild(cline);
+    pp = math_movePointTowards([rad + 1, rad + 1], [16.77, rot - 63.43])
+    cline = document.createElementNS(svgNS, "line");
+    cline.setAttribute("x1", pp[0]);
+    cline.setAttribute("y1", pp[1]);
+    pp = math_movePointTowards([rad + 1, rad + 1], [16.77, rot - (180 - 63.43)]);
+    cline.setAttribute("x2", pp[0]);
+    cline.setAttribute("y2", pp[1]);
+    cline.setAttribute("style", "stroke:blue;stroke-width:1");
+    svgele.appendChild(cline);
 }
