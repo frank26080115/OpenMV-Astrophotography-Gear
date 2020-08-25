@@ -62,7 +62,7 @@ What can hold the sky still for me? It turns out asking Atlas to stay a bit more
 
 (sooooo it looks like there's no official name for these devices, people just call them camera mounts, so I'll call them star-tracking camera mounts. I would like to call them star-trackers but that's a different device used for navigation)
 
-![](doc/img/staradventurer.jpg)
+![](doc/img/trackingmounts.png)
 
 You mount a camera on it and it will follow the stars. This allows astrophotographers to extend their shutter to tens, or even hundreds of seconds, without getting any star-trails in their picture. If you've ever used a equatorial telescope mount, it's the same thing but with a motorized right-ascension axis, and no declination axis.
 
