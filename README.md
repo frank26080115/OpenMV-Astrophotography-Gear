@@ -379,9 +379,17 @@ The remaining mechanical problems are about cooling the camera sensor, and preve
 Future Improvements
 ===================
 
-The equivalent focal-length lens for a CS lens mount would have about twice the aperture as the current M12 lens. If I add a CS lens mount, the I can almost double the framerate. This would add another $40 to the cost.
+The equivalent focal-length lens for a CS lens mount would have about twice the aperture as the current M12 lens. If I add a CS lens mount, the I can almost double the framerate.
 
-Maybe I can figure out a way to cool the camera sensor. I can get a $10 extension cable made specifically for OpenMV, and then figure out how to mount a heatsink and maybe a fan.
+![](doc/img/cctv_lens.png)
+
+This would add another $40 to the cost.
+
+Maybe I can figure out a way to cool the camera sensor. I can get a $10 extension cable made specifically for OpenMV
+
+![](doc/img/openmv_extension_cable.png)
+
+and then figure out how to mount a heatsink and maybe a fan.
 
 Next Project
 ============
