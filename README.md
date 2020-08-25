@@ -25,6 +25,8 @@ A normal polar scope is used to polar-align star-tracking camera mounts and equa
 
 ![](doc/img/openmv.png)
 
+**Currently this project is feature-complete and requires outdoor testing.**
+
 The journey it took to complete this project was quite the special learning experience. This is the story about what happens when a bird photographer with a EE degree gets lost and finds a telescope store.
 
 I hope you all had a chance to see [Comet NEOWISE](https://en.wikipedia.org/wiki/C/2020_F3_(NEOWISE)). It was discovered on March 27, 2020, and in July 2020, it started to become visible a few hours before dawn. It's a happy coincidence that I've spent the pandemic getting into photography, so up a hill I went
@@ -259,6 +261,8 @@ In the above illustration, lines AA' and BB' is step 1, points E and D are step 
 Here it is in action on the screen:
 
 ![](doc/img/calibration_view.png)
+
+When the user accepts the new location, the yellow crosshair will move to where the blue lines intersect.
 
 Axis Wobble
 ===========
