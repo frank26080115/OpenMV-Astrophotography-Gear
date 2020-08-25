@@ -54,7 +54,7 @@ This is because the Earth is spinning. The stars in the sky, like our own belove
 
 (credit: [https://en.wikipedia.org/wiki/Star_trail#/media/File:All_In_A_Spin_Star_trail.jpg](https://en.wikipedia.org/wiki/Star_trail#/media/File:All_In_A_Spin_Star_trail.jpg) I wish I was that good, still working on it...)
 
-Oops, I lied again, did I really say "exactly once a day"? The **24 hours** that make up an entire day, that's a **Solar Day**, because it's how long it takes the Sun to circle the Earth exactly once. Ahhhh but the Earth also orbits the Sun! The Earth does not orbit any one of the other billions of stars, and those stars **appear** to circle the Earth exactly once every **23 hours, 56 minutes, and 4.0905 seconds**. This is called a **Sidereal Day**. The difference between a Sidereal Day and a Solar Day will eventually add up to one entire day, about once every 4 years, and that's why we have Leap Years!
+Oops, I lied again, did I really say "exactly once a day"? The **24 hours** that make up an entire day, that's a **Solar Day**, because it's how long it takes the Sun to circle the Earth exactly once. Ahhhh but the Earth also orbits the Sun! The Earth does not orbit any one of the other billions of stars, and those stars **appear** to circle the Earth exactly once every **23 hours, 56 minutes, and 4.0905 seconds**. This is called a **Sidereal Day**.
 
 What can hold the sky still for me? It turns out asking Atlas to stay a bit more still is a bit out of my budget... But humans have managed to land on the Moon, and I can buy a motor that spins my camera around slowly exactly once every sidereal day for about $300
 
