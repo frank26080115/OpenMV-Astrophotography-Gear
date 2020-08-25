@@ -12,13 +12,18 @@ A normal polar scope is used to polar-align star-tracking camera mounts and equa
 
  * Identifies Polaris, aka The North Star, and computes the position of the North Celestial Pole
  * Shows a crosshair on screen so the user can point it right at the North Celestial Pole
- * Identifies 500 other stars around Polaris just in case you have trouble finding Polaris
 
 ![](doc/img/DSC01051_es.jpg)
 
  * Use with any smartphone! Browser based UI, works as a WiFi soft-AP captive portal, no WiFi router required
+ * Identifies 500 other stars around Polaris just in case you have trouble finding Polaris
+
+![](doc/img/platesolving.gif)
+
  * Accounts for current time and location to compensate for atmospheric refraction
- * All open source, OpenMV is an open source platform, and my code is in C, MicroPython, JavaScript, plus some HTML and CSS
+ * All open source, [OpenMV](https://openmv.io/) is an open source platform, and my code is in C, MicroPython, JavaScript, plus some HTML and CSS
+
+![](doc/img/openmv.png)
 
 The journey it took to complete this project was quite the special learning experience. This is the story about what happens when a bird photographer with a EE degree gets lost and finds a telescope store.
 
@@ -323,6 +328,8 @@ The WiFi module can operate in soft-access-point mode, so you do not need a WiFi
 
 More Plate Solving
 ==================
+
+![](doc/img/platesolving.gif)
 
 I wanted another feature: identify other stars that are not Polaris. This would help people if they get "lost". If people can identify what they are pointed at, they can use additional smartphone apps to help navigate towards Polaris.
 
