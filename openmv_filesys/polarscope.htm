@@ -87,15 +87,9 @@ function loadSettings(t)
 function loadSettingsFailed()
 {
     loadTries += 1;
-    if (loadTries > 3) {
-        document.getElementById("loading").style.display        = "none";
-        document.getElementById("loading_failed").style.display = "block";
-        document.getElementById("showme").style.display         = "none";
-    }
-    else {
-        document.getElementById("load_tries").innerHTML = "retry # " + loadTries;
-        loadSettings(0);
-    }
+    console.log("settings load reattempt " + loadTries);
+    document.getElementById("load_tries").innerHTML += ".";
+    loadSettings(0);
 }
 
 function startLoadJpeg(t)
@@ -138,11 +132,6 @@ function loadJpeg()
     }
     divele.appendChild(jpegele);
     jpgdata = true;
-}
-
-function showPosition(position) {
-    console.log(position);
-    // this doesn't work without SSL
 }
 
 function startSendSettings()
@@ -622,14 +611,6 @@ function onLoadAll()
 {
     document.getElementById("loading").style.display = "none";
     $( "#accordion" ).accordion({heightStyle: "content"});
-
-    //if (navigator.geolocation) {
-    //    navigator.geolocation.getCurrentPosition(showPosition);
-    //    // this doesn't work without SSL
-    //}
-
-    //settings["time"] = updateTime();
-    //queueSettingsUpdate("time");
 
     $( "#fldset_zoom  input" ).checkboxradio();
     $( "#viewmode-1").prop("checked", true).checkboxradio("refresh");

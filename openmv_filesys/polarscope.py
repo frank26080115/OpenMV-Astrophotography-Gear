@@ -2,7 +2,7 @@ import micropython
 micropython.opt_level(2)
 
 import blobstar, astro_sensor, time_location, captive_portal, pole_finder, star_finder, pole_movement
-import exclogger, fakestream
+import exclogger
 import pyb, uos, uio, gc, sys
 import time, math, ujson, ubinascii
 import network
@@ -24,7 +24,6 @@ class PolarScope(object):
         self.time_mgr = time_location.TimeLocationManager()
 
         self.debug = debug
-        self.fakestream = fakestream.FakeStream()
 
         t = pyb.millis()
         self.diag_cnt    = 0

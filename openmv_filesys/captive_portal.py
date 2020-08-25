@@ -310,6 +310,8 @@ class CaptivePortal(object):
     def task_http(self):
         if self.s is None:
             self.start_http()
+        if self.s is None:
+            return STS_IDLE # this only happens if the WiFi hardware is missing
         res = None
         try:
             res = self.s.accept()

@@ -47,6 +47,7 @@ class BlobStar(object):
         self.r  = r
         self.brightness = brightness
         self.score = 0
+        self.penalty = 0
 
     def set_ref_star(self, ref_star):
         self.ref_star = ref_star
