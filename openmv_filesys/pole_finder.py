@@ -89,7 +89,8 @@ class PoleSolution(object):
             i.score = 0
             i.penalty = 0
             i.rotation = 0
-            i.rot_ang_sum = 0
+            i.rot_angi_sum = 0
+            i.rot_angj_sum = 0
             i.rot_dist_sum = 0
             i.pix_calibration = []
 
@@ -133,9 +134,11 @@ class PoleSolution(object):
                         # each match is a further star, which means more precise angle
                         # compute (and update) the weighted average of the angle offset
                         rot_ang = angle_diff(k.ref_star_angle, STARS_NEAR_POLARIS[idx_tbl][2])
-                        i.rot_ang_sum += rot_ang * k.ref_star_dist
+                        unitvector = [math.cos(math.radians(rot_ang)), math.sin(math.radians(rot_ang))]
+                        i.rot_angi_sum += unitvector[0] * k.ref_star_dist
+                        i.rot_angj_sum += unitvector[1] * k.ref_star_dist
                         i.rot_dist_sum += k.ref_star_dist
-                        rot_ang = i.rot_ang_sum / i.rot_dist_sum
+                        rot_ang = math.degrees(math.atan2(i.rot_angj_sum / i.rot_dist_sum, i.rot_angi_sum / i.rot_dist_sum))
                         i.rotation = rot_ang
 
                         if k.ref_star_dist > max_dist:
@@ -221,7 +224,7 @@ class PoleSolution(object):
         dt = t - self.solu_time
         rot = float(dt) * 360.0
         rot /= 86164.09054 # sidereal day length
-        return self.rotation + rot
+        return self.rotation - rot
 
     def get_pole_coords(self):
         if self.solved == False:
@@ -242,15 +245,15 @@ class PoleSolution(object):
         ra_adj = radeg - self.get_rotation()
         rho = (90.0 - dec) * self.pix_per_deg
         try:
-            phi = np.radians(360.0 * ra_adj / 24.0)
+            phi = np.radians(ra_adj)
             dx = rho * np.cos(phi)
             dy = rho * np.sin(phi)
         except:
-            phi = math.radians(360.0 * ra_adj / 24.0)
+            phi = math.radians(ra_adj)
             dx = rho * math.cos(phi)
             dy = rho * math.sin(phi)
         x = star.cx + dx
-        y = star.cy - dy # y is flipped!
+        y = star.cy + dy # y is flipped!
         return x, y, self.get_rotation()
 
     def compare(self, tgt):
