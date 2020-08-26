@@ -324,6 +324,10 @@ The web interface had some reliability issues, seems like occasionally, AJAX req
 
 Streaming live JPG images is a requirement because the camera may need to have its focus adjusted. It would also help with the exposure adjustments. But the data size could be huge and the transfer rate is slow. Also, AJAX cannot be used to transport binary JPG data. Base64 encoded data could be transported by AJAX but since it makes the data even longer, it was not fast enough. In the end, at 1x zoom, the image is first shrunk by half and compressed before transmission. At other zoom levels, the image is cropped instead of shrunk. The resulting responsiveness is enough.
 
+![](doc/img/liveviewmode.gif)
+
+(that video shows how it works but it's slower in real life as the shutter speed needs to be much slower)
+
 Since I didn't want to rely on the browser for local storage, when the user wants to save a setting, it's sent back to the HTTP server as an AJAX request. The server will save it as a JSON file in the OpenMV's flash memory.
 
 The UI used a lot of [jQuery UI](https://jqueryui.com/), which made great looking and easy to use UI elements on mobile browsers. I had to hack the themeing CSS to keep only the checkbox tick image to lighten up the payload.
@@ -373,6 +377,8 @@ It has hole patterns that matches the QHYCCD PoleMaster. QHYCCD offers a variety
  My 3D print also has a large 1/4"-20 threaded insert for tripods, and another two 4mm holes specifically for use with the Sky-Watcher Star Adventurer that I own.
 
 ![](doc/img/DSC01029_es.jpg)
+
+The 3D model is open source, publically hosted on OnShape and ready for export: [https://cad.onshape.com/documents/c9071d...a6bfdc](https://cad.onshape.com/documents/c9071d5019e566707bd722e9/w/00d826b3890ec75dd7440bb9/e/b73a27c8ab1a7c58eba6bfdc)
 
 The remaining mechanical problems are about cooling the camera sensor, and preventing damage from potential water drops. The OpenMV board itself does not make it easy for me to solve either of these problems, but luckily, it's open source!
 
