@@ -173,9 +173,29 @@ function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, ghost_results)
                 cirele.setAttribute("cy", Math.round((cy / imgscale) - offset_y));
                 cirele.setAttribute("r", math_mapStarRadius(ele["r"], minr, maxr, imgh));
                 cirele.setAttribute("style", "fill:rgb(255,255,255);stroke:none;");
+                cirele.setAttribute("onclick", "star_onclick(" + cx + ", " + cy + ");");
+                svgele.appendChild(cirele);
+
+                // draw one that's bigger so that it's easier to click
+                cirele = document.createElementNS(svgNS, "circle");
+                cirele.setAttribute("cx", Math.round((cx / imgscale) - offset_x));
+                cirele.setAttribute("cy", Math.round((cy / imgscale) - offset_y));
+                cirele.setAttribute("r", imgh / 20);
+                cirele.setAttribute("style", "fill:rgb(255,255,255, 0.01);stroke:none;");
+                cirele.setAttribute("onclick", "star_onclick(" + cx + ", " + cy + ");");
                 svgele.appendChild(cirele);
             }
         });
+    }
+
+    if (platesolve_start_x > 0 && platesolve_start_y > 0)
+    {
+        cirele = document.createElementNS(svgNS, "circle");
+        cirele.setAttribute("cx", Math.round((platesolve_start_x / imgscale) - offset_x));
+        cirele.setAttribute("cy", Math.round((platesolve_start_y / imgscale) - offset_y));
+        cirele.setAttribute("r", imgh / 20);
+        cirele.setAttribute("style", "fill:none;stroke:yellow;stroke-width:1");
+        svgele.appendChild(cirele);
     }
 
     // draw crosshair on center-of-rotation

@@ -33,12 +33,15 @@ function platesolver_init()	{
 
     $("#btn_platesolve" ).button().click(function( event ) {
         console.log("click btn_platesolve");
-        platesolver_start();
+        platesolver_prime();
     });
 
     $("#btn_platesolvehalt" ).button().click(function( event ) {
         console.log("click btn_platesolvehalt");
         platesolve_interrupt = true;
+        platesolve_primed = false;
+        platesolve_start_x = -1;
+        platesolve_start_y = -1;
         $( "#btn_platesolvehalt" ).button( "option", "disabled", true );
     });
     $( "#btn_platesolvehalt" ).button( "option", "disabled", true );
@@ -52,7 +55,11 @@ var platesolve_interrupt = false;
 var platesolve_statemachine = null;
 var platesolve_scorereq = 4;
 
-function platesolver_start()
+var platesolve_start_x = -1;
+var platesolve_start_y = -1;
+var platesolve_primed = false;
+
+function platesolver_prime()
 {
     if (lastStatus == null || lastStatus == false || lastStatus == undefined) {
         document.getElementById("div_platesolvesolution").innerHTML = "No data available";
@@ -67,12 +74,31 @@ function platesolver_start()
     $( "#btn_platesolve" ).button( "option", "disabled", true );
     $( "#btn_platesolvehalt" ).button( "option", "disabled", false );
 
+    platesolve_primed = true;
+    document.getElementById("div_platesolvesolution").innerHTML = "Click on a star!";
+}
+
+function platesolver_start()
+{
+    platesolve_primed = false;
+    document.getElementById("title_platesolve").scrollIntoView();
+
+    if (lastStatus == null || lastStatus == false || lastStatus == undefined) {
+        document.getElementById("div_platesolvesolution").innerHTML = "No data available";
+        return;
+    }
+    var stars = lastStatus["stars"];
+    if (stars.length < 4) {
+        document.getElementById("div_platesolvesolution").innerHTML = "Not enough stars";
+        return;
+    }
+
     // since the plate solving takes longer than a new image frame
     // we cache the current list of stars so it doesn't get overwritten when a new frame arrives
     stars_cache = [];
     stars.forEach(function(ele, idx) {
-        var vcx = settings["center_x"];
-        var vcy = settings["center_y"];
+        var vcx = platesolve_start_x;
+        var vcy = platesolve_start_y;
         var ecx = ele["cx"];
         var ecy = ele["cy"];
         var vc = math_getVector([vcx, vcy], [ecx, ecy]);
@@ -90,11 +116,6 @@ function platesolver_start()
             centerstar_idx = idx;
         }
     });
-
-    if (mindist > datah / 6) {
-        document.getElementById("div_platesolvesolution").innerHTML = "No star close to crosshairs";
-        return;
-    }
 
     platesolve_done = false;
     platesolve_interrupt = false;
@@ -224,6 +245,7 @@ function platesolve_progress()
 function platesolve_finish()
 {
     platesolve_done = true; // stop the ticker
+    platesolve_primed = false;
 
     $( "#btn_platesolve" ).button( "option", "disabled", false );
     $( "#btn_platesolvehalt" ).button( "option", "disabled", true );
@@ -252,5 +274,14 @@ function platesolve_finish()
         });
         resstr += "\r\n</ol>\r\n";
         div.innerHTML = resstr;
+    }
+}
+
+function star_onclick(x, y)
+{
+    platesolve_start_x = x;
+    platesolve_start_y = y;
+    if (platesolve_primed) {
+        platesolver_start();
     }
 }
