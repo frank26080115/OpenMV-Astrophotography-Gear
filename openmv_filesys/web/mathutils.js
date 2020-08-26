@@ -119,6 +119,23 @@ function math_calcRotationCenterFromTwoPointPairs(pp1, pp2)
     var anglediff = math_getAngleDiff(math_getSlopeAngleFromTwoPoints(bisect1[0], bisect1[1]), math_getSlopeAngleFromTwoPoints(bisect2[0], bisect2[1]));
     var result = checkLineIntersection(bisect1[0][0], bisect1[0][1], bisect1[1][0], bisect1[1][1], bisect2[0][0], bisect2[0][1], bisect2[1][0], bisect2[1][1]);
 
+    if (result.x != null && result.x != 0 && result.y != null && result.y != 0)
+    {
+        // validate angles
+        var vect1 = math_getVector(pp1[0], midpoint1);
+        var vect2 = math_getVector(pp2[1], midpoint2);
+        var vect3 = math_getVector([result.x, result.y], midpoint1);
+        var vect4 = math_getVector([result.x, result.y], midpoint2);
+        // this validation only works if the lines are long enough
+        var maglim = 10.0;
+        if (vect1[0] >= maglim && vect2[0] >= maglim && vect3[0] >= maglim && vect4[0] >= maglim)
+        {
+            if (math_isNear90Apart(math_getAngleDiff(vect1[1], vect3[1]), 1) == false || math_isNear90Apart(math_getAngleDiff(vect2[1], vect4[1]), 1) == false) {
+                anglediff = null;
+            }
+        }
+    }
+
     return [[result.x, result.y], midpoint1, midpoint2, bisect1[2], bisect2[2], anglediff];
 }
 
@@ -188,4 +205,19 @@ function math_getRefraction(lat, pressure, temperature)
         arcmin = 0;
     }
     return [arcmin / 60.0, arcmin];
+}
+
+function math_roundPlaces(x, places)
+{
+    var f = 1.0;
+    var i;
+    for (i = 0; i < places && places >= 0; i++)
+    {
+        f *= 10.0;
+    }
+    for (i = 0; i < (-places) && places < 0; i++)
+    {
+        f /= 10.0;
+    }
+    return Math.round(x * f) / f;
 }

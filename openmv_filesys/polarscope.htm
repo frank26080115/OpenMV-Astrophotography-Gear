@@ -297,8 +297,8 @@ function refreshUi(obj)
 
     var stats_str = "num of stars: " + star_cnt.toString() + "&nbsp;&nbsp;&nbsp;&nbsp;";
 
-    stats_str += "image mean: "  + Math.round(obj["img_mean"]).toString() + "/255    \t";
-    stats_str += "image stdev: " + Math.round(obj["img_stdev"]).toString() + "/255    \t";
+    stats_str += "image mean: "  + math_roundPlaces(obj["img_mean"], 1).toString() + "/255    \t";
+    stats_str += "image stdev: " + math_roundPlaces(obj["img_stdev"], 1).toString() + "/255    \t";
     stats_str += "image max: " + Math.round(obj["img_max"]).toString() + "/255    \t";
     stats_str += "image min: " + Math.round(obj["img_min"]).toString() + "/255    \t";
     stats_str += "exposure code: ";
@@ -316,9 +316,12 @@ function refreshUi(obj)
     var curCalDataEle = document.getElementById("div_curdata");
     if (obj["solution"] && obj["star_x"] && obj["star_y"] && obj["pole_x"] && obj["pole_y"])
     {
-        var s = "Polaris = (" + obj["star_x"] + ", " + obj["star_y"] + ")  ;  NCP = (" + obj["pole_x"] + ", " + obj["pole_y"] + ")";
+        var s = "Polaris = (" + math_roundPlaces(obj["star_x"], 1) + " , " + math_roundPlaces(obj["star_y"], 1) + ")  ;  NCP = (" + math_roundPlaces(obj["pole_x"], 1) + " , " + math_roundPlaces(obj["pole_y"], 1) + ")";
         if (canCalibrate == false && ghost != null) {
             s += " ; cannot calibrate with this" + reason;
+        }
+        else if (canCalibrate == true && ghost_results != null) {
+            s += "<br />New Center = (" + math_roundPlaces(ghost_results.cent_x, 1) + " ," + math_roundPlaces(ghost_results.cent_y, 1) + ")";
         }
         curCalDataEle.innerHTML = s;
         pre_ghost = {star_x: obj["star_x"], star_y: obj["star_y"], pole_x: obj["pole_x"], pole_y: obj["pole_y"]};
@@ -335,7 +338,8 @@ function refreshUi(obj)
     var ghostDataEle = document.getElementById("div_caldata");
     if (ghost != null)
     {
-        ghostDataEle.innerHTML = "Polaris = (" + ghost.star_x + ", " + ghost.star_y + ")  ;  NCP = (" + ghost.pole_x + ", " + ghost.pole_y + ")";
+        ghostDataEle.innerHTML = "Polaris = (" + math_roundPlaces(ghost.star_x, 1) + " , " + math_roundPlaces(ghost.star_y, 1) + ")  ;  NCP = (" + math_roundPlaces(ghost.pole_x, 1) + " , " + math_roundPlaces(ghost.pole_y, 1) + ")<br />Old Center = (" + math_roundPlaces(settings["center_x"], 1) + " , " + math_roundPlaces(settings["center_y"], 1) + ")";
+
         $("#btn_clearregimg" ).button( "option", "disabled",  false);
     }
     else
@@ -369,6 +373,14 @@ function validateGhost()
             if (ghost_results.cent_y < datah * 0.33 || ghost_results.cent_y > datah * 0.67) {
                 canCalibrate = false;
                 reason = ", too off-center";
+            }
+
+            // we want the angle to be close to perpendicular
+            // if there lines where parallel then there would be no solution
+            // perfectly perpendicular lines would give a very accurate solution
+            if (math_isNear90Apart(ghost_results.angle, 70) == false) {
+                canCalibrate = false;
+                reason = ", angle not good";
             }
         }
         else {
@@ -518,10 +530,10 @@ function computeRefraction() {
         }
         fmtRefraction = fmtRefraction.substring(0, fmtRefraction.length - 1);
     }
-    var txtinfo = "Calculated Refraction: " + fmtRefraction + "&deg; = " + (Math.round(refraction[1] * 100.0) / 100.0) + " arcmin";
+    var txtinfo = "Calculated Refraction: " + fmtRefraction + "&deg; = " + math_roundPlaces(refraction[1], 2) + " arcmin";
     if (lastStatus != null && lastStatus != false) {
         if (lastStatus["solution"]) {
-            txtinfo += " = " + (Math.round(lastStatus["pix_per_deg"] * refraction[0] * 10.0) / 10.0) + " camera pixels";
+            txtinfo += " = " + math_roundPlaces(lastStatus["pix_per_deg"] * refraction[0], 1) + " camera pixels";
         }
     }
     document.getElementById("refraction_info").innerHTML = txtinfo;
@@ -739,11 +751,18 @@ function onLoadAll()
         {
             if (ghost_results.cent_x != 0 && ghost_results.cent_x != null && ghost_results.cent_y != 0 && ghost_results.cent_y != null)
             {
-                settings["center_x"] = ghost_results.cent_x;
-                settings["center_y"] = ghost_results.cent_y;
-                queueSettingsUpdate("center_x");
-                queueSettingsUpdate("center_y");
-                alert("calibration done!");
+                if (math_isNear90Apart(ghost_results.angle, 70))
+                {
+                    settings["center_x"] = ghost_results.cent_x;
+                    settings["center_y"] = ghost_results.cent_y;
+                    queueSettingsUpdate("center_x");
+                    queueSettingsUpdate("center_y");
+                    alert("calibration done!");
+                }
+                else
+                {
+                    alert("ERROR: angle for calibration is bad!");
+                }
             }
             else {
                 alert("ERROR: no solution for calibration!");
@@ -777,8 +796,8 @@ function onLoadAll()
         {
             pixstr += "<ol>";
             hotpixels.forEach(function(ele, idx) {
-                pixstr += "<li>( " + (Math.round(ele[0] * 10.0) / 10.0) + " , " + (Math.round(ele[1] * 10.0) / 10.0) + " )</li>";
-                settingsStr += (Math.round(ele[0] * 10.0) / 10.0) + "," + (Math.round(ele[1] * 10.0) / 10.0) + ";";
+                pixstr += "<li>( " + math_roundPlaces(ele[0], 1) + " , " + math_roundPlaces(ele[1], 1) + " )</li>";
+                settingsStr += math_roundPlaces(ele[0], 1) + "," + math_roundPlaces(ele[1], 1) + ";";
             });
             pixstr += "</ol>";
             settings["hotpixels"] = settingsStr;

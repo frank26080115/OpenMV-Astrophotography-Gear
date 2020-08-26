@@ -181,7 +181,7 @@ function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, ghost_results)
                 cirele.setAttribute("cx", Math.round((cx / imgscale) - offset_x));
                 cirele.setAttribute("cy", Math.round((cy / imgscale) - offset_y));
                 cirele.setAttribute("r", imgh / 20);
-                cirele.setAttribute("style", "fill:rgb(255,255,255, 0.01);stroke:none;");
+                cirele.setAttribute("style", "fill:rgb(255,255,255, 0.001);stroke:none;");
                 cirele.setAttribute("onclick", "star_onclick(" + cx + ", " + cy + ");");
                 svgele.appendChild(cirele);
             }
@@ -347,7 +347,7 @@ function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, ghost_results)
                     gline.setAttribute("x2", Math.round((ghost_results.mp1_x  / imgscale) - offset_x));
                     gline.setAttribute("y1", Math.round((ghost_results.cent_y / imgscale) - offset_y));
                     gline.setAttribute("y2", Math.round((ghost_results.mp1_y  / imgscale) - offset_y));
-                    gline.setAttribute("style", "stroke:blue;stroke-width:1");
+                    gline.setAttribute("style", "stroke:deepskyblue;stroke-width:1");
                     svgele.appendChild(gline);
                     gline = document.createElementNS(svgNS, "line");
                     gline.setAttribute("x1", Math.round((ghost_results.cent_x / imgscale) - offset_x));
@@ -361,7 +361,7 @@ function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, ghost_results)
                     gline.setAttribute("x2", Math.round((ghost_results.ghost_sx / imgscale) - offset_x));
                     gline.setAttribute("y1", Math.round((ghost_results.star_y   / imgscale) - offset_y));
                     gline.setAttribute("y2", Math.round((ghost_results.ghost_sy / imgscale) - offset_y));
-                    gline.setAttribute("style", "stroke:blue;stroke-width:1");
+                    gline.setAttribute("style", "stroke:deepskyblue;stroke-width:1");
                     svgele.appendChild(gline);
                     gline = document.createElementNS(svgNS, "line");
                     gline.setAttribute("x1", Math.round((ghost_results.pole_x   / imgscale) - offset_x));
@@ -389,7 +389,7 @@ function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, ghost_results)
         gcir.setAttribute("cx", Math.round((ghost.star_x / imgscale) - offset_x));
         gcir.setAttribute("cy", Math.round((ghost.star_y / imgscale) - offset_y));
         gcir.setAttribute("r", 3);
-        gcir.setAttribute("style", "stroke:blue;stroke-width:2");
+        gcir.setAttribute("style", "stroke:deepskyblue;stroke-width:2");
         svgele.appendChild(gcir);
         gcir = document.createElementNS(svgNS, "rect");
         var cx = Math.round((ghost.pole_x / imgscale) - offset_x);
@@ -398,7 +398,7 @@ function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, ghost_results)
         gcir.setAttribute("y", cy - 2);
         gcir.setAttribute("width", 4);
         gcir.setAttribute("height", 4);
-        gcir.setAttribute("style", "stroke:blue;stroke-width:2");
+        gcir.setAttribute("style", "stroke:deepskyblue;stroke-width:2");
         svgele.appendChild(gcir);
     }
 
