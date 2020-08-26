@@ -370,14 +370,6 @@ function validateGhost()
                 canCalibrate = false;
                 reason = ", too off-center";
             }
-
-            // we want the angle to be close to perpendicular
-            // if there lines where parallel then there would be no solution
-            // perfectly perpendicular lines would give a very accurate solution
-            if (math_isNear90Apart(ghost_results.angle, 15) == false) {
-                canCalibrate = false;
-                reason = ", angle not good";
-            }
         }
         else {
             canCalibrate = false;
@@ -722,7 +714,7 @@ function onLoadAll()
         console.log("click btn_regimg");
         ghost = pre_ghost;
 
-        var demo = true;
+        var demo = false;
         if (demo)
         {
             demoGhost();
@@ -747,18 +739,11 @@ function onLoadAll()
         {
             if (ghost_results.cent_x != 0 && ghost_results.cent_x != null && ghost_results.cent_y != 0 && ghost_results.cent_y != null)
             {
-                if (math_isNear90Apart(ghost_results.angle, 15))
-                {
-                    settings["center_x"] = ghost_results.cent_x;
-                    settings["center_y"] = ghost_results.cent_y;
-                    queueSettingsUpdate("center_x");
-                    queueSettingsUpdate("center_y");
-                    alert("calibration done!");
-                }
-                else
-                {
-                    alert("ERROR: angle for calibration is bad!");
-                }
+                settings["center_x"] = ghost_results.cent_x;
+                settings["center_y"] = ghost_results.cent_y;
+                queueSettingsUpdate("center_x");
+                queueSettingsUpdate("center_y");
+                alert("calibration done!");
             }
             else {
                 alert("ERROR: no solution for calibration!");
