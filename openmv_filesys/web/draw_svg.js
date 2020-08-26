@@ -202,7 +202,7 @@ function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, ghost_results)
         {
             // we need to draw the matched stars even though the stars have already been draw
             // this will prevent hot pixels from hiding an important star
-            if (hasjpg == false && hotpixels.length > 0)
+            if (hasjpg == false)// && hotpixels.length > 0)
             {
                 var solstars = obj["solution"]["matches"];
                 solstars.forEach(function(ele, idx) {
@@ -212,7 +212,7 @@ function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, ghost_results)
                     cirele.setAttribute("cx", Math.round((cx / imgscale) - offset_x));
                     cirele.setAttribute("cy", Math.round((cy / imgscale) - offset_y));
                     cirele.setAttribute("r", math_mapStarRadius(ele["r"], minr, maxr, imgh));
-                    cirele.setAttribute("style", "fill:rgb(255,255,255);stroke:none;");
+                    cirele.setAttribute("style", "fill:rgb(255,255,128);stroke:none;");
                     svgele.appendChild(cirele);
                 });
             }
