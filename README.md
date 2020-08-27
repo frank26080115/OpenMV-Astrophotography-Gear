@@ -94,13 +94,13 @@ Sorry again. You don't point it exactly at Polaris. The Earth rotates about an a
 
 The polar-scope doesn't just have a crosshair, it has a special circle reticle that requires you to take into account the current date, time, and location.
 
-![](doc/img/polarscope_reticule_800x700.jpg)
+![](doc/img/polarscope_reticle_800x700.jpg)
 
-You have to calculate the current sidereal time and adjust for your location's longitude to figure out where Polaris should be on the reticule circle.
+You have to calculate the current sidereal time and adjust for your location's longitude to figure out where Polaris should be on the reticle circle.
 
 Astronomy is an activity spanning centuries, these types of mounts existed before digital cameras existed. Today, we have smartphone apps that can help us these calculations. Doesn't sound so bad... It can't be that hard...
 
-I thought so until I tried using one. My biggest gripe with the polar-scope is that it has poor (to be fair, it's "economical") optical design, the reticule will move around the target as your eyes moves around, this is called the **parallax effect**. Ideally, the reticule should stay on target no matter where your eye is.
+I thought so until I tried using one. My biggest gripe with the polar-scope is that it has poor (to be fair, it's "economical") optical design, the reticle will move around the target as your eyes moves around, this is called the **parallax effect**. Ideally, the reticle should stay on target no matter where your eye is.
 
 ![](doc/img/parallax.gif)
 
@@ -108,7 +108,7 @@ I thought so until I tried using one. My biggest gripe with the polar-scope is t
 
 Rifle scopes don't have this problem, the crosshairs of a rifle scope would stay on target no matter where your eye is. But a good rifle scope would cost as much as just one of these mounts, as it requires many more lenses.
 
-When I encountered the parallax effect in my polar-scope, I asked the internet community if it was a defective scope. I complained that it's not possible to be accurate if it has a parallax effect of the reticule. People told me that it's supposed to be simply "good enough" for wide angle astrophotography, and telescope users can just nudge their telescopes. If I really wanted high precision, there are digital cameras that can help me polar-align. You attach the camera to your mount/tracker, calibrate it, point it roughly at Polaris, and they'll tell you how to adjust your mount to achieve polar-alignment.
+When I encountered the parallax effect in my polar-scope, I asked the internet community if it was a defective scope. I complained that it's not possible to be accurate if it has a parallax effect of the reticle. People told me that it's supposed to be simply "good enough" for wide angle astrophotography, and telescope users can just nudge their telescopes. If I really wanted high precision, there are digital cameras that can help me polar-align. You attach the camera to your mount/tracker, calibrate it, point it roughly at Polaris, and they'll tell you how to adjust your mount to achieve polar-alignment.
 
 I researched into these cameras. There are two popular ones on the market right now.
 
@@ -131,7 +131,7 @@ How do I start?
 Picking Hardware
 ================
 
-A Raspberry Pi seems like a solid starting point for any DIY camera project, especially now that they have a "high quality" camera that accepts CCTV lenses. It would get a bit bulky and pricy once you add in things like a case, battery pack, and a screen.
+A Raspberry Pi seems like a solid starting point for any DIY camera project, especially now that they have a "high quality" camera that accepts CCTV lenses. It would get a bit bulky and pricey once you add in things like a case, battery pack, and a screen.
 
 I have previously played with a ESP32-CAM, which would have a OV2640 along with WiFi capability for under $10. But the sensor, simply put, sucks. And the library available simply isn't ready for any advanced control of the camera or any image processing at all. The ESP32-CAM would be great for a dirt cheap WiFi camera project and such but not for this project.
 
@@ -139,7 +139,7 @@ I finally settled on OpenMV.
 
 ![](doc/img/openmv.png)
 
-I first saw it in action when my friend invited me to a robocar race, and his robot car used one to follow the race track. It's a microcontroller and camera module that can run MicroPython and has MicroPython libraries for image processing similar to OpenCV. The H7 Plus version has a 5 megapixel sensor plus extra RAM. After adding a WiFi module and an appropriate lens, the total cost was only $110. It's all open source so I can optimize cost later. (OpenMV offers a LCD module too but it's not a touch screen, so I decided on WiFi instead)
+I first saw it in action when my friend invited me to a robo-car race, and his robot car used one to follow the race track. It's a microcontroller and camera module that can run MicroPython and has MicroPython libraries for image processing similar to OpenCV. The H7 Plus version has a 5 megapixel sensor plus extra RAM. After adding a WiFi module and an appropriate lens, the total cost was only $110. It's all open source so I can optimize cost later. (OpenMV offers a LCD module too but it's not a touch screen, so I decided on WiFi instead)
 
 Since adding a LCD screen isn't as practical as I'd hoped, my product designer hat is making me decide to use WiFi to serve an interactive web-page, the user will use their smartphone as the display and user input.
 
@@ -155,11 +155,11 @@ This impressed me, the camera managed to see Jupiter along with its moons! I can
 
 (The software on the right side is Stellarium. You can input your camera's specifications and it will be able to preview your camera's view of the sky.)
 
-I then went out and took a few pictures of Polaris, testing out various settings in two different levels of light polution.
+I then went out and took a few pictures of Polaris, testing out various settings in two different levels of light pollution.
 
 ![](doc/img/first_polaris_settings.png)
 
-Great, this gave me hope for the image processing algorithm. The plan is to use the `find_blobs()` function, which requires some thresholds. I can use `get_histogram()` and `get_statistics()` to determine a baseline threshold, and warn the user if the light polution is too strong.
+Great, this gave me hope for the image processing algorithm. The plan is to use the `find_blobs()` function, which requires some thresholds. I can use `get_histogram()` and `get_statistics()` to determine a baseline threshold, and warn the user if the light pollution is too strong.
 
 From the test images, I am able to correlate distance between the stars with distance in pixel units. This is important for my plate-solving algorithm.
 
@@ -173,7 +173,7 @@ Just some background knowledge for those readers who are unfamiliar with astrono
 
 The position of a star is described with two numbers: Right-Ascension (R.A.) and Declination (Dec.). They are kind of like longitude and latitude for geographic location coordinates. Declination is basically exactly the same as latitude. Right-Ascension is defined as being a circle totalling 24 hours, not 360° like longitude. Also, longitude starts at Greenwich, but right-ascension's zero starts from something called Vernal Equinox.
 
-This is the kind of data a star catelogue would give you, the RA and Dec of each star. Importantly, that data is where the stars are on January 1st, 2000. The catelogues might also contain the star's position on the current day.
+This is the kind of data a star catalog would give you, the RA and Dec of each star. Importantly, that data is where the stars are on January 1st, 2000. The catalogues might also contain the star's position on the current day.
 
 You might be wondering... why are the positions different between dates? The answer is that the Earth's axis of rotation is actually slowly wobbling. We'll get to what problem this wobble causes this project.
 
@@ -184,21 +184,21 @@ Mathematically, these coordinates are very easy to work with. Remember how Polar
 
 If look through a manual polar-scope, notice how the circle is marked by 12 hours (it's absolutely stupid that they used 12 hours instead of 24)
 
-![](doc/img/polarscope_reticule_zoomed.png)
+![](doc/img/polarscope_reticle_zoomed.png)
 
 You convert your vector angle into those hours, and place Polaris on the circle where the corresponding tick is.
 
 Notice that there are three circles, the diameters of those three are different. You pick which circle to use according to the current year.
 
-![](doc/img/polarscope_reticule_yearmarkers.png)
+![](doc/img/polarscope_reticle_yearmarkers.png)
 
 This is how to compensate for the wobble of the Earth's rotation axis.
 
 These are the kind of mathematics that my firmware will need to perform. It's not hard but it definitely took some time to learn the required knowledge before getting it right. In the end, Stellarium was used to verify the output of my calculations.
 
-(By the way, that reticule isn't actually visible at night, but the scope is supplied with a seperate LED flashlight that you can shine into it. More expensive mounts would have this light built-in.)
+(By the way, that reticle isn't actually visible at night, but the scope is supplied with a separate LED flashlight that you can shine into it. More expensive mounts would have this light built-in.)
 
-Since we are using computer code, the MicroPython time library uses seconds-since-epoch, with 00:00 Jan 1 2000 (all the times mentioned are UTC +0) being the epoch. That's still usually a huge number that could hurt precision when floating point numbers are involved. So I came up with a new epoch, closer to the current date, which is 20:40:46 of Aug 10 2020. At this moment, if you looked at Polaris from Greenwich UK (0° longitude), Polaris would be at where the star catelogue says it's at without any RA offsets. Using this point as my epoch made calculations much easier and more precise.
+Since we are using computer code, the MicroPython time library uses seconds-since-epoch, with 00:00 Jan 1 2000 (all the times mentioned are UTC +0) being the epoch. That's still usually a huge number that could hurt precision when floating point numbers are involved. So I came up with a new epoch, closer to the current date, which is 20:40:46 of Aug 10 2020. At this moment, if you looked at Polaris from Greenwich UK (0° longitude), Polaris would be at where the star catalog says it's at without any RA offsets. Using this point as my epoch made calculations much easier and more precise.
 
 Plate Solving
 =============
@@ -249,7 +249,7 @@ To predict the new celestial coordinate of Polaris for a given date:
  5. using the movement-per-day, you can predict the new cartesian coordnate of Polaris for any day. You can use Jan 1 2020 as a reference day
  6. convert the new predicted cartesian coordinates back into celestial coordinates
 
-Noteice that there's no reason to use sidereal time units for this calculation. You can, but it offers no advantages and only adds a few extra unneccessary date conversions. However, you do need to understand the Julian Day Number and how to calculate time spans while accounting for leap-years. I used the math formula from [http://www.cs.utsa.edu/~cs1063/projects/Spring2011/Project1/jdn-explanation.html](http://www.cs.utsa.edu/~cs1063/projects/Spring2011/Project1/jdn-explanation.html) in my code.
+Noteice that there's no reason to use sidereal time units for this calculation. You can, but it offers no advantages and only adds a few extra unnecessary date conversions. However, you do need to understand the Julian Day Number and how to calculate time spans while accounting for leap-years. I used the math formula from [http://www.cs.utsa.edu/~cs1063/projects/Spring2011/Project1/jdn-explanation.html](http://www.cs.utsa.edu/~cs1063/projects/Spring2011/Project1/jdn-explanation.html) in my code.
 
 Unit testing my code and comparing against Stellarium, it showed that for the year 2024, the results were accurate to within 1 arc-second for declination, and 12 arc-minutes for RA. This is excellent because it's less than a pixel worth of error.
 
@@ -264,11 +264,11 @@ Atmospheric refraction is a small problem that ordinary polar-scopes cannot help
 
 (from [Wikipedia](https://en.wikipedia.org/wiki/Atmospheric_refraction), according to the Wikipedia page, this approximation formula is good enough for astronomy and navigation)
 
-Where "h" is the altitude in degrees (for looking at Polaris, this is equal to your latitude), "R" is the result in arc-minutes. "P" is the pressure in kPa and "T" is the temperature in Celcius degrees. "cot" is the cotangent function (the reciprocal of the tangent function).
+Where "h" is the altitude in degrees (for looking at Polaris, this is equal to your latitude), "R" is the result in arc-minutes. "P" is the pressure in kPa and "T" is the temperature in Celsius degrees. "cot" is the cotangent function (the reciprocal of the tangent function).
 
 All of this is simple enough to code. At the North Pole, the result is very close to zero, because looking straight up, you wouldn't experience any refraction. Near the Earth's equator, the refraction could be over 30 arc-minutes, which would be over 100 pixels on the camera's image. This calculation can make tropical astrophotographers very happy, while people in Alaska might not bother using it.
 
-The hardest part about coding all this is actually trying to judge which way is "down", since the camera isn't neccessarily upright. Luckily, the plate-solving algorithm knows how the other stars are rotated around Polaris, and the current date and location can be used to apply another rotation offset, giving me an angle of the horizon. Thus, I can figure out which way is down.
+The hardest part about coding all this is actually trying to judge which way is "down", since the camera isn't necessarily upright. Luckily, the plate-solving algorithm knows how the other stars are rotated around Polaris, and the current date and location can be used to apply another rotation offset, giving me an angle of the horizon. Thus, I can figure out which way is down.
 
 Software and Firmware Engineering
 =================================
@@ -288,9 +288,9 @@ The first two huge annoyances that I had to deal with:
  * capturing a frame with the camera is a blocking call, which makes the HTTP server not able to respond quickly
    * I dug into the OpenMV back-end firmware and added a non-blocking way of capturing frames. This change was then submitted back to the original GitHub project as a pull-request.
 
-Then as development and testing went further on, I ran into a out-of-memory issue. It seems like there was a limit to how many blobs can be detected by `find_blobs()` before it runs out of memory and throws an exception. To fix this, I dug into the firmware backend again. First, I removed many properties from the blob data structure so that it consumes less memory. Second, I added a way for the `find_blobs()` to reject blobs that are too big (it already rejects blobs that are too small).
+Then as development and testing went further on, I ran into a out-of-memory issue. It seems like there was a limit to how many blobs can be detected by `find_blobs()` before it runs out of memory and throws an exception. To fix this, I dug into the firmware back-end again. First, I removed many properties from the blob data structure so that it consumes less memory. Second, I added a way for the `find_blobs()` to reject blobs that are too big (it already rejects blobs that are too small).
 
-The web interface had some reliability issues, seems like occasionally, AJAX requests would simply fail and the OpenMV never receives it. Of course, it will reattempt the request, but it seems like once one request is lost, all subsequent requests are lost. To solve this problem, I tried to simply reboot the WiFi module when a server-side timeout occurs, but this was super annoying. The better solution was to make another change to the backend firmware. When the timeout occurs, the new backend code will reset all TCP and UDP sockets without resetting the WiFi connection. This solved the reliability problem.
+The web interface had some reliability issues, seems like occasionally, AJAX requests would simply fail and the OpenMV never receives it. Of course, it will reattempt the request, but it seems like once one request is lost, all subsequent requests are lost. To solve this problem, I tried to simply reboot the WiFi module when a server-side timeout occurs, but this was super annoying. The better solution was to make another change to the back-end firmware. When the timeout occurs, the new back-end code will reset all TCP and UDP sockets without resetting the WiFi connection. This solved the reliability problem.
 
 Streaming live JPG images is a requirement because the camera may need to have its focus adjusted. It would also help with the exposure adjustments. But the data size could be huge and the transfer rate is slow. Also, AJAX cannot be used to transport binary JPG data. Base64 encoded data could be transported by AJAX but since it makes the data even longer, it was not fast enough. In the end, at 1x zoom, the image is first shrunk by half and compressed before transmission. At other zoom levels, the image is cropped instead of shrunk. The resulting responsiveness is enough.
 
@@ -300,7 +300,7 @@ Streaming live JPG images is a requirement because the camera may need to have i
 
 Since I didn't want to rely on the browser for local storage, when the user wants to save a setting, it's sent back to the HTTP server as an AJAX request. The server will save it as a JSON file in the OpenMV's flash memory.
 
-The UI used a lot of [jQuery UI](https://jqueryui.com/), which made great looking and easy to use UI elements on mobile browsers. I had to hack the themeing CSS to keep only the checkbox tick image to lighten up the payload.
+The UI used a lot of [jQuery UI](https://jqueryui.com/), which made great looking and easy to use UI elements on mobile browsers. I had to hack the theme CSS to keep only the checkbox tick image to lighten up the payload.
 
 The WiFi module can operate in soft-access-point mode, so you do not need a WiFi router with you. In this mode, it starts a micro DNS server that redirects all DNS name resolutions to itself. This creates a captive portal, think of the Star Bucks WiFi login page. This means the page cannot be secured by SSL, as technically I've hijacked the connection and the whole point of SSL is to prevent hijacking. Not using SSL means I can't directly access the smartphone's GPS data through the web browser ("OpenMV wants to know your location, allow?"). The location coordinates needs to be entered in by the user manually. Bummer. I included the [Magellan JS library](http://dbarbalato.github.io/magellan/) to help parse GPS coordinates.
 
@@ -317,7 +317,7 @@ This also meant the database had to be in ASCII, as JavaScript cannot load any b
 
 The stars in the database are only the ones within 45° of Polaris, with a sufficient brightness. I expect the user to at least know roughly where North is and also capable of turning the latitude knob correctly before even turning on this camera.
 
-The match algorithm is similar to the one used to identify Polaris, but instead of establishing a reference angle using the first neighbouring star, it simply checks all 360 possible angles. This is because I can no-longer assume the brightest star is the target star, and the matching tolerance was set a bit looser. Possible pattern matches are scored, and the patterns with the highest score is shown to the user at the end as a sorted list.
+The match algorithm is similar to the one used to identify Polaris, but instead of establishing a reference angle using the first neighboring star, it simply checks all 360 possible angles. This is because I can no-longer assume the brightest star is the target star, and the matching tolerance was set a bit looser. Possible pattern matches are scored, and the patterns with the highest score is shown to the user at the end as a sorted list.
 
 For a very dense image, getting a false-positive pattern match is very likely. Later I added the ability to penalize the score if a bright star is somewhere in the pattern's area but isn't expected. This lowered the probability of a false-positive result.
 
@@ -348,7 +348,7 @@ It has hole patterns that matches the QHYCCD PoleMaster. QHYCCD offers a variety
 
 ![](doc/img/DSC01029_es.jpg)
 
-The 3D model is open source, publically hosted on OnShape and ready for export: [https://cad.onshape.com/documents/c9071d...a6bfdc](https://cad.onshape.com/documents/c9071d5019e566707bd722e9/w/00d826b3890ec75dd7440bb9/e/b73a27c8ab1a7c58eba6bfdc)
+The 3D model is open source, publicly hosted on OnShape and ready for export: [https://cad.onshape.com/documents/c9071d...a6bfdc](https://cad.onshape.com/documents/c9071d5019e566707bd722e9/w/00d826b3890ec75dd7440bb9/e/b73a27c8ab1a7c58eba6bfdc). If you want to make changes, simply fork it to your own OnShape account.
 
 The remaining mechanical problems are about cooling the camera sensor, and preventing damage from potential water drops. The OpenMV board itself does not make it easy for me to solve either of these problems, but luckily, it's open source!
 

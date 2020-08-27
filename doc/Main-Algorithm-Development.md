@@ -64,7 +64,7 @@ The Stellarium software allows astrophotographers to input their camera specific
 
 ![](img/stellarium_predicted_view.png)
 
-Neither the parser nor Stellarium would be able to generate a true preview of what the camera sensor sees. The pixel distances between each star is calibrated using pictures I actually took with the camera. Using Polaris as the reference point, the same Python script calculates the vector from Polaris to each star. The table is sorted from closest to fartest. The first number is the distance (vector magnitude) in pixel units, the second number is the angle of the vector.
+Neither the parser nor Stellarium would be able to generate a true preview of what the camera sensor sees. The pixel distances between each star is calibrated using pictures I actually took with the camera. Using Polaris as the reference point, the same Python script calculates the vector from Polaris to each star. The table is sorted from closest to farthest. The first number is the distance (vector magnitude) in pixel units, the second number is the angle of the vector.
 
     "HD 5914",         98.867180,  -10.647256,
     "* lam UMi",      479.008301, -118.529852,
@@ -92,7 +92,7 @@ Neither the parser nor Stellarium would be able to generate a true preview of wh
     "* del UMi",     1195.457555, -104.488215,
     "HD 107113",     1264.471354, -170.201903,
 
-When the camera takes a new picture, the code needs to find the stars in the picture first. It needs to somehow separate the stars from the background. The image is analyzed first, to see how bright the sky is overall. This is done with the `get_histogram()` and `get_statistics()` functions of OpenMV. The result is mainly is affected by the light pollution and the camera settings. With that analysis, it can figure out the threshold brightness of stars. (the threshold is also user customizable)
+When the camera takes a new picture, the code needs to find the stars in the picture first. It needs to somehow separate the stars from the background. The image is analyzed first, to see how bright the sky is overall. This is done with the `get_histogram()` and `get_statistics()` functions of OpenMV. The result is mainly is affected by the light pollution and the camera settings. With that analysis, it can figure out the threshold brightness of stars. (the threshold is also user selectable through the web interface)
 
 ![](img/explain_histogram.png)
 
