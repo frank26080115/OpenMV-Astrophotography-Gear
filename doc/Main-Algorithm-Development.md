@@ -54,6 +54,8 @@ To understand what a azimuthal equidistant projection is, compare it against oth
 
 ![](img/map_projections.png)
 
+I might be using fancy words, but in reality, it just means I'm using declination to calculate the distance between the middle of the image to a star by just one multiplication. I'm essentially turning right-ascension and declination into vectors quickly. Using this projection makes the mathematics very simple, as I can ignore distortion.
+
 Here's the visualization of what my database parser sees:
 
 ![](img/generator_projected.png)
