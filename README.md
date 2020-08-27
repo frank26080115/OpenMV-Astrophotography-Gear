@@ -203,9 +203,11 @@ Since we are using computer code, the MicroPython time library uses seconds-sinc
 Plate Solving
 =============
 
-Plate-solving, "finding match between the imaged stars and a star catalogue", is actually quite complicated. In fact, most open source plate-solvers are simply an API that uploads to [nova.astrometry.net](https://nova.astrometry.net) and download the result, and that obviously requires an internet connection (good dark skies and phone signals don't usually mix), and takes up to 10 minutes for just one camera frame. My own plate-solving algorithm will need to be optimized for my weak hardware and specific use case. This algorithm is described on this separate page: [read it here!](doc/Main-Algorithm-Development.md) I show you real calculations and visualize what the code is actually doing!
+Plate-solving, "finding match between the imaged stars and a star catalogue", is actually quite complicated. In fact, most open source plate-solvers are simply an API that uploads to [nova.astrometry.net](https://nova.astrometry.net) and download the result, and that obviously requires an internet connection (good dark skies and phone signals don't usually mix), and takes up to 10 minutes for just one camera frame. My own plate-solving algorithm will need to be optimized for my weak hardware and specific use case. This algorithm is described on a separate page where I show you real calculations and visualize what the code is actually doing!
 
-[![read it here](doc/img/ad_for_the_next_page.png)](doc/Main-Algorithm-Development.md)
+![](doc/img/ad_for_the_next_page.png)
+
+[Read it HERE!](doc/Main-Algorithm-Development.md)
 
 Center Calibration
 ==================
