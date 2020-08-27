@@ -60,7 +60,11 @@ Here's the visualization of what my database parser sees:
 
 ![](img/generator_projected.png)
 
-The pixel distances between each star is calibrated using the sample image I actually took with the camera. Using Polaris as the reference point, the same Python script calculates the vector from Polaris to each star. The table is sorted from closest to fartest. The first number is the distance (vector magnitude) in pixel units, the second number is the angle of the vector.
+The Stellarium software allows astrophotographers to input their camera specifications and show a preview of what the camera would see. You can also tell it to change between different projection methods. It showed me that my projection method is valid and my assumption of negligible distortion is also valid.
+
+![](img/stellarium_predicted_view.png)
+
+Neither the parser nor Stellarium would be able to generate a true preview of what the camera sensor sees. The pixel distances between each star is calibrated using pictures I actually took with the camera. Using Polaris as the reference point, the same Python script calculates the vector from Polaris to each star. The table is sorted from closest to fartest. The first number is the distance (vector magnitude) in pixel units, the second number is the angle of the vector.
 
     "HD 5914",         98.867180,  -10.647256,
     "* lam UMi",      479.008301, -118.529852,
@@ -88,7 +92,7 @@ The pixel distances between each star is calibrated using the sample image I act
     "* del UMi",     1195.457555, -104.488215,
     "HD 107113",     1264.471354, -170.201903,
 
-When the camera takes a new picture, the code needs to find the stars in the picture first. It needs to somehow separate the stars from the background. The image is analyzed first, to see how bright the sky is overall, which is affected by the light pollution and the camera settings. With that analysis, it can figure out the threshold brightness of stars. The threshold is also user customizable.
+When the camera takes a new picture, the code needs to find the stars in the picture first. It needs to somehow separate the stars from the background. The image is analyzed first, to see how bright the sky is overall. This is done with the `get_histogram()` and `get_statistics()` functions of OpenMV. The result is mainly is affected by the light pollution and the camera settings. With that analysis, it can figure out the threshold brightness of stars. (the threshold is also user customizable)
 
 ![](img/explain_histogram.png)
 
@@ -122,4 +126,6 @@ Since this algorithm simply uses a whitelist of stars, it is more susceptible to
 
 The matching does have some tolerance to account for blurriness and lens distortion, but in the end, the true detected distances and angles are averaged to calibrate the calculation of the North Celestial Pole. As the NCP and Polaris will be very close to the center of the image, the lens distortion isn't something to be worried about anyways, as through the center of any lens, the path of the light should be perfectly straight. It's the edges that experience the most distortion, if there was any.
 
-This whole algorithm for Polaris is different from the other more generalized plate solving algorithm implemented later. The difference is that the more generalized algorithm does not establish a reference angle with the first star it matches, instead, it simply loops through 360 different angles and see which angle results in the most matches.
+This whole algorithm for Polaris is different from the other more generalized plate solving algorithm implemented later. The difference is that the more generalized algorithm does not establish a reference angle with the first star it matches, instead, it simply loops through 360 different angles and see which angle results in the most matches. This is slower but the slower algorithm runs on the smartphone (as JavaScript) instead of OpenMV (as MicroPython) so I don't really care, it doesn't really ruin the user experience.
+
+This Polaris specific algorithm only works if the stars "HD 14369" and "HD 1687" are not visible, otherwise the algorithm needs to become recursive and check three different reference angles instead of just one. Those two stars are quite dim and my camera never sees them even at aggressive settings, which is why testing the camera before writing the code was so important. The generalized algorithm does not have this problem as it checks all 360 angles.
