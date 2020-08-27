@@ -21,31 +21,31 @@ except:
 # vector to a star from Polaris, magnitude in pixels
 # sorted by closest first
 STARS_NEAR_POLARIS = micropython.const([
-    ["HD 5914",         98.867180,  -10.647256, True],
-    ["* lam UMi",      479.008301, -118.529852, True],
-    ["HD 66368",       524.994808,  164.780381, True],
-    ["HD 213126",      534.725064,  -51.636087, True],
-    ["HD 6319",        654.323145,   12.759174, True],
-    ["HD 221525",      676.906523,  -21.909059, True],
-    ["HD 22701",       820.441622,   68.948647, True],
-    ["HD 224687",      829.461143,   -9.602170, True],
-    ["V* OV Cep",      875.677409,  129.407251, True], # 2.9063 arc degs from Polaris
-    ["HD 96870",       876.265358, -178.807660, False],
-    ["V* UY UMi",      884.833301, -168.092577, True],
-    ["HD 203836",      896.804216,  -59.867339, True],
-    ["HD 221488",      897.533794,  -18.299156, False],
-    ["HD 114282",      914.532044, -160.757620, True],
-    ["* 2 UMi",        924.487512,   12.313035, True],
-    ["HD 42855",       927.519046,  115.447469, False],
-    ["V* V377 Cep",    942.226371,  -18.793331, True],
-    ["V* V378 Cep",   1007.975111,  -16.059071, True],
-    ["HD 135294",     1060.463568, -140.366796, True],
-    ["HD 212774",     1063.289980,  -37.557174, False],
-    ["* 24 UMi",      1082.153394, -105.587018, True],
-    ["HD 212710",     1096.976152,  -37.222721, True],
-    ["HD 174878",     1146.140083,  -95.341928, True],
-    ["* del UMi",     1195.457555, -104.488215, True],
-    ["HD 107113",     1264.471354, -170.201903, True]])
+    ["HD 5914",         98.867180,  -10.647256 ],
+    ["* lam UMi",      479.008301, -118.529852 ],
+    ["HD 66368",       524.994808,  164.780381 ],
+    ["HD 213126",      534.725064,  -51.636087 ],
+    ["HD 6319",        654.323145,   12.759174 ],
+    ["HD 221525",      676.906523,  -21.909059 ],
+    ["HD 22701",       820.441622,   68.948647 ],
+    ["HD 224687",      829.461143,   -9.602170 ],
+    ["V* OV Cep",      875.677409,  129.407251 ], # 2.9063 arc degs from Polaris
+    ["HD 96870",       876.265358, -178.807660 ],
+    ["V* UY UMi",      884.833301, -168.092577 ],
+    ["HD 203836",      896.804216,  -59.867339 ],
+    ["HD 221488",      897.533794,  -18.299156 ],
+    ["HD 114282",      914.532044, -160.757620 ],
+    ["* 2 UMi",        924.487512,   12.313035 ],
+    ["HD 42855",       927.519046,  115.447469 ],
+    ["V* V377 Cep",    942.226371,  -18.793331 ],
+    ["V* V378 Cep",   1007.975111,  -16.059071 ],
+    ["HD 135294",     1060.463568, -140.366796 ],
+    ["HD 212774",     1063.289980,  -37.557174 ],
+    ["* 24 UMi",      1082.153394, -105.587018 ],
+    ["HD 212710",     1096.976152,  -37.222721 ],
+    ["HD 174878",     1146.140083,  -95.341928 ],
+    ["* del UMi",     1195.457555, -104.488215 ],
+    ["HD 107113",     1264.471354, -170.201903 ]])
 
 PIXELS_PER_DEGREE = micropython.const(875.677409 / 2.9063) # calculated using "OV Cep"
 DIST_TOL = micropython.const(0.03)    # percentage
@@ -112,10 +112,12 @@ class PoleSolution(object):
             len_blobs = len(dist_sorted)
             while idx_tbl < len_tbl:
 
-                # skip stars that shouldn't be checked
-                if STARS_NEAR_POLARIS[idx_tbl][3] == False:
-                    idx_tbl += 1
-                    continue
+                # skip stars that might have too similar of a vector distance if the reference angle is not established yet
+                # it is unlikely that this logic is actually useful in real life
+                if rot_ang is None and idx_tbl >= 1:
+                    if abs(STARS_NEAR_POLARIS[idx_tbl][1] - STARS_NEAR_POLARIS[idx_tbl - 1][1]) <= 2:
+                        idx_tbl += 1
+                        continue
 
                 idx_blobs = idx_blobs_start # previous blobs (closer-to-Polaris) will be ignored
                 while idx_blobs < len_blobs:
