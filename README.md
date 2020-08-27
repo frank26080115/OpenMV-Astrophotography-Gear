@@ -171,7 +171,7 @@ Celestial Coordinate
 
 Just some background knowledge for those readers who are unfamiliar with astronomy.
 
-The position of a star is described with two numbers: Right-Ascension (R.A.) and Declination (Dec.). They are kind of like longitude and latitude for geographic location coordinates. Declination is basically exactly the same as latitude. Right-Ascension is defined as being a circle totalling 24 hours, not 360 degrees like longitude. Also, longitude starts at Greenwich, but right-ascension's zero starts from something called Vernal Equinox.
+The position of a star is described with two numbers: Right-Ascension (R.A.) and Declination (Dec.). They are kind of like longitude and latitude for geographic location coordinates. Declination is basically exactly the same as latitude. Right-Ascension is defined as being a circle totalling 24 hours, not 360° like longitude. Also, longitude starts at Greenwich, but right-ascension's zero starts from something called Vernal Equinox.
 
 This is the kind of data a star catelogue would give you, the RA and Dec of each star. Importantly, that data is where the stars are on January 1st, 2000. The catelogues might also contain the star's position on the current day.
 
@@ -203,41 +203,7 @@ Since we are using computer code, the MicroPython time library uses seconds-sinc
 Plate Solving
 =============
 
-Plate-solving, "finding match between the imaged stars and a star catalogue", is actually quite complicated. In fact, most open source plate-solvers are simply an API that uploads to [nova.astrometry.net](https://nova.astrometry.net) and download the result, and that obviously requires an internet connection (good dark skies and phone signals don't usually mix), and takes up to 10 minutes for just one camera frame. My own plate-solving algorithm will need to be optimized in a few ways:
-
- * assume the brightest star is Polaris, I double checked, within all possible camera views that contain Polaris, Polaris will always be the brightest
-   * this means I don't have to run matching on all of the stars detected, only one, massively speeding up the algorithm
- * only need a database of stars close enough to Polaris to be seen in camera view
-   * this keeps the database small and algorithm fast
- * the lens is fixed focus, I can assume the distances between the stars will never change
-   * in contrast, [nova.astrometry.net](https://nova.astrometry.net)'s more advanced algorithms can handle any sized image at any unknown scale. I think they use a database of triangle signatures instead, 3 stars make up a triangle and the signature contains the 3 angles of that triangle
- * the strategy essentially uses a **[azimuthal equidistant projection](https://en.wikipedia.org/wiki/Azimuthal_equidistant_projection)** centered on the North Celestial Pole, the camera's field-of-view is assumed to be on a flat rectangle on this projection
-   * great for this application and the very narrow field-of-view of the camera lens
-   * it keeps the math very simple, only basic vector calculations and coordinate system conversions are required, all I need are the functions `sqrt()`, `sin()`, `cos()`, and `atan2()`.
-   * there is no lens distortion that I can see
-   * any distortion is calibrated away once the star pattern has been matched
-
-Here's what the azimuthal equidistant projection looks like when applied to a world map:
-
-![](doc/img/azimuthal_equidistant_projection.png)
-
-My own algorithm is very simple. I keep a pre-generated table of stars, with the vector between each star and Polaris. Here's a visualization provided by my database generator script:
-
-![](doc/img/simulated_database_projection.png)
-
-I can check this against what Stellarium thinks my camera's view would be
-
-![](doc/img/stellarium_predicted_view.png)
-
-The table is sorted by distance (vector magnitude). The algorithm will assume the brightest star is the Polaris-candidate and look for the closest detected star, checking if the distance between the detected-star and Polaris-candidate matches any entries in the table. If it does match, a rotation angle is established, and subsequent checks of detected stars will also check the angle of the vector. At the end, if enough matches are found, then the candidate is confirmed to be Polaris. All of the vectors to the matching-detected-stars are used to establish the rotation of the image, calibrates for lens distortion, and finally determine the position of the North Celestial Pole as a pixel position on the image.
-
-One fundamental flaw with this code is that it only white-lists stars, there's no such thing as a black-list. So later on, another technique was applied to reject false-positive matches better: any bright but unidentified star within the pattern's area will count as a score penalty.
-
-Here's how well it works in reality:
-
-![](doc/img/simulated_input_image.png)
-
-![](doc/img/simulated_input_image_result.png)
+Plate-solving, "finding match between the imaged stars and a star catalogue", is actually quite complicated. In fact, most open source plate-solvers are simply an API that uploads to [nova.astrometry.net](https://nova.astrometry.net) and download the result, and that obviously requires an internet connection (good dark skies and phone signals don't usually mix), and takes up to 10 minutes for just one camera frame. My own plate-solving algorithm will need to be optimized for my weak hardware and specific use case. This algorithm is described on this separate page: [read it here!](doc/Main-Algorithm-Development.md) I show you real calculations and visualize what the code is actually doing!
 
 Center Calibration
 ==================
