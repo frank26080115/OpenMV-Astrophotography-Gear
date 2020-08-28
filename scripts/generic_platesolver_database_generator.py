@@ -2,12 +2,18 @@
 
 import sys
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 SENSOR_WIDTH  = 2592
 SENSOR_HEIGHT = 1944
 SENSOR_DIAGONAL = np.sqrt((SENSOR_WIDTH ** 2) + (SENSOR_HEIGHT ** 2))
 PIXELS_PER_DEGREE = 875.677409 / 2.9063 # calculated using "OV Cep"
+font = ImageFont.truetype(r"C:\Windows\Fonts\arial.ttf", 80)
+
+DRAW_AEP_IMAGE = True
+DRAW_STAR_CENTERED_IMAGE = True
+
+DRAW_ME = ["* tet Dra", "* eta Dra", "* iot Dra", "* eps UMa", "* alf UMa"]
 
 class Star(object):
     def __init__(self, name, coord_str, bmag):
@@ -99,6 +105,7 @@ class Star(object):
 
     def calc_visual_vector(self, star):
         ra, dec = self.get_celestial_coord_float()
+        ra2, dec2 = star.get_celestial_coord_float()
         dist1, ang1 = self.calc_aep_vector(star)
         dist2, ang2 = self.calc_arc_vector(star)
         if dist2 == 0: # calc_arc_vector encountered invalid data
@@ -108,12 +115,11 @@ class Star(object):
         dist = dist2 * PIXELS_PER_DEGREE
 
         # the azimuthal equidistant projection still works great near the pole, do not re-calculate for stars here
-        if dec >= SENSOR_DIAGONAL / PIXELS_PER_DEGREE:
+        if dec2 >= SENSOR_DIAGONAL / PIXELS_PER_DEGREE:
             return dist, ang1
 
         # RA still in hours, convert to degrees
         ra = ra * 360.0 / 24.0
-        ra2, dec2 = star.get_celestial_coord_float()
         ra2 = ra2 * 360.0 / 24.0
         delta_ra = angle_norm(ra - ra2) # east is positive, just like X is positive
         # SOHCAHTOA, cos(theta) = A/H, where A is delta_ra converted to pixels, and H is dist
@@ -174,7 +180,99 @@ def draw_stars(stars):
         x += (width / 2)
         y += (height / 2)
         draw.ellipse([(x - radius, y - radius), (x + radius, y + radius)], fill=(255, 255, 255))
-    return im, draw
+
+    im.save("stars_aep_full.png")
+    im1 = im.crop(((width / 2) - (SENSOR_WIDTH / 2), (height / 2) - (SENSOR_HEIGHT / 2), (width / 2) + (SENSOR_WIDTH / 2), (height / 2) + (SENSOR_HEIGHT / 2)))
+    draw = ImageDraw.Draw(im1)
+    i = 1
+    while i < 90:
+        radius = i * PIXELS_PER_DEGREE
+        draw.ellipse([((SENSOR_WIDTH / 2) - radius, (SENSOR_HEIGHT / 2) - radius), ((SENSOR_WIDTH / 2) + radius, (SENSOR_HEIGHT / 2) + radius)], fill=None, outline=(255, 255, 0))
+        i += 1
+    im1.save("stars_aep_cropped.png")
+
+def draw_single_star(star, bucket):
+    fname = star.name.replace("*", "star").replace(" ", "_") + ".png"
+    print("drawing for " + fname)
+
+    im = Image.new("RGB", (int(round(SENSOR_DIAGONAL * 2)), int(round(SENSOR_DIAGONAL * 2))), (0, 0, 0))
+    draw = ImageDraw.Draw(im)
+    radius = 80.0 / star.bmag
+    draw.ellipse([(SENSOR_DIAGONAL - radius, SENSOR_DIAGONAL - radius), (SENSOR_DIAGONAL + radius, SENSOR_DIAGONAL + radius)], fill=(255, 255, 255))
+    draw.text((SENSOR_DIAGONAL + radius + 2, SENSOR_DIAGONAL), star.name, font = font, align = "left")
+    for s in bucket:
+        radius = 80.0 / s.bmag
+        dx = s.rel_dist * np.cos(np.radians(s.rel_ang))
+        dy = s.rel_dist * np.sin(np.radians(s.rel_ang))
+        dx += SENSOR_DIAGONAL
+        dy += SENSOR_DIAGONAL
+        draw.ellipse([(dx - radius, dy - radius), (dx + radius, dy + radius)], fill=(255, 255, 255))
+        draw.text((dx + radius + 2, dy), s.name, font = font, align = "left")
+
+    ra10 = np.round(star.ra_float)
+    dec10 = np.round(star.dec_float)
+    ra_list = []
+    dec_list = []
+    i = -300
+    while i <= 300:
+        ra_list.append(ra10 + i)
+        dec_list.append(dec10 + i)
+        i += 0.1
+
+    for ri in ra_list:
+        if ri < 0 or ri > 24:
+            continue
+        line_list = []
+        for di in dec_list:
+            if di > 90 or di < 0:
+                continue
+            ns = Star("", "%u 0 0 %u 0 0" % (ri, di), 0)
+            dist, ang = ns.calc_visual_vector(star)
+            ns.rel_dist = dist
+            ns.rel_ang = ang
+            line_list.append(ns)
+        i = 0
+        while i < len(line_list) - 1:
+            ns1 = line_list[i]
+            ns2 = line_list[i + 1]
+            x1 = ns1.rel_dist * np.cos(np.radians(ns1.rel_ang))
+            y1 = ns1.rel_dist * np.sin(np.radians(ns1.rel_ang))
+            x2 = ns2.rel_dist * np.cos(np.radians(ns2.rel_ang))
+            y2 = ns2.rel_dist * np.sin(np.radians(ns2.rel_ang))
+            x1 += SENSOR_DIAGONAL
+            y1 += SENSOR_DIAGONAL
+            x2 += SENSOR_DIAGONAL
+            y2 += SENSOR_DIAGONAL
+            draw.line((x1, y1, x2, y2), fill=(255, 255, 0), width = 2)
+            i += 1
+    for di in dec_list:
+        if di > 90 or di < 0:
+            continue
+        line_list = []
+        for ri in ra_list:
+            if ri < 0 or ri > 24:
+                continue
+            ns = Star("", "%u 0 0 %u 0 0" % (ri, di), 0)
+            dist, ang = ns.calc_visual_vector(star)
+            ns.rel_dist = dist
+            ns.rel_ang = ang
+            line_list.append(ns)
+        i = 0
+        while i < len(line_list) - 1:
+            ns1 = line_list[i]
+            ns2 = line_list[i + 1]
+            x1 = ns1.rel_dist * np.cos(np.radians(ns1.rel_ang))
+            y1 = ns1.rel_dist * np.sin(np.radians(ns1.rel_ang))
+            x2 = ns2.rel_dist * np.cos(np.radians(ns2.rel_ang))
+            y2 = ns2.rel_dist * np.sin(np.radians(ns2.rel_ang))
+            x1 += SENSOR_DIAGONAL
+            y1 += SENSOR_DIAGONAL
+            x2 += SENSOR_DIAGONAL
+            y2 += SENSOR_DIAGONAL
+            draw.line((x1, y1, x2, y2), fill=(255, 255, 0), width = 1)
+            i += 1
+
+    im.save(fname)
 
 def sort_rel_dist(x):
     return x.rel_dist
@@ -203,10 +301,10 @@ def main():
 
     print("finished parsing file")
 
-    print("drawing stars")
-    im, draw = draw_stars(stars)
-    im.save("stars_aep.png")
-    print("finished drawing stars")
+    if DRAW_AEP_IMAGE:
+        print("drawing stars")
+        draw_stars(stars)
+        print("finished drawing stars")
 
     dec_sorted = sorted(stars, key = sort_declination, reverse = True) # database must be in order of distance from NCP
 
@@ -229,10 +327,12 @@ def main():
         dist_sorted = sorted(stars, key = sort_rel_dist, reverse = False)
         bucket = []
         for j in dist_sorted:
-            if j.rel_dist > 0 and j.rel_dist < maxdist and j.bmag <= 7:
+            if j.rel_dist > 0 and j.rel_dist < maxdist: # and j.bmag <= 7:
                 bucket.append(j)
         if len(bucket) < 4: # need a minimum number of matches
             continue
+        if i.name in DRAW_ME and DRAW_STAR_CENTERED_IMAGE:
+            draw_single_star(i, bucket)
         bucket_str = ""
         pre_val = ""
         for j in bucket:
