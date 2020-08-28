@@ -45,7 +45,7 @@ def find_stars(img, hist = None, stats = None, thresh = 0, region = None, force_
         region = (0, 0, img.width(), img.height())
 
     # custom firmware supports negative area for inverted area threshold
-    max_star_width = int(35)
+    max_star_width = int(100)
     area = int(max_star_width * max_star_width)
     maxpix = int(round(((float(max_star_width) / 2.0) ** 2) * 3.14159))
 
@@ -61,16 +61,7 @@ def find_stars(img, hist = None, stats = None, thresh = 0, region = None, force_
     too_long = 0
     too_big  = 0
     for b in blobs:
-        accept = True
-        #if b.roundness() < 0.2 and b.area() > (5 * 5):
-        #    too_long += 1
-        #    accept = False
-        ## the reduced lightweight firmware cannot calculate roundness
-        if b.area() > (25 * 25):
-            too_big += 1
-            accept = False
-        if accept:
-            stars.append(blob_to_star(b, img, thresh))
+        stars.append(blob_to_star(b, img, thresh))
     if force_solve == False:
         if too_big > len(stars):
             return stars, EXPO_TOO_BIG
