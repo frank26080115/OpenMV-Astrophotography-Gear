@@ -168,22 +168,44 @@ function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, ghost_results)
             var ishot = checkHotPixel(ele);
             if (ishot == false)
             {
+                var drawn_rad = math_mapStarRadius(ele["r"], minr, maxr, imgh);
                 cirele = document.createElementNS(svgNS, "circle");
                 cirele.setAttribute("cx", Math.round((cx / imgscale) - offset_x));
                 cirele.setAttribute("cy", Math.round((cy / imgscale) - offset_y));
-                cirele.setAttribute("r", math_mapStarRadius(ele["r"], minr, maxr, imgh));
+                cirele.setAttribute("r", drawn_rad);
                 cirele.setAttribute("style", "fill:rgb(255,255,255);stroke:none;");
                 cirele.setAttribute("onclick", "star_onclick(" + cx + ", " + cy + ");");
                 svgele.appendChild(cirele);
 
                 // draw one that's bigger so that it's easier to click
-                cirele = document.createElementNS(svgNS, "circle");
-                cirele.setAttribute("cx", Math.round((cx / imgscale) - offset_x));
-                cirele.setAttribute("cy", Math.round((cy / imgscale) - offset_y));
-                cirele.setAttribute("r", imgh / 20);
-                cirele.setAttribute("style", "fill:rgb(255,255,255, 0.001);stroke:none;");
-                cirele.setAttribute("onclick", "star_onclick(" + cx + ", " + cy + ");");
-                svgele.appendChild(cirele);
+                // check distance to another nearby star to make sure we don't draw an overlapping clickable circle
+                var mindist = -1;
+                stars.forEach(function(ele2, idx2) {
+                    if (idx == idx2) {
+                        return;
+                    }
+                    v = math_getVector([ele["cx"],ele["cy"]], [ele2["cx"],ele2["cy"]]);
+                    if (mindist < 0 || v[0] < mindist) {
+                        mindist = v[0];
+                    }
+                });
+                mindist = mindist / imgscale / 2;
+
+                // establish minimum and maximum size of 
+                if (mindist > drawn_rad)
+                {
+                    drawn_rad = mindist;
+                    if (drawn_rad > imgh / 20) {
+                        drawn_rad = imgh / 20;
+                    }
+                    cirele = document.createElementNS(svgNS, "circle");
+                    cirele.setAttribute("cx", Math.round((cx / imgscale) - offset_x));
+                    cirele.setAttribute("cy", Math.round((cy / imgscale) - offset_y));
+                    cirele.setAttribute("r", drawn_rad);
+                    cirele.setAttribute("style", "fill:rgb(255,255,255, 0.001);stroke:none;");
+                    cirele.setAttribute("onclick", "star_onclick(" + cx + ", " + cy + ");");
+                    svgele.appendChild(cirele);
+                }
             }
         });
     }
