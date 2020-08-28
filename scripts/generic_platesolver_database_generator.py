@@ -36,7 +36,7 @@ class Star(object):
     def get_celestial_coord_float(self):
         # converts the input DDMMSS into floats
         # warning: RA is still in 24H units, not degrees
-        self.ra_float  = self.ra_hour + (self.ra_min  / 60.0) + (self.ra_sec  / (60.0 * 60.0))
+        self.ra_float  = self.ra_hour  + (self.ra_min  / 60.0) + (self.ra_sec  / (60.0 * 60.0))
         self.dec_float = self.dec_deg + (self.dec_min / 60.0) + (self.dec_sec / (60.0 * 60.0))
         return self.ra_float, self.dec_float
 
@@ -60,35 +60,11 @@ class Star(object):
     def calc_aep_vector(self, star):
         # azimuthal equidistant projection vector
         dx, dy = self.calc_aep_dxdy(star)
-        #dist = np.sqrt((dx ** 2) + (dy ** 2))
-        dist = self.calc_arc_dist(star)
+        dist = np.sqrt((dx ** 2) + (dy ** 2))
         ang  = np.degrees(np.arctan2(dy, dx))
         return dist, ang
 
-    def calc_gnomonic_dxdy(self, star):
-        delta_ra = np.radians(hours_to_degrees(self.ra_float) - hours_to_degrees(star.ra_float))
-        dec_0 = np.radians(star.dec_float)
-        dec   = np.radians(self.dec_float)
-        x_numerator   = np.cos(dec) * np.sin(delta_ra)
-        x_denominator = (np.cos(dec_0) * np.cos(dec) * np.cos(delta_ra)) + (np.sin(dec_0) * np.sin(dec))
-        y_numerator = (np.sin(star.dec_float) * np.cos(dec) * np.cos(delta_ra)) - (np.cos(dec_0) * np.sin(dec))
-        y_denominator = (np.cos(dec_0) * np.cos(dec) * np.cos(delta_ra)) - (np.sin(dec) * np.sin(dec_0))
-        x = x_numerator / x_denominator
-        y = y_numerator / y_denominator
-        mag = np.sqrt((x ** 2) + (y ** 2))
-        arcdist = self.calc_arc_dist(star)
-        mult = arcdist / mag
-        x *= mult
-        y *= mult
-        return x, y
-
-    def calc_gnomonic_vector(self, star):
-        dx, dy = self.calc_gnomonic_dxdy(star)
-        dist = self.calc_arc_dist(star)
-        ang  = np.degrees(np.arctan2(dy, dx))
-        return dist, ang
-
-    def calc_arc_dist(self, star):
+    def calc_arc_vector(self, star):
         # https://en.wikipedia.org/wiki/Great-circle_distance
         # https://www.gyes.eu/calculator/calculator_page1.htm
         ra1, dec1 = self.get_celestial_coord_float()
@@ -100,27 +76,27 @@ class Star(object):
         dec1 = np.radians(dec1)
         dec2 = np.radians(dec2)
         cosa = (np.sin(dec1) * np.sin(dec2)) + (np.cos(dec1) * np.cos(dec2) * np.cos(ra1 - ra2))
-        if cosa > 1.0 or cosa < -1.0:
-            return 0
+        if cosa > 1.0:
+            cosa = 1.0
+        elif cosa < -1.0:
+            cosa = -1.0
         arcdist = np.arccos(cosa)
-        return np.degrees(arcdist)
-
-    def calc_arc_vector(self, star):
-        arcdist = self.calc_arc_dist(star)
 
         # https://en.wikipedia.org/wiki/Solution_of_triangles
         # point C is the NCP, point A is the current reference star, point B is the input star
         # all units are radians right now
         arc_a = (np.pi / 2.0) - dec2
         arc_b = (np.pi / 2.0) - dec1
-        arc_c = np.radians(arcdist)
+        arc_c = arcdist
         numerator = np.cos(arc_a) - (np.cos(arc_b) * np.cos(arc_c))
         denominator = np.sin(arc_b) * np.sin(arc_c)
         if denominator == 0.0:
             return 0, 0
         x = numerator / denominator
-        if x > 1.0 or x < -1.0:
-            return 0, 0
+        if x > 1.0:
+            x = 1.0
+        elif x < -1.0:
+            x = -1.0
         alpha = np.arccos(x)
 
         # if the star is more east, then we want alpha to be positive
@@ -130,16 +106,39 @@ class Star(object):
         if delta_ra < 0:
             alpha *= -1.0
 
-        return arcdist, np.degrees(alpha)
+        return np.degrees(arcdist), np.degrees(alpha)
 
     def calc_visual_vector(self, star):
-        # the azimuthal equidistant projection still works great near the pole, do not re-calculate for stars here
-        if star.dec_float >= LIMIT_DEC:
-            dist, ang = self.calc_aep_vector(star)
-            return dist * PIXELS_PER_DEGREE, ang
+        ra, dec = self.get_celestial_coord_float()
+        ra2, dec2 = star.get_celestial_coord_float()
+        dist1, ang1 = self.calc_aep_vector(star)
+        dist2, ang2 = self.calc_arc_vector(star)
+        if dist2 == 0: # calc_arc_vector encountered invalid data
+            return 0, 0
 
-        dist, ang = self.calc_gnomonic_vector(star)
-        return dist * PIXELS_PER_DEGREE, ang
+        # only use dist2, as it is an arc distance, it is accurate no matter what projection we use
+        dist = dist2 * PIXELS_PER_DEGREE
+
+        # the azimuthal equidistant projection still works great near the pole, do not re-calculate for stars here
+        if dec2 >= LIMIT_DEC:
+            return dist, ang1
+
+        # RA still in hours, convert to degrees
+        ra = hours_to_degrees(ra)
+        ra2 = hours_to_degrees(ra2)
+        delta_ra = angle_norm(ra - ra2) # east is positive, just like X is positive
+        # SOHCAHTOA, cos(theta) = A/H, where A is delta_ra converted to pixels, and H is dist
+        fra = delta_ra * pix_per_ra(dec) / dist
+        if fra > 1.0:
+            fra = 1.0
+        elif fra < -1.0:
+            fra = -1.0
+        theta = np.arccos(fra)
+        # theta is positive if target star has lower dec than reference star
+        if dec2 > dec:
+            theta *= -1.0
+
+        return dist, np.degrees(theta)
 
     def printme(self):
         ra, dec = self.get_celestial_coord_float()
@@ -149,14 +148,10 @@ class Star(object):
 # since this value changes according to declination
 # at zero declination, the equator, cos() = 1
 def pix_per_ra(dec):
-    return PIXELS_PER_DEGREE * np.cos(np.degrees(dec))
+    return PIXELS_PER_DEGREE * np.cos(np.radians(dec))
 
 def angle_norm(x):
-    while x > 180.0:
-        x -= 360.0
-    while x < -180.0:
-        x += 360.0
-    return x
+    return np.degrees(np.arcsin(np.sin(np.radians(x))))
 
 def hours_to_degrees(x):
     return x * 360.0 / 24.0
@@ -283,7 +278,7 @@ def draw_single_star(star, bucket):
             y1 += SENSOR_DIAGONAL
             x2 += SENSOR_DIAGONAL
             y2 += SENSOR_DIAGONAL
-            draw.line((x1, y1, x2, y2), fill=(255, 255, 0), width = 2)
+            draw.line((x1, y1, x2, y2), fill=(255, 255, 0), width = 1)
             i += 1
 
     im.save(fname)
