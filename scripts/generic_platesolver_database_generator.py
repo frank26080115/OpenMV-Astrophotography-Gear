@@ -8,6 +8,7 @@ SENSOR_WIDTH  = 2592
 SENSOR_HEIGHT = 1944
 SENSOR_DIAGONAL = np.sqrt((SENSOR_WIDTH ** 2) + (SENSOR_HEIGHT ** 2))
 PIXELS_PER_DEGREE = 875.677409 / 2.9063 # calculated using "OV Cep"
+LIMIT_DEC = 90 - (SENSOR_DIAGONAL / PIXELS_PER_DEGREE)
 font = ImageFont.truetype(r"C:\Windows\Fonts\arial.ttf", 80)
 
 DRAW_AEP_IMAGE = True
@@ -35,7 +36,7 @@ class Star(object):
     def get_celestial_coord_float(self):
         # converts the input DDMMSS into floats
         # warning: RA is still in 24H units, not degrees
-        self.ra_float  = self.ra_hour  + (self.ra_min  / 60.0) + (self.ra_sec  / (60.0 * 60.0))
+        self.ra_float  = self.ra_hour + (self.ra_min  / 60.0) + (self.ra_sec  / (60.0 * 60.0))
         self.dec_float = self.dec_deg + (self.dec_min / 60.0) + (self.dec_sec / (60.0 * 60.0))
         return self.ra_float, self.dec_float
 
@@ -70,7 +71,7 @@ class Star(object):
         dec   = np.radians(self.dec_float)
         x_numerator   = np.cos(dec) * np.sin(delta_ra)
         x_denominator = (np.cos(dec_0) * np.cos(dec) * np.cos(delta_ra)) + (np.sin(dec_0) * np.sin(dec))
-        y_numerator = (np.sin(star.dec_flaot) * np.cos(dec) * np.cos(delta_ra)) - (np.cos(dec_0) * np.sin(dec))
+        y_numerator = (np.sin(star.dec_float) * np.cos(dec) * np.cos(delta_ra)) - (np.cos(dec_0) * np.sin(dec))
         y_denominator = (np.cos(dec_0) * np.cos(dec) * np.cos(delta_ra)) - (np.sin(dec) * np.sin(dec_0))
         x = x_numerator / x_denominator
         y = y_numerator / y_denominator
@@ -85,7 +86,7 @@ class Star(object):
         dx, dy = self.calc_gnomonic_dxdy(star)
         dist = self.calc_arc_dist(star)
         ang  = np.degrees(np.arctan2(dy, dx))
-        return dist * PIXELS_PER_DEGREE, ang
+        return dist, ang
 
     def calc_arc_dist(self, star):
         # https://en.wikipedia.org/wiki/Great-circle_distance
@@ -133,7 +134,7 @@ class Star(object):
 
     def calc_visual_vector(self, star):
         # the azimuthal equidistant projection still works great near the pole, do not re-calculate for stars here
-        if star.dec_float >= SENSOR_DIAGONAL / PIXELS_PER_DEGREE:
+        if star.dec_float >= LIMIT_DEC:
             dist, ang = self.calc_aep_vector(star)
             return dist * PIXELS_PER_DEGREE, ang
 
