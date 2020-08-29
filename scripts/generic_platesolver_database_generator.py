@@ -12,11 +12,15 @@ LIMIT_DEC = 90 - (SENSOR_DIAGONAL / PIXELS_PER_DEGREE)
 font = ImageFont.truetype(r"C:\Windows\Fonts\arial.ttf", 80)
 
 USE_GNOMONIC = False
+USE_SPHERICAL_ARC = True
+USE_WARPED_CYLINDER = False
+USE_ONLY_AEP = False
 
-DRAW_AEP_IMAGE = True
-DRAW_STAR_CENTERED_IMAGE = True
+DRAW_AEP_IMAGE = False
+DRAW_STAR_CENTERED_IMAGE = False
 
 DRAW_ME = ["* tet Dra", "* eta Dra", "* iot Dra", "* eps UMa", "* alf UMa"]
+#DRAW_ME.append("* alf UMi")
 
 class Star(object):
     def __init__(self, name, coord_str, bmag):
@@ -68,37 +72,44 @@ class Star(object):
         return dist, ang
 
     def calc_gnomonic_dxdy(self, star):
-        delta_ra = np.radians(hours_to_degrees(star.ra_float) - hours_to_degrees(self.ra_float))
+        delta_ra = np.radians(hours_to_degrees(self.ra_float) - hours_to_degrees(star.ra_float))
         dec_0 = np.radians(star.dec_float)
         dec   = np.radians(self.dec_float)
         x_numerator   = np.cos(dec) * np.sin(delta_ra)
         x_denominator = (np.cos(dec_0) * np.cos(dec) * np.cos(delta_ra)) + (np.sin(dec_0) * np.sin(dec))
-        y_numerator = (np.cos(dec_0) * np.sin(dec)) - (np.sin(dec_0) * np.cos(dec) * np.cos(delta_ra))
-        y_denominator = (np.cos(dec_0) * np.cos(dec) * np.cos(delta_ra)) - (np.sin(dec) * np.sin(dec_0))
+
+        # this is the original formula
+        #y_numerator = (np.sin(dec_0) * np.cos(dec) * np.cos(delta_ra)) - (np.cos(dec_0) * np.sin(dec))
+        #y_denominator = (np.cos(dec_0) * np.cos(dec) * np.cos(delta_ra)) - (np.sin(dec_0) * np.sin(dec))
+
+        # this modified equation keeps the declination lines equidistant
+        y_numerator = (np.sin(dec_0) * np.cos(dec) * np.cos(delta_ra)) - (np.cos(dec_0) * np.sin(dec_0))
+        y_denominator = (np.cos(dec_0) * np.cos(dec) * np.cos(delta_ra)) - (np.sin(dec_0) * np.sin(dec_0))
+
         if x_denominator == 0:
             return 0, 0
         if y_denominator == 0:
             return 0, 0
+
         x = x_numerator / x_denominator
         y = y_numerator / y_denominator
-        mag = np.sqrt((x ** 2) + (y ** 2))
-        if mag == 0:
-            return 0, 0
-        arcdist = self.calc_arc_dist(star)
-        mult = arcdist / mag
-        x *= mult
-        y *= mult
+
+        x = np.degrees(x) * PIXELS_PER_DEGREE
+        y = np.degrees(y) * PIXELS_PER_DEGREE
+
+        # this modifier I added to squish the Y down, unsure if valid
+        y *= np.sin(dec_0) * np.sin(dec)
         return x, y
 
     def calc_gnomonic_vector(self, star):
         dx, dy = self.calc_gnomonic_dxdy(star)
         if dx == 0 and dy == 0:
             return 0, 0
-        dist = self.calc_arc_dist(star)
+        dist = np.sqrt((dx ** 2) + (dy ** 2))
         ang  = np.degrees(np.arctan2(dy, dx))
         return dist, ang
 
-    def calc_warppedcylinder_vector(self, star):
+    def calc_warpedcylinder_vector(self, star):
         dist = self.calc_arc_dist(star)
         if dist == 0:
             return 0, 0
@@ -117,6 +128,16 @@ class Star(object):
         if star.dec_float > self.dec_float:
             theta *= -1.0
         return dist, np.degrees(theta)
+
+    #def calc_warpedcylinder2_vector(self, star):
+    #    # RA still in hours, convert to degrees
+    #    delta_ra = angle_norm(hours_to_degrees(self.ra_float) - hours_to_degrees(star.ra_float)) # east is positive, just like X is positive
+    #
+    #    dy = (star.dec_float - self.dec_float) * PIXELS_PER_DEGREE
+    #    dx = delta_ra * pix_per_ra(self.dec_float)
+    #    dist = np.sqrt((dx ** 2) + (dy ** 2))
+    #    ang  = np.degrees(np.arctan2(dy, dx))
+    #    return dist, ang
 
     def calc_arc_dist(self, star):
         # https://en.wikipedia.org/wiki/Great-circle_distance
@@ -138,12 +159,13 @@ class Star(object):
     def calc_arc_vector(self, star):
         arcdist = self.calc_arc_dist(star)
 
-        # https://en.wikipedia.org/wiki/Solution_of_triangles
-        # point C is the NCP, point A is the current reference star, point B is the input star
+        # https://en.wikipedia.org/wiki/Solution_of_triangles (Solving spherical triangles)
+        # point C is the NCP, point A is the center star (input variable), point B is self star
         # all units are radians right now
-        arc_a = (np.pi / 2.0) - dec2
-        arc_b = (np.pi / 2.0) - dec1
+        arc_a = (np.pi / 2.0) - np.radians(self.dec_float)
+        arc_b = (np.pi / 2.0) - np.radians(star.dec_float)
         arc_c = np.radians(arcdist)
+        # the angle we want is alpha
         numerator = np.cos(arc_a) - (np.cos(arc_b) * np.cos(arc_c))
         denominator = np.sin(arc_b) * np.sin(arc_c)
         if denominator == 0.0:
@@ -158,7 +180,7 @@ class Star(object):
         # if the star is more east, then we want alpha to be positive
         # otherwise, alpha should be negative
         # lower RA is more East, so if ra1 - ra2 is greater than zero, ra2 is more east
-        delta_ra = angle_norm(np.degrees(ra1 - ra2))
+        delta_ra = angle_norm(hours_to_degrees(star.ra_float) - hours_to_degrees(self.ra_float))
         if delta_ra < 0:
             alpha *= -1.0
 
@@ -166,16 +188,21 @@ class Star(object):
 
     def calc_visual_vector(self, star):
         # the azimuthal equidistant projection still works great near the pole, do not re-calculate for stars here
-        if star.dec_float >= LIMIT_DEC:
+        if star.dec_float >= LIMIT_DEC or USE_ONLY_AEP:
             dist, ang = self.calc_aep_vector(star)
             return dist * PIXELS_PER_DEGREE, ang
 
         if USE_GNOMONIC:
             dist, ang = self.calc_gnomonic_vector(star)
+            return dist, ang
+
+        if USE_SPHERICAL_ARC:
+            dist, ang = self.calc_arc_vector(star)
             return dist * PIXELS_PER_DEGREE, ang
 
-        dist, ang = self.calc_warppedcylinder_vector(star)
-        return dist * PIXELS_PER_DEGREE, ang
+        if USE_WARPED_CYLINDER:
+            dist, ang = self.calc_warpedcylinder_vector(star)
+            return dist * PIXELS_PER_DEGREE, ang
 
     def printme(self):
         ra, dec = self.get_celestial_coord_float()
@@ -261,9 +288,14 @@ def draw_single_star(star, bucket, draw_lines = True):
         dec10 = np.round(star.dec_float)
         ra_list = []
         dec_list = []
-        i = -10
-        while i <= 10:
-            ra_list.append(ra10 + i)
+        i = -13
+        while i <= 13:
+            ran = ra10 + i
+            while ran < 0:
+                ran += 24
+            while ran >= 24:
+                ran -= 24
+            ra_list.append(ran)
             dec_list.append(dec10 + i)
             i += 1
 
@@ -291,7 +323,7 @@ def draw_single_star(star, bucket, draw_lines = True):
                 y1 += SENSOR_DIAGONAL
                 x2 += SENSOR_DIAGONAL
                 y2 += SENSOR_DIAGONAL
-                draw.line((x1, y1, x2, y2), fill=(255, 255, 0), width = 2)
+                draw.line((x1, y1, x2, y2), fill=(255, 255, 0), width = 3)
                 i += 1
         for di in dec_list:
             if di > 90 or di < 0:
@@ -317,7 +349,7 @@ def draw_single_star(star, bucket, draw_lines = True):
                 y1 += SENSOR_DIAGONAL
                 x2 += SENSOR_DIAGONAL
                 y2 += SENSOR_DIAGONAL
-                draw.line((x1, y1, x2, y2), fill=(255, 255, 0), width = 2)
+                draw.line((x1, y1, x2, y2), fill=(255, 255, 0), width = 3)
                 i += 1
 
     im.save(fname)
@@ -327,6 +359,16 @@ def sort_rel_dist(x):
 
 def sort_declination(x):
     return x.dec_float
+
+#if USE_GNOMONIC:
+#    GNOMONIC_CAL = None
+#    ncp = Star("ncp", "0 0 0 90 0 0", 0)
+#    lower_star = Star("lower_star", "0 0 0 80 0 0", 0)
+#    dx, dy = lower_star.calc_gnomonic_dxdy(ncp)
+#    print("gnomonic distance calibration, 10 deg is %f" % dy)
+#    should_be = 10.0 * PIXELS_PER_DEGREE
+#    GNOMONIC_CAL = should_be / dy
+#    print("gnomonic distance calibration %.16f" % GNOMONIC_CAL)
 
 def main():
     stars = []
