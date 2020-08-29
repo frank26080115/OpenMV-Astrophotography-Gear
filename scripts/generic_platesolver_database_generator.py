@@ -11,6 +11,8 @@ PIXELS_PER_DEGREE = 875.677409 / 2.9063 # calculated using "OV Cep"
 LIMIT_DEC = 90 - (SENSOR_DIAGONAL / PIXELS_PER_DEGREE)
 font = ImageFont.truetype(r"C:\Windows\Fonts\arial.ttf", 80)
 
+USE_GNOMONIC = False
+
 DRAW_AEP_IMAGE = True
 DRAW_STAR_CENTERED_IMAGE = True
 
@@ -36,7 +38,7 @@ class Star(object):
     def get_celestial_coord_float(self):
         # converts the input DDMMSS into floats
         # warning: RA is still in 24H units, not degrees
-        self.ra_float  = self.ra_hour  + (self.ra_min  / 60.0) + (self.ra_sec  / (60.0 * 60.0))
+        self.ra_float  = self.ra_hour + (self.ra_min  / 60.0) + (self.ra_sec  / (60.0 * 60.0))
         self.dec_float = self.dec_deg + (self.dec_min / 60.0) + (self.dec_sec / (60.0 * 60.0))
         return self.ra_float, self.dec_float
 
@@ -60,19 +62,69 @@ class Star(object):
     def calc_aep_vector(self, star):
         # azimuthal equidistant projection vector
         dx, dy = self.calc_aep_dxdy(star)
-        dist = np.sqrt((dx ** 2) + (dy ** 2))
+        #dist = np.sqrt((dx ** 2) + (dy ** 2))
+        dist = self.calc_arc_dist(star)
         ang  = np.degrees(np.arctan2(dy, dx))
         return dist, ang
 
-    def calc_arc_vector(self, star):
+    def calc_gnomonic_dxdy(self, star):
+        delta_ra = np.radians(hours_to_degrees(star.ra_float) - hours_to_degrees(self.ra_float))
+        dec_0 = np.radians(star.dec_float)
+        dec   = np.radians(self.dec_float)
+        x_numerator   = np.cos(dec) * np.sin(delta_ra)
+        x_denominator = (np.cos(dec_0) * np.cos(dec) * np.cos(delta_ra)) + (np.sin(dec_0) * np.sin(dec))
+        y_numerator = (np.cos(dec_0) * np.sin(dec)) - (np.sin(dec_0) * np.cos(dec) * np.cos(delta_ra))
+        y_denominator = (np.cos(dec_0) * np.cos(dec) * np.cos(delta_ra)) - (np.sin(dec) * np.sin(dec_0))
+        if x_denominator == 0:
+            return 0, 0
+        if y_denominator == 0:
+            return 0, 0
+        x = x_numerator / x_denominator
+        y = y_numerator / y_denominator
+        mag = np.sqrt((x ** 2) + (y ** 2))
+        if mag == 0:
+            return 0, 0
+        arcdist = self.calc_arc_dist(star)
+        mult = arcdist / mag
+        x *= mult
+        y *= mult
+        return x, y
+
+    def calc_gnomonic_vector(self, star):
+        dx, dy = self.calc_gnomonic_dxdy(star)
+        if dx == 0 and dy == 0:
+            return 0, 0
+        dist = self.calc_arc_dist(star)
+        ang  = np.degrees(np.arctan2(dy, dx))
+        return dist, ang
+
+    def calc_warppedcylinder_vector(self, star):
+        dist = self.calc_arc_dist(star)
+        if dist == 0:
+            return 0, 0
+        # RA still in hours, convert to degrees
+        ra1 = hours_to_degrees(self.ra_float)
+        ra2 = hours_to_degrees(star.ra_float)
+        delta_ra = angle_norm(ra1 - ra2) # east is positive, just like X is positive
+        # SOHCAHTOA, cos(theta) = A/H, where A is delta_ra converted to pixels, and H is dist
+        fra = delta_ra * pix_per_ra(self.dec_float) / (dist * PIXELS_PER_DEGREE)
+        if fra > 1.0:
+            fra = 1.0
+        elif fra < -1.0:
+            fra = -1.0
+        theta = np.arccos(fra)
+        # theta is positive if target star has lower dec than reference star
+        if star.dec_float > self.dec_float:
+            theta *= -1.0
+        return dist, np.degrees(theta)
+
+    def calc_arc_dist(self, star):
         # https://en.wikipedia.org/wiki/Great-circle_distance
         # https://www.gyes.eu/calculator/calculator_page1.htm
         ra1, dec1 = self.get_celestial_coord_float()
         ra2, dec2 = star.get_celestial_coord_float()
-        ra1 = hours_to_degrees(ra1)
-        ra2 = hours_to_degrees(ra2)
-        ra1 = np.radians(ra1)
-        ra2 = np.radians(ra2)
+        ra1 = np.radians(hours_to_degrees(ra1))
+        ra2 = np.radians(hours_to_degrees(ra2))
         dec1 = np.radians(dec1)
         dec2 = np.radians(dec2)
         cosa = (np.sin(dec1) * np.sin(dec2)) + (np.cos(dec1) * np.cos(dec2) * np.cos(ra1 - ra2))
@@ -81,13 +133,17 @@ class Star(object):
         elif cosa < -1.0:
             cosa = -1.0
         arcdist = np.arccos(cosa)
+        return np.degrees(arcdist)
+
+    def calc_arc_vector(self, star):
+        arcdist = self.calc_arc_dist(star)
 
         # https://en.wikipedia.org/wiki/Solution_of_triangles
         # point C is the NCP, point A is the current reference star, point B is the input star
         # all units are radians right now
         arc_a = (np.pi / 2.0) - dec2
         arc_b = (np.pi / 2.0) - dec1
-        arc_c = arcdist
+        arc_c = np.radians(arcdist)
         numerator = np.cos(arc_a) - (np.cos(arc_b) * np.cos(arc_c))
         denominator = np.sin(arc_b) * np.sin(arc_c)
         if denominator == 0.0:
@@ -106,39 +162,20 @@ class Star(object):
         if delta_ra < 0:
             alpha *= -1.0
 
-        return np.degrees(arcdist), np.degrees(alpha)
+        return arcdist, np.degrees(alpha)
 
     def calc_visual_vector(self, star):
-        ra, dec = self.get_celestial_coord_float()
-        ra2, dec2 = star.get_celestial_coord_float()
-        dist1, ang1 = self.calc_aep_vector(star)
-        dist2, ang2 = self.calc_arc_vector(star)
-        if dist2 == 0: # calc_arc_vector encountered invalid data
-            return 0, 0
-
-        # only use dist2, as it is an arc distance, it is accurate no matter what projection we use
-        dist = dist2 * PIXELS_PER_DEGREE
-
         # the azimuthal equidistant projection still works great near the pole, do not re-calculate for stars here
-        if dec2 >= LIMIT_DEC:
-            return dist, ang1
+        if star.dec_float >= LIMIT_DEC:
+            dist, ang = self.calc_aep_vector(star)
+            return dist * PIXELS_PER_DEGREE, ang
 
-        # RA still in hours, convert to degrees
-        ra = hours_to_degrees(ra)
-        ra2 = hours_to_degrees(ra2)
-        delta_ra = angle_norm(ra - ra2) # east is positive, just like X is positive
-        # SOHCAHTOA, cos(theta) = A/H, where A is delta_ra converted to pixels, and H is dist
-        fra = delta_ra * pix_per_ra(dec) / dist
-        if fra > 1.0:
-            fra = 1.0
-        elif fra < -1.0:
-            fra = -1.0
-        theta = np.arccos(fra)
-        # theta is positive if target star has lower dec than reference star
-        if dec2 > dec:
-            theta *= -1.0
+        if USE_GNOMONIC:
+            dist, ang = self.calc_gnomonic_vector(star)
+            return dist * PIXELS_PER_DEGREE, ang
 
-        return dist, np.degrees(theta)
+        dist, ang = self.calc_warppedcylinder_vector(star)
+        return dist * PIXELS_PER_DEGREE, ang
 
     def printme(self):
         ra, dec = self.get_celestial_coord_float()
@@ -200,7 +237,7 @@ def draw_stars(stars):
         i += 1
     im1.save("stars_aep_cropped.png")
 
-def draw_single_star(star, bucket):
+def draw_single_star(star, bucket, draw_lines = True):
     fname = star.name.replace("*", "star").replace(" ", "_") + ".png"
     print("drawing for " + fname)
 
@@ -211,75 +248,77 @@ def draw_single_star(star, bucket):
     draw.text((SENSOR_DIAGONAL + radius + 2, SENSOR_DIAGONAL), star.name, font = font, align = "left")
     for s in bucket:
         radius = 80.0 / s.bmag
-        dx = s.rel_dist * np.cos(np.radians(s.rel_ang))
-        dy = s.rel_dist * np.sin(np.radians(s.rel_ang))
-        dx += SENSOR_DIAGONAL
-        dy += SENSOR_DIAGONAL
-        draw.ellipse([(dx - radius, dy - radius), (dx + radius, dy + radius)], fill=(255, 255, 255))
-        draw.text((dx + radius + 2, dy), s.name, font = font, align = "left")
+        if s.rel_dist > 0:
+            dx = s.rel_dist * np.cos(np.radians(s.rel_ang))
+            dy = s.rel_dist * np.sin(np.radians(s.rel_ang))
+            dx += SENSOR_DIAGONAL
+            dy += SENSOR_DIAGONAL
+            draw.ellipse([(dx - radius, dy - radius), (dx + radius, dy + radius)], fill=(255, 255, 255))
+            draw.text((dx + radius + 2, dy), s.name, font = font, align = "left")
 
-    ra10 = np.round(star.ra_float)
-    dec10 = np.round(star.dec_float)
-    ra_list = []
-    dec_list = []
-    i = -300
-    while i <= 300:
-        ra_list.append(ra10 + i)
-        dec_list.append(dec10 + i)
-        i += 0.1
-
-    for ri in ra_list:
-        if ri < 0 or ri > 24:
-            continue
-        line_list = []
-        for di in dec_list:
-            if di > 90 or di < 0:
-                continue
-            ns = Star("", "%u 0 0 %u 0 0" % (ri, di), 0)
-            dist, ang = ns.calc_visual_vector(star)
-            ns.rel_dist = dist
-            ns.rel_ang = ang
-            line_list.append(ns)
-        i = 0
-        while i < len(line_list) - 1:
-            ns1 = line_list[i]
-            ns2 = line_list[i + 1]
-            x1 = ns1.rel_dist * np.cos(np.radians(ns1.rel_ang))
-            y1 = ns1.rel_dist * np.sin(np.radians(ns1.rel_ang))
-            x2 = ns2.rel_dist * np.cos(np.radians(ns2.rel_ang))
-            y2 = ns2.rel_dist * np.sin(np.radians(ns2.rel_ang))
-            x1 += SENSOR_DIAGONAL
-            y1 += SENSOR_DIAGONAL
-            x2 += SENSOR_DIAGONAL
-            y2 += SENSOR_DIAGONAL
-            draw.line((x1, y1, x2, y2), fill=(255, 255, 0), width = 2)
+    if draw_lines:
+        ra10 = np.round(star.ra_float)
+        dec10 = np.round(star.dec_float)
+        ra_list = []
+        dec_list = []
+        i = -10
+        while i <= 10:
+            ra_list.append(ra10 + i)
+            dec_list.append(dec10 + i)
             i += 1
-    for di in dec_list:
-        if di > 90 or di < 0:
-            continue
-        line_list = []
+
         for ri in ra_list:
             if ri < 0 or ri > 24:
                 continue
-            ns = Star("", "%u 0 0 %u 0 0" % (ri, di), 0)
-            dist, ang = ns.calc_visual_vector(star)
-            ns.rel_dist = dist
-            ns.rel_ang = ang
-            line_list.append(ns)
-        i = 0
-        while i < len(line_list) - 1:
-            ns1 = line_list[i]
-            ns2 = line_list[i + 1]
-            x1 = ns1.rel_dist * np.cos(np.radians(ns1.rel_ang))
-            y1 = ns1.rel_dist * np.sin(np.radians(ns1.rel_ang))
-            x2 = ns2.rel_dist * np.cos(np.radians(ns2.rel_ang))
-            y2 = ns2.rel_dist * np.sin(np.radians(ns2.rel_ang))
-            x1 += SENSOR_DIAGONAL
-            y1 += SENSOR_DIAGONAL
-            x2 += SENSOR_DIAGONAL
-            y2 += SENSOR_DIAGONAL
-            draw.line((x1, y1, x2, y2), fill=(255, 255, 0), width = 1)
-            i += 1
+            line_list = []
+            for di in dec_list:
+                if di > 90 or di < 0:
+                    continue
+                ns = Star("", "%u 0 0 %u 0 0" % (ri, di), 0)
+                dist, ang = ns.calc_visual_vector(star)
+                ns.rel_dist = dist
+                ns.rel_ang = ang
+                line_list.append(ns)
+            i = 0
+            while i < len(line_list) - 1:
+                ns1 = line_list[i]
+                ns2 = line_list[i + 1]
+                x1 = ns1.rel_dist * np.cos(np.radians(ns1.rel_ang))
+                y1 = ns1.rel_dist * np.sin(np.radians(ns1.rel_ang))
+                x2 = ns2.rel_dist * np.cos(np.radians(ns2.rel_ang))
+                y2 = ns2.rel_dist * np.sin(np.radians(ns2.rel_ang))
+                x1 += SENSOR_DIAGONAL
+                y1 += SENSOR_DIAGONAL
+                x2 += SENSOR_DIAGONAL
+                y2 += SENSOR_DIAGONAL
+                draw.line((x1, y1, x2, y2), fill=(255, 255, 0), width = 2)
+                i += 1
+        for di in dec_list:
+            if di > 90 or di < 0:
+                continue
+            line_list = []
+            for ri in ra_list:
+                if ri < 0 or ri > 24:
+                    continue
+                ns = Star("", "%u 0 0 %u 0 0" % (ri, di), 0)
+                dist, ang = ns.calc_visual_vector(star)
+                ns.rel_dist = dist
+                ns.rel_ang = ang
+                line_list.append(ns)
+            i = 0
+            while i < len(line_list) - 1:
+                ns1 = line_list[i]
+                ns2 = line_list[i + 1]
+                x1 = ns1.rel_dist * np.cos(np.radians(ns1.rel_ang))
+                y1 = ns1.rel_dist * np.sin(np.radians(ns1.rel_ang))
+                x2 = ns2.rel_dist * np.cos(np.radians(ns2.rel_ang))
+                y2 = ns2.rel_dist * np.sin(np.radians(ns2.rel_ang))
+                x1 += SENSOR_DIAGONAL
+                y1 += SENSOR_DIAGONAL
+                x2 += SENSOR_DIAGONAL
+                y2 += SENSOR_DIAGONAL
+                draw.line((x1, y1, x2, y2), fill=(255, 255, 0), width = 2)
+                i += 1
 
     im.save(fname)
 
@@ -325,7 +364,7 @@ def main():
 
     print("writing to file")
     fsz = 0
-    file = open("generic_platesolver_database.txt", "w") 
+    file = open("generic_platesolver_database_output.txt", "w") 
     for i in dec_sorted:
         if i.bmag > 6:
             continue

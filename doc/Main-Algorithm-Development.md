@@ -62,6 +62,8 @@ Here's the visualization of what my database parser sees:
 
 The Stellarium software allows astrophotographers to input their camera specifications and show a preview of what the camera would see. You can also tell it to change between different projection methods. It showed me that my projection method is valid and my assumption of negligible distortion is also valid.
 
+Azimuthal equidistant projection only works for looking at the North Celestial Pole with a very narrow field-of-view. If we are looking at other places in the sky with a low declination, or with a wide angle lens, the distortion would start to become problematic.
+
 ![](img/stellarium_predicted_view.png)
 
 Neither the parser nor Stellarium would be able to generate a true preview of what the camera sensor sees. The pixel distances between each star is calibrated using pictures I actually took with the camera. Using Polaris as the reference point, the same Python script calculates the vector from Polaris to each star. The table is sorted from closest to farthest. The first number is the distance (vector magnitude) in pixel units, the second number is the angle of the vector.
