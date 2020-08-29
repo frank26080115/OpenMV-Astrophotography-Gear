@@ -81,3 +81,18 @@ I tried using MicroPython to load the database and immediately ran out of memory
 This also meant the database had to be in ASCII, as JavaScript cannot load any binary files. I fit a database of about 2700 stars, 500 identifiable, into a single string in JavaScript. This used about 300kb more data and added more than a second of page loading time. If I exceed 5 seconds, a mobile browser could timeout.
 
 You may have noticed some of my screenshots don't have perfectly straight lines where they should be. I have tried to use arbitrary precision number libraries to see if the calculations end up different, they did not. I also tried to implement trigonometry functions with Taylor series, all that did was slow down the script enough that I couldn't finish running it overnight.
+
+How Other People Do This
+========================
+
+The best plate solving tool right now is probably [nova.astrometry.net](https://nova.astrometry.net/), which is so good that most open-source plate solvers are nothing more than an image uploader to their web server. It is capable of plate solving an entire image, multiple stars on it, without knowing the image scale or distortion.
+
+As far as I understand, it's using signatures that are made of triangles. Basically, triangles all have three distinct angles, by using angles and not directly using distances, the signature matching is quick and also ignores image scale. It also uses kd-trees for quick searching.
+
+It's a bit more complicated than just that, it's doing something called **geometric hashing**. I'm guessing it's because hashes are unique and quicker to do matching with.
+
+For more info, look for Dustin Lang's PhD thesis title **Astrometry.net: Automatic recognition and calibration of astronomical images**. [Here's a copy from University of Toronto's library](https://tspace.library.utoronto.ca/bitstream/1807/19281/3/Lang_Dustin_A_200911_PhD_thesis.pdf), Dustin Lang also hosts his thesis on [his own GitHub](https://github.com/dstndstn/thesis), but it's written in TeX.
+
+I have looked around for an open source plate solver in Java, so that it might work on Android, but found nothing useful.
+
+I've found somebody else who has coded a astrophotograph stacker in C++ and he talks about how he builds constellations out of these triangles, and kd-trees, in order to align multiple images for stacking: [https://benedikt-bitterli.me/astro/](https://benedikt-bitterli.me/astro/)
