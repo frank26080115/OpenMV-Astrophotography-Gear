@@ -311,17 +311,9 @@ More Plate Solving
 
 I wanted another feature: identify other stars that are not Polaris. This would help people if they get "lost". If people can identify what they are pointed at, they can use additional smartphone apps to help navigate towards Polaris.
 
-This means a much bigger star database. I generated some data tables and immediately ran out of memory on the MicroPython due to the overwhelming amount of data required. So I decided to put this feature into the JavaScript instead, it would be more responsive, and a progress bar would not require additional HTTP requests.
+This was a big endeavour on its own. [Read about it here](doc/Extra-Plate-Solving-Algorithm.md).
 
-This also meant the database had to be in ASCII, as JavaScript cannot load any binary files. I fit a database of about 2700 stars, 500 identifiable, into a single string in JavaScript. This used about 200kb more data and added more than a second of page loading time. If I exceed 5 seconds, a mobile browser could timeout.
-
-The stars in the database are only the ones within 45° of Polaris, with a sufficient brightness. I expect the user to at least know roughly where North is and also capable of turning the latitude knob correctly before even turning on this camera.
-
-The match algorithm is similar to the one used to identify Polaris, but instead of establishing a reference angle using the first neighboring star, it simply checks all 360 possible angles. This is because I can no-longer assume the brightest star is the target star, and the matching tolerance was set a bit looser. Possible pattern matches are scored, and the patterns with the highest score is shown to the user at the end as a sorted list.
-
-For a very dense image, getting a false-positive pattern match is very likely. Later I added the ability to penalize the score if a bright star is somewhere in the pattern's area but isn't expected. This lowered the probability of a false-positive result.
-
-The entire routine will iterate through all 500 stars in the database so it's quite slow. So I made it only operate on one star that the user is pointed at, instead of 500 x all of the stars within the view.
+[![](doc/img/click_bate_2.png)](doc/Extra-Plate-Solving-Algorithm.md)
 
 Hot Pixels
 ==========
