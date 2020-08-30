@@ -74,8 +74,13 @@ function platesolver_prime()
     $( "#btn_platesolve" ).button( "option", "disabled", true );
     $( "#btn_platesolvehalt" ).button( "option", "disabled", false );
 
-    platesolve_primed = true;
-    document.getElementById("div_platesolvesolution").innerHTML = "Click on a star!";
+    if (platesolve_start_x <= 0 || platesolve_start_y <= 0) {
+        platesolve_primed = true;
+        document.getElementById("div_platesolvesolution").innerHTML = "Click on a star!";
+    }
+    else {
+        platesolver_start();
+    }
 }
 
 function platesolver_start()
@@ -148,6 +153,7 @@ function platesolve_tick()
     var max_score = 0;
     var max_score_list = [];
     var min_error = -1;
+    var best_penalty = 0;
     var rot;
     for (rot = 0; rot < 360; rot += 1)
     {
@@ -177,7 +183,7 @@ function platesolve_tick()
                 }
             }
 
-            if (minerr < 100)
+            if (minerr < (datah / 20))
             {
                 score += 1;
                 err_sum += minerr;
@@ -190,8 +196,9 @@ function platesolve_tick()
                 score_list.push(platesolve_statemachine.far_stars[minidx]);
             }
         }
-        err_sum /= score;
-        if (score >= max_score && score >= platesolve_scorereq && (min_error < 0 || err_sum < min_error))
+        var avg_err = err_sum / score;
+        var penalty = 0;
+        if (score >= max_score && score >= platesolve_scorereq && (min_error < 0 || avg_err < min_error))
         {
             platesolve_statemachine.far_stars.forEach(function(ele,idx) {
                 var matched = false;
@@ -222,7 +229,7 @@ function platesolve_tick()
                             // this becomes a penalty against the score
                             if (hot_pix == false)
                             {
-                                score -= 0.5;
+                                penalty += 1;
                             }
                         }
                     }
@@ -231,13 +238,14 @@ function platesolve_tick()
 
             if (score >= max_score) {
                 max_score = score;
-                min_error = err_sum;
+                min_error = avg_err;
+                best_penalty = penalty;
             }
         }
     }
 
-    if (max_score >= platesolve_scorereq && min_error < 100 && min_error > 0) {
-        platesolve_statemachine.solutions.push({name: possibility.name, score: max_score, avg_err: min_error});
+    if ((max_score - (best_penalty / 2)) >= platesolve_scorereq && min_error < 100 && min_error > 0) {
+        platesolve_statemachine.solutions.push({name: possibility.name, score: max_score, avg_err: min_error, penalty: best_penalty});
         document.getElementById("div_platesolvesolution").innerHTML += "[" + possibility.name + ": " + max_score + "]";
     }
 
@@ -269,25 +277,69 @@ function platesolve_finish()
     {
         //platesolve_statemachine.solutions.sort(function(a, b) { return b.score - a.score; });
         platesolve_statemachine.solutions.sort(function(a, b) { return a.avg_err - b.avg_err; });
+        var stats = { best_score: 0, best_err: dataw * 2, best_penalty: 0, avg_score: 0, avg_err: 0, avg_penalty: 0, worst_score: 9999, worst_err: 0, worst_penalty: 0, cnt: 0, };
+        platesolve_statemachine.solutions.forEach(function(ele, idx) {
+            var score = ele.score - (ele.penalty / 2.0);
+            if (score > stats.best_score) {
+                stats.best_score = score;
+            }
+            if (ele < stats.worst_score) {
+                stats.worst_score = score;
+            }
+            stats.avg_score += score;
+            if (ele.avg_err < stats.best_err) {
+                stats.best_err = ele.avg_err;
+            }
+            if (ele.avg_err > stats.worst_err) {
+                stats.worst_err = ele.avg_err;
+            }
+            stats.avg_err += ele.avg_err;
+            if (ele.penalty < stats.best_penalty) {
+                stats.best_penalty = ele.penalty;
+            }
+            if (ele.penalty > stats.worst_penalty) {
+                stats.worst_penalty = ele.penalty;
+            }
+            stats.avg_penalty += ele.penalty;
+            stats.cnt += 1;
+        });
+        stats.avg_score /= stats.cnt;
+        stats.avg_err /= stats.cnt;
+        stats.avg_penalty /= stats.cnt;
 
-        var resstr = "TOP POSSIBILITIES ranked:<br /><ol>";
-        var minscore = platesolve_statemachine.solutions[0].score;
-        var minscore = platesolve_statemachine.solutions[0].avg_err;
-        var inccnt = 0;
-        if (platesolve_statemachine.solutions.length >= 10) {
-            minscore = ((minscore - platesolve_scorereq) / 4) + platesolve_scorereq;
+        var score_req = ((stats.best_score - platesolve_scorereq) / 4) + platesolve_scorereq;
+        var err_req = ((stats.avg_err - stats.best_err) / 4) + stats.best_err;
+        var penalty_req = stats.worst_penalty / 4;
+        var filtered_solutions = [];
+        platesolve_statemachine.solutions.forEach(function(ele, idx) {
+            if (ele.score >= score_req && ele.avg_err <= err_req && ele.penalty <= penalty_req) {
+                filtered_solutions.push(ele);
+            }
+        });
+
+        if (filtered_solutions.length <= 0) {
+            div.innerHTML = "No solution";
         }
         else {
-            minscore = 0;
-        }
-        platesolve_statemachine.solutions.forEach(function(ele, idx) {
-            if (inccnt < 5 || ele.score >= minscore) {
-                resstr += "\r\n<li>[" + ele.score + " ; " + math_roundPlaces(ele.avg_err, 1) + " ]: " + ele.name + "</li>";
+            var resstr = "TOP POSSIBILITIES ranked:<br /><table class=\"tbl_platesolve\"><tr><th>Name</th><th>Matches</th><th>Avg. Err.</th><th>Penalties</th></tr>";
+            var inccnt = 0;
+            var usedgrn = false;
+            filtered_solutions.forEach(function(ele, idx) {
+                var grnstr = "";
+                if (((ele.score - (ele.penalty / 2.0)) >= (stats.best_score - 1) || filtered_solutions.length <= 1) && ele.avg_err <= stats.best_err && ele.penalty <= 1) {
+                    grnstr = " class=\"platesolve_green\"";
+                    usedgrn = true;
+                }
+                resstr += "\r\n<tr" + grnstr + "><td>" + ele.name + "</td><td>" + math_roundPlaces(ele.score, 1) + "</td><td>" + math_roundPlaces(ele.avg_err, 1) + "</td><td>" + math_roundPlaces(ele.penalty, 1) + "</td></tr>\r\n";
+                inccnt += 1;
+            });
+            resstr += "\r\n</table>\r\n";
+            if (usedgrn == false && filtered_solutions.length <= 5) {
+                resstr += "<br />average error of all " + stats.cnt + " possibilities: " + math_roundPlaces(stats.avg_err, 1) + "\r\n";
+                resstr += "<br />usually a high-confidence result will have 6 or more matches with no penalties, and an average error below 20\r\n";
             }
-            inccnt += 1;
-        });
-        resstr += "\r\n</ol>\r\n";
-        div.innerHTML = resstr;
+            div.innerHTML = resstr;
+        }
     }
 }
 
