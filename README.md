@@ -328,7 +328,7 @@ Fast Mode
 Fast mode, or high-framerate mode, I added because you don't want to wait 1.5 seconds when you make a physical adjustment to the mount. But with a shorter shutter time, the camera wouldn't be able to see enough stars to identify Polaris. So when the user switches to fast mode, the firmware remembers the previous solution, then it simply assumes the brightest star in view is still Polaris, applying the previously calculated offset from the true North Celestial Pole to the brightest star.
 
 3D Printed Base Plate
-===================
+=====================
 
 To be able to attach the OpenMV to an equatorial mount or tracker, I designed a 3D printed plate that holds it.
 
