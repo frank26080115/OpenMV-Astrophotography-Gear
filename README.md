@@ -184,13 +184,13 @@ Mathematically, these coordinates are very easy to work with. Remember how Polar
 
 If look through a manual polar-scope, notice how the circle is marked by 12 hours (it's absolutely stupid that they used 12 hours instead of 24)
 
-![](doc/img/polarscope_reticle_zoomed.png)
+![](doc/img/polarscope_reticle_zoomed.jpg)
 
 You convert your vector angle into those hours, and place Polaris on the circle where the corresponding tick is.
 
 Notice that there are three circles, the diameters of those three are different. You pick which circle to use according to the current year.
 
-![](doc/img/polarscope_reticle_yearmarkers.png)
+![](doc/img/polarscope_reticle_yearmarkers.jpg)
 
 This is how to compensate for the wobble of the Earth's rotation axis.
 
