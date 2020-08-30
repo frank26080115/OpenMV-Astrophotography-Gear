@@ -116,6 +116,8 @@ I researched into these cameras. There are two popular ones on the market right 
 
 I studied them, watched some videos about how they are used. The user experience for the PoleMaster is just embarrassing, it requires the user to select the stars around Polaris manually. The iPolar at least uses some plate-solving (algorithm to identify stars) to automate that process. My biggest gripe with both of these cameras is that they require you to haul around a laptop to run the software.
 
+![](doc/img/polemaster_bad.png)
+
 At this point, I decided that they are over-priced for a glorified USB webcam with a CCTV lens, and I can make a better device myself.
 
 The journey begins! The birth of a DIY polar alignment digital camera.
@@ -123,7 +125,8 @@ The journey begins! The birth of a DIY polar alignment digital camera.
 So I put on my product designer hat. My minimum-viable-product needs to:
 
  * identify Polaris
- * calculate where the North Celestial Pole is using the position of Polaris, and other data
+ * calculate where the North Celestial Pole is
+   * using the position of Polaris, the surrounding stars, and other data
  * tell the user how to adjust the mount to achieve polar-alignment
 
 How do I start?
