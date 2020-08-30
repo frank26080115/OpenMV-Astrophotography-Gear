@@ -42,9 +42,9 @@ function platesolver_init()	{
         platesolve_primed = false;
         platesolve_start_x = -1;
         platesolve_start_y = -1;
-        $( "#btn_platesolvehalt" ).button( "option", "disabled", true );
+        //$( "#btn_platesolvehalt" ).button( "option", "disabled", true );
     });
-    $( "#btn_platesolvehalt" ).button( "option", "disabled", true );
+    //$( "#btn_platesolvehalt" ).button( "option", "disabled", true );
 
     console.log("platesolver done loading " + star_database_cnt + " entries");
 }
@@ -72,7 +72,7 @@ function platesolver_prime()
     }
 
     $( "#btn_platesolve" ).button( "option", "disabled", true );
-    $( "#btn_platesolvehalt" ).button( "option", "disabled", false );
+    //$( "#btn_platesolvehalt" ).button( "option", "disabled", false );
 
     if (platesolve_start_x <= 0 || platesolve_start_y <= 0) {
         platesolve_primed = true;
@@ -267,7 +267,7 @@ function platesolve_finish()
     platesolve_primed = false;
 
     $( "#btn_platesolve" ).button( "option", "disabled", false );
-    $( "#btn_platesolvehalt" ).button( "option", "disabled", true );
+    //$( "#btn_platesolvehalt" ).button( "option", "disabled", true );
     var div = document.getElementById("div_platesolvesolution");
     if (platesolve_statemachine.solutions.length <= 0)
     {
