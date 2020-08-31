@@ -21,7 +21,7 @@ A normal polar scope is used to polar-align star-tracking camera mounts and equa
 ![](doc/img/platesolving.gif)
 
  * Accounts for current time and location to compensate for atmospheric refraction
- * All open source, [OpenMV](https://openmv.io/) is an open source platform, and my code is in C, MicroPython, JavaScript, plus some HTML and CSS
+ * All open source, [OpenMV](https://openmv.io/) is an open source embedded computer vision platform, and my code is in C, MicroPython, JavaScript, plus some HTML and CSS
 
 ![](doc/img/openmv.png)
 
@@ -29,17 +29,13 @@ A normal polar scope is used to polar-align star-tracking camera mounts and equa
 
 The journey it took to complete this project was quite the special learning experience. This is the story about what happens when a bird photographer with a EE degree gets lost and finds a telescope store.
 
-I hope you all had a chance to see [Comet NEOWISE](https://en.wikipedia.org/wiki/C/2020_F3_(NEOWISE)). It was discovered on March 27, 2020, and in July 2020, it started to become visible a few hours before dawn. It's a happy coincidence that I've spent the pandemic getting into photography, so up a hill I went
-
-![](doc/img/neowise_hill.png)
-
-with a bit of gear to see the comet at 3AM. I got this shot
+I hope you all had a chance to see [Comet NEOWISE](https://en.wikipedia.org/wiki/C/2020_F3_(NEOWISE)). It was discovered on March 27, 2020, and in July 2020, it started to become visible a few hours before dawn. It's a happy coincidence that I've spent the pandemic getting into photography, so up a hill I went with a bit of gear to see the comet at 3AM. I got this shot
 
 ![](doc/img/DSC06746_e1.jpg)
 
 I'm quite proud of it and can claim that it's my first ever astro-photograph.
 
-Nah... that's a lie. I had no idea what I was doing... I spent the entire time experimenting with different camera exposure settings and compositions before deciding that one was the best. I thought I can use long shutter speeds let in more light, to get great low noise pictures in the dark. The only problem is that if the camera moves, then the picture will be blurry. That's a problem easily solved by holding my camera with a tripod.
+Nah... that's a lie. I probably deleted like 50 pictures before that one. I had no idea what I was doing... I spent the entire time experimenting with different camera exposure settings and compositions before deciding that one was the best. I thought I can use long shutter speeds let in more light, to get great low noise pictures in the dark. The only problem is that if the camera moves, then the picture will be blurry. That's a problem easily solved by holding my camera with a tripod.
 
 So I gave it a shot... 5 second shutter speed...
 
