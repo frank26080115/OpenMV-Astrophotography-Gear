@@ -48,18 +48,18 @@ STARS_NEAR_POLARIS = micropython.const([
     ["HD 107113",     1264.471354, -170.201903 ]])
 
 PIXELS_PER_DEGREE = micropython.const(875.677409 / 2.9063) # calculated using "OV Cep"
-DIST_TOL = micropython.const(0.03)    # percentage
-ANG_TOL  = micropython.const(1.0)     # degrees
-SCORE_REQUIRED = micropython.const(6) # must have this many stars that match their estimated coordinates
+DIST_TOL = micropython.const(0.1)     # percentage
+SCORE_REQUIRED = micropython.const(4) # must have this many stars that match their estimated coordinates
 ENABLE_PENALTY = micropython.const(True)
 
 class PoleSolution(object):
-    def __init__(self, star_list, hot_pixels = [], search_limit = 3):
+    def __init__(self, star_list, hot_pixels = [], search_limit = 3, debug = False):
         self.solved = False
         self.star_list = star_list
         self.search_limit = search_limit
         self.hot_pixels = hot_pixels
         self.accel_sec = 0
+        self.debug = debug
 
     def solve(self, polaris_ra_dec = (2.960856, 89.349278)):
 
@@ -94,11 +94,19 @@ class PoleSolution(object):
             i.rot_angj_sum = 0
             i.rot_dist_sum = 0
             i.pix_calibration = []
+            ang_tol = 4
 
             for j in self.star_list:
                 j.set_ref_star(i) # this is required for all entries in the list, so that sort_dist can work
                 # set_ref_star also computes the vector to the ref star and caches the result
             dist_sorted = blobstar.sort_dist(self.star_list) # sorted closest-to-Polaris first
+
+            if self.debug:
+                print("center star (%.1f , %.1f)" % (i.cx, i.cy))
+                dbgi = 0
+                for dbg in dist_sorted:
+                    print("[%u]: (%.1f , %.1f) -> (%.1f , %.1f)" % (dbgi, dbg.cx, dbg.cy, dbg.ref_star_dist, dbg.ref_star_angle))
+                    dbgi += 1
 
             rot_ang = None # without a known reference angle, use the first angle we encounter to establish a reference angle
             # rot_ang is set after the match is made
@@ -125,14 +133,29 @@ class PoleSolution(object):
                     k = dist_sorted[idx_blobs]
                     match = False
                     if dist_match(k.ref_star_dist, STARS_NEAR_POLARIS[idx_tbl][1]):
+
+                        if self.debug:
+                            print("dist matched [%s , %u] %.1f %.1f %.1f" % (STARS_NEAR_POLARIS[idx_tbl][0], idx_blobs, STARS_NEAR_POLARIS[idx_tbl][1], k.ref_star_dist, abs(k.ref_star_dist - STARS_NEAR_POLARIS[idx_tbl][1])))
+
                         if rot_ang is None:
                             # without a known reference angle, use the first angle we encounter to establish a reference angle
                             # rot_ang is set after the match is made
                             match = True
+                            if self.debug:
+                                print("first angle match [%s , %u] %.1f %.1f %.1f" % (STARS_NEAR_POLARIS[idx_tbl][0], idx_blobs, STARS_NEAR_POLARIS[idx_tbl][2], k.ref_star_angle, angle_diff(k.ref_star_angle, STARS_NEAR_POLARIS[idx_tbl][2])))
                         else:
-                            adj_ang = ang_normalize(STARS_NEAR_POLARIS[idx_tbl][2] - rot_ang)
-                            if angle_match(k.ref_star_angle, adj_ang):
+                            adj_ang = ang_normalize(STARS_NEAR_POLARIS[idx_tbl][2] + rot_ang)
+                            if angle_match(k.ref_star_angle, adj_ang, tol = ang_tol):
                                 match = True
+                                if ang_tol > 1:
+                                    ang_tol -= 1
+                                if self.debug:
+                                    print("angle matched ", end="")
+                            else:
+                                if self.debug:
+                                    print("angle match failed ", end="")
+                            if self.debug:
+                                print("[%s , %u] %.1f %.1f %.1f %.1f %.1f" % (STARS_NEAR_POLARIS[idx_tbl][0], idx_blobs, STARS_NEAR_POLARIS[idx_tbl][2], k.ref_star_angle, angle_diff(k.ref_star_angle, adj_ang), rot_ang, adj_ang))
                     if match:
                         # each match is a further star, which means more precise angle
                         # compute (and update) the weighted average of the angle offset
@@ -158,6 +181,10 @@ class PoleSolution(object):
 
                         #i.score_list.append(STARS_NEAR_POLARIS[idx_tbl][0]) # save the name to the list of matches (score)
                         i.score_list.append(k)
+
+                        if self.debug:
+                            print("score %u , new rotation %.1f" % (len(i.score_list), rot_ang))
+
                     idx_blobs += 1
                 idx_tbl += 1
 
@@ -176,7 +203,7 @@ class PoleSolution(object):
                         idx_tbl = 0
                         len_tbl = len(STARS_NEAR_POLARIS)
                         while idx_tbl < len_tbl:
-                            if dist_match(k.ref_star_dist, STARS_NEAR_POLARIS[idx_tbl][1]) and angle_match(k.ref_star_angle, ang_normalize(STARS_NEAR_POLARIS[idx_tbl][2] - rot_ang)):
+                            if dist_match(k.ref_star_dist, STARS_NEAR_POLARIS[idx_tbl][1]) and angle_match(k.ref_star_angle, ang_normalize(STARS_NEAR_POLARIS[idx_tbl][2] + rot_ang)):
                                 in_database = True
                                 break
                             idx_tbl += 1
@@ -191,6 +218,8 @@ class PoleSolution(object):
                                     break
                             if is_hot == False:
                                 i.penalty += 1
+                                if self.debug:
+                                    print("penalty (%.1f , %.1f)" % (k.cx, k.cy))
                     idx_blobs += 1
                 # calculate score accounting for penalty
                 i.score = len(i.score_list) - i.penalty
@@ -246,7 +275,7 @@ class PoleSolution(object):
         rahr  = self.polaris_ra_dec[0]
         dec   = self.polaris_ra_dec[1]
         radeg = (rahr * 360.0) / 24.0
-        ra_adj = radeg - self.get_rotation()
+        ra_adj = radeg + self.get_rotation()
         rho = (90.0 - dec) * self.pix_per_deg
         try:
             phi = np.radians(ra_adj)
@@ -287,11 +316,13 @@ def dist_match(x, y):
     return abs_err <= err_tol
 
 def angle_diff(x, y):
-    return 180.0 - abs(abs(ang_normalize(x) - ang_normalize(y)) - 180.0)
+    x = ang_normalize(x)
+    y = ang_normalize(y)
+    return ang_normalize(x - y)
 
-def angle_match(x, y):
-    d = angle_diff(x, y)
-    return d <= ANG_TOL
+def angle_match(x, y, tol = 1.0):
+    d = abs(angle_diff(x, y))
+    return d <= tol
 
 def ang_normalize(x):
     while x > 180.0:
@@ -303,36 +334,6 @@ def ang_normalize(x):
 def sort_score_func(x):
     return x.score
 
-"""
-def test():
-    test_input = [
-    [397.18523026, 352.17618942, 3.00000000, 663.99998665 ],
-    [2083.69231224, 353.98778915, 5.33333349, 2782.00006485 ],
-    [2054.12411690, 369.41549778, 2.66666675, 709.99999046 ],
-    [2463.42802048, 439.18943405, 5.00000000, 2702.99983025 ],
-    [2368.38316917, 465.73734283, 4.66666651, 2588.99998665 ],
-    [986.39898300, 603.85775566, 5.33333349, 2826.99985504 ],
-    [1842.11635590, 765.32363892, 3.66666675, 1822.99995422 ],
-    [350.78625679, 845.62540054, 3.00000000, 944.99998093 ],
-    [1314.42451477, 1002.91526318, 2.33333325, 708.99996758 ],
-    [1215.90340137, 1021.48807049, 13.33333373, 31816.99991226 ],
-    [1855.34992218, 1161.86487675, 3.33333325, 1517.00010300 ],
-    [2118.60203743, 1212.23235130, 8.00000000, 9802.00004578 ],
-    [666.57261848, 1701.49030685, 8.00000000, 8348.99997711 ],
-    [1517.31705666, 1784.47270393, 3.00000000, 1722.00002670 ],
-    [825.48303604, 1862.05902100, 2.33333325, 558.99996758 ]]
-    stars = []
-    for i in test_input:
-        stars.append(blobstar.BlobStar(i[0], i[1], i[2], i[3]))
-    sol = PoleSolution(stars)
-    if sol.solve():
-        print("solution found!")
-        print(sol.stars_matched)
-        x, y, r = sol.get_pole_coords()
-        print("%f, %f, %f" % (x, y, r))
-    else:
-        print("no solution")
-
 if __name__ == "__main__":
-    test()
-"""
+    import test_bench
+    test_bench.test()

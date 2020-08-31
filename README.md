@@ -205,6 +205,10 @@ Since we are using computer code, the MicroPython time library uses seconds-sinc
 
 All calculations have been verified up to the year 2040, just to make sure that floating point precision is good enough.
 
+Read more in depth about the calculations on [this separate page](doc/Calculations-for-Polaris.md)
+
+[![](doc/img/click_bate_3.png)](doc/Calculations-for-Polaris.md)
+
 Plate Solving
 =============
 
