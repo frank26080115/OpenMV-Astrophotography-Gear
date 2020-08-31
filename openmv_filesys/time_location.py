@@ -5,6 +5,7 @@ import pyb, uos, utime, math
 import pole_movement
 
 SIDEREAL_DAY_SECONDS = micropython.const(86164.09054)
+USE_FIXED_POINT = micropython.const(False)
 
 class TimeLocationManager(object):
     def __init__(self):
@@ -27,7 +28,8 @@ class TimeLocationManager(object):
         self.set_location(-122.246086, 37.364107)
 
         # at Greenwich (longitude = 0), the solar time that matches sidereal time = 00:00
-        self.sidereal_sync_time = utc_to_epoch(2020, 8, 10, 20, 40, 46)
+        self.sidereal_sync_time = utc_to_epoch(2020, 8, 10, 20, 40, 53)
+        # in Jan 1 2040 at 11:17:05 is another such epoch
 
         self.pole_move = pole_movement.PoleMovement()
 
@@ -82,11 +84,16 @@ class TimeLocationManager(object):
     def get_sidereal_angle(self):
         x = self.get_sec()
         x -= self.sidereal_sync_time
-        while x > SIDEREAL_DAY_SECONDS:
-            x -= SIDEREAL_DAY_SECONDS
-        x *= 360.0
-        x /= SIDEREAL_DAY_SECONDS
-        return x
+
+        if USE_FIXED_POINT:
+            x = [int(round(x)), 0]
+            y = micropython.const([int(86164), int(9054)])
+            div, rem = fixed_point_divide(x, y, 100000)
+        else:
+            rem = math.fmod(x, SIDEREAL_DAY_SECONDS)
+        rem *= 360.0
+        rem /= SIDEREAL_DAY_SECONDS
+        return rem
 
     def get_longitude_angle(self):
         x = self.longitude
@@ -115,7 +122,47 @@ def jdn(y, m, d):
     # http://www.cs.utsa.edu/~cs1063/projects/Spring2011/Project1/jdn-explanation.html
     return d + (((153 * m) + 2) // 5) + (356 * y) + (y // 4) - (y // 100) + (y // 400) - 32045
 
-"""
+def fixed_point_divide(x, y, dec):
+    cnt = 0
+    if x[1] < dec:
+        x[1] += dec
+    while x[0] / y[0] >= 1100:
+        x[0] -= 1000 * y[0]
+        x[1] -= 1000 * y[1]
+        cnt += 1000
+        while x[1] < dec:
+            x[1] += dec
+            x[0] -= 1
+    while x[0] / y[0] >= 110:
+        x[0] -= 100 * y[0]
+        x[1] -= 100 * y[1]
+        cnt += 100
+        while x[1] < dec:
+            x[1] += dec
+            x[0] -= 1
+    while x[0] / y[0] >= 11:
+        x[0] -= 10 * y[0]
+        x[1] -= 10 * y[1]
+        cnt += 10
+        while x[1] < dec:
+            x[1] += dec
+            x[0] -= 1
+    while True:
+        z = [x[0] - y[0], x[1] - y[1]]
+        if z[0] < 0:
+            break
+        if z[0] == 0 and z[1] < dec:
+            break
+        if z[1] < dec:
+            z[0] -= 1
+            z[1] += dec
+        x = z
+        cnt += 1
+    x[1] -= dec
+    r = x[1] / dec
+    r += x[0]
+    return cnt, r
+
 def test():
     mgr = TimeLocationManager()
     print("Start Time From File: " + str(mgr.start_time))
@@ -148,11 +195,12 @@ def test():
         if longitude > 180:
             longitude -= 360
         mgr.set_location(longitude, None)
-        mgr.set_utc_time(2021 + (pyb.rng() % 2), 1 + (pyb.rng() % 12), 1 + (pyb.rng() % 27), pyb.rng() % 24, pyb.rng() % 60, pyb.rng() % 60)
-        print("%d, %s, %0.4f" % (longitude, str(mgr.get_time()), mgr.get_angle()))
-        i += 1
+        mgr.set_utc_time(2021 + (pyb.rng() % 20), 1 + (pyb.rng() % 12), 1 + (pyb.rng() % 27), pyb.rng() % 24, pyb.rng() % 60, pyb.rng() % 60)
+        ang = mgr.get_angle()
+        if ang < 1 or ang > 359:
+            print("%d, %s, %0.4f" % (longitude, str(mgr.get_time()), ang))
+            i += 1
     print("=============")
 
 if __name__ == "__main__":
     test()
-"""

@@ -201,7 +201,9 @@ These are the kind of mathematics that my firmware will need to perform. It's no
 
 (By the way, that reticle isn't actually visible at night, but the scope is supplied with a separate LED flashlight that you can shine into it. More expensive mounts would have this light built-in.)
 
-Since we are using computer code, the MicroPython time library uses seconds-since-epoch, with 00:00 Jan 1 2000 (all the times mentioned are UTC +0) being the epoch. That's still usually a huge number that could hurt precision when floating point numbers are involved. So I came up with a new epoch, closer to the current date, which is 20:40:46 of Aug 10 2020. At this moment, if you looked at Polaris from Greenwich UK (0° longitude), Polaris would be at where the star catalog says it's at without any RA offsets. Using this point as my epoch made calculations much easier and more precise.
+Since we are using computer code, the MicroPython time library uses seconds-since-epoch, with 00:00 Jan 1 2000 (all the times mentioned are UTC +0) being the epoch. That's still usually a huge number that could hurt precision when floating point numbers are involved. So I came up with a new epoch, closer to the current date, which is 20:40:53 of Aug 10 2020. At this moment, if you looked at Polaris from Greenwich UK (0° longitude), Polaris would be at where the star catalog says it's at without any RA offsets. Using this point as my epoch made calculations much easier and more precise.
+
+All calculations have been verified up to the year 2040, just to make sure that floating point precision is good enough.
 
 Plate Solving
 =============

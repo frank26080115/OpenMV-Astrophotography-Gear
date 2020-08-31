@@ -403,14 +403,18 @@ function validateGhost()
 }
 
 function updateTime() {
-    var newEpoch = Date.UTC(2000, 1, 1); 
+    // warning, month is 0-11
+    var epoch2000 = new Date(Date.UTC(2000, 0, 1));
+    var epoch2020 = new Date(Date.UTC(2020, 7, 10, 20, 40, 46));
     date = new Date();
-    var nowEpoch = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), date.getUTCHours(), date.getUTCMinutes(), date.getUTCSeconds());
-    nowEpoch -= newEpoch;
-    nowEpoch = Math.round(nowEpoch / 1000.0);
+    var nowEpoch = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), date.getUTCHours(), date.getUTCMinutes(), date.getUTCSeconds()));
+    var nowEpoch2000 = nowEpoch - epoch2000;
+    var nowEpoch2020 = nowEpoch - epoch2020;
+    nowEpoch2000 = Math.round(nowEpoch2000 / 1000.0);
     document.getElementById("span_utc_time").innerHTML = date.toUTCString();
-    document.getElementById("span_utc_time_epoch").innerHTML = nowEpoch.toString();
-    return nowEpoch;
+    document.getElementById("span_utc_time_epoch").innerHTML = nowEpoch2000.toString();
+    document.getElementById("span_utc_time_epoch2020").innerHTML = Math.round(nowEpoch2020 / 1000.0).toString();
+    return nowEpoch2000;
 }
 
 function errorStatusUpdate() {
@@ -903,7 +907,7 @@ function onLoadAll()
   </div>
   <h3>Time and Location</h3>
   <div>
-    <div><fieldset><legend>Time and Date</legend><div><p>UTC Time: <span id="span_utc_time"></span></p><p>Epoch Seconds: <span id="span_utc_time_epoch"></span></p><p style="display: none;"><button id="btn_time_update">Update</button></p></div></fieldset></div>
+    <div><fieldset><legend>Time and Date</legend><div><p>UTC Time: <span id="span_utc_time"></span></p><p>Epoch Seconds: <span id="span_utc_time_epoch"></span></p><p style="display: none;">Seconds Since 2020-Aug-10, 20:40:53&nbsp= <span id="span_utc_time_epoch2020"></span></p><p style="display: none;"><button id="btn_time_update">Update</button></p></div></fieldset></div>
     <div><fieldset><legend>Location</legend><div><p>type in or paste in coordinates</p><p>latitude, longitude</p><p>comma separated, multiple formats supported (automatically detected)</p><p><input type="text" name="txt_location" id="txt_location" style="width: 100%;" /><button id="btn_location_update">Save</button></p></div></fieldset></div>
     <p>The time and date information is used to calculate the position of Polaris while compensating for the very slow wobble of the Earth's rotation axis. The location information is used to help determine the atmospheric refraction compensation required.</p>
     <div><fieldset><legend>Atmosphere Conditions</legend><div><p>Pressure and temperature does affect the air's index of refraction, by very little amounts. Default values are 101 kPa and 10&deg;C.</p>
