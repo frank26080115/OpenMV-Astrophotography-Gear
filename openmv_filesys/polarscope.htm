@@ -48,6 +48,8 @@ var loadTries = 0;
 
 var refraction = null;
 
+var timeAccel = 0;
+
 function loadSettings(t)
 {
     if (platesolver_init !== undefined) {
@@ -409,6 +411,7 @@ function updateTime() {
     date = new Date();
     var nowEpoch = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), date.getUTCHours(), date.getUTCMinutes(), date.getUTCSeconds()));
     var nowEpoch2000 = nowEpoch - epoch2000;
+    nowEpoch2000 += timeAccel * 1000;
     var nowEpoch2020 = nowEpoch - epoch2020;
     nowEpoch2000 = Math.round(nowEpoch2000 / 1000.0);
     document.getElementById("span_utc_time").innerHTML = date.toUTCString();
@@ -718,6 +721,12 @@ function onLoadAll()
         refreshUi(null);
     });
 
+    $("#btn_time_accelerate" ).button().click(function( event ) {
+        console.log("click btn_time_accelerate");
+        timeAccel += 60 * 60;
+        refreshUi(null);
+    });
+
     $("#btn_location_update" ).button().click(function( event ) {
         console.log("click btn_location_update");
         var x = getLocation();
@@ -907,7 +916,7 @@ function onLoadAll()
   </div>
   <h3>Time and Location</h3>
   <div>
-    <div><fieldset><legend>Time and Date</legend><div><p>UTC Time: <span id="span_utc_time"></span></p><p>Epoch Seconds: <span id="span_utc_time_epoch"></span></p><p style="display: none;">Seconds Since 2020-Aug-10, 20:40:53&nbsp= <span id="span_utc_time_epoch2020"></span></p><p style="display: none;"><button id="btn_time_update">Update</button></p></div></fieldset></div>
+    <div><fieldset><legend>Time and Date</legend><div><p>UTC Time: <span id="span_utc_time"></span></p><p>Epoch Seconds: <span id="span_utc_time_epoch"></span></p><p style="display: none;">Seconds Since 2020-Aug-10, 20:40:53&nbsp;= <span id="span_utc_time_epoch2020"></span></p><p style="display: none;"><button id="btn_time_update">Update</button></p><p style="display: none;"><button id="btn_time_accelerate">Accelerate</button></p></div></fieldset></div>
     <div><fieldset><legend>Location</legend><div><p>type in or paste in coordinates</p><p>latitude, longitude</p><p>comma separated, multiple formats supported (automatically detected)</p><p><input type="text" name="txt_location" id="txt_location" style="width: 100%;" /><button id="btn_location_update">Save</button></p></div></fieldset></div>
     <p>The time and date information is used to calculate the position of Polaris while compensating for the very slow wobble of the Earth's rotation axis. The location information is used to help determine the atmospheric refraction compensation required.</p>
     <div><fieldset><legend>Atmosphere Conditions</legend><div><p>Pressure and temperature does affect the air's index of refraction, by very little amounts. Default values are 101 kPa and 10&deg;C.</p>
