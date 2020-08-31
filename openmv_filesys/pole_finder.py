@@ -59,6 +59,7 @@ class PoleSolution(object):
         self.star_list = star_list
         self.search_limit = search_limit
         self.hot_pixels = hot_pixels
+        self.accel_sec = 0
 
     def solve(self, polaris_ra_dec = (2.960856, 89.349278)):
 
@@ -224,6 +225,7 @@ class PoleSolution(object):
         except:
             t = int(round(time.time()))
         dt = t - self.solu_time
+        dt += self.accel_sec # for simulation only
         rot = float(dt) * 360.0
         rot /= 86164.09054 # sidereal day length
         return self.rotation - rot

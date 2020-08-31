@@ -244,7 +244,7 @@ function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, ghost_results)
         {
             // we need to draw the matched stars even though the stars have already been draw
             // this will prevent hot pixels from hiding an important star
-            if (hasjpg == false)// && hotpixels.length > 0)
+            if (hasjpg == false && obj["highspeed"] == false)// && hotpixels.length > 0)
             {
                 var solstars = obj["solution"]["matches"];
                 solstars.forEach(function(ele, idx) {

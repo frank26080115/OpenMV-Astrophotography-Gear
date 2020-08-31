@@ -214,6 +214,10 @@ function startStatusUpdate() {
     }
     qstr += "zoom=" + get_zoom().toString() + "&";
 
+    if (timeAccel != 0) {
+        qstr += "accel_sec=" + timeAccel.toString() + "&";
+    }
+
     qstr += "time=" + updateTime();
 
     $.ajax({

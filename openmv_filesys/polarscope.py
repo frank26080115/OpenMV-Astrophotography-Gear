@@ -56,7 +56,7 @@ class PolarScope(object):
         self.load_settings()
         self.time_mgr.readiness = False
 
-        self.portal = captive_portal.CaptivePortal()
+        self.portal = captive_portal.CaptivePortal(debug = self.debug)
 
         self.img = None
         self.img_compressed = None
@@ -71,6 +71,7 @@ class PolarScope(object):
         self.zoom = 1
         self.prevzoom = 1
         self.mem_errs = 0
+        self.accel_sec = 0
         self.solution = None
         #self.solutions = [None, None]
         self.locked_solution = None
@@ -177,7 +178,7 @@ class PolarScope(object):
         json_str = ujson.dumps(state)
         client_stream.write(captive_portal.default_reply_header(content_type = "application/json", content_length = len(json_str)) + json_str)
         client_stream.close()
-        red_led.on()
+        #red_led.on()
 
     def handle_getsettings(self, client_stream, req, headers, content):
         if self.debug:
@@ -251,6 +252,8 @@ class PolarScope(object):
                         self.compress_img()
                 elif i == "hotpixels":
                     self.hot_pixels = star_finder.decode_hotpixels(v)
+                elif i == "accel_sec":
+                    self.accel_sec = v
                 elif i == "save":
                     save = (v == True)
                     need_save = True
@@ -382,6 +385,7 @@ class PolarScope(object):
             self.solution = pole_finder.PoleSolution(self.stars, hot_pixels = self.hot_pixels)
             if self.solution.solve(self.time_mgr.get_polaris()):
                 self.solu_dur_ls = pyb.elapsed_millis(self.t) # debug solution speed
+                self.solution.accel_sec = self.accel_sec
                 accept = True
                 """
                 if self.solutions[0] is not None:
@@ -415,7 +419,7 @@ class PolarScope(object):
             return False
 
     def solve_fast(self):
-        if self.expo_code == star_finder.EXPO_JUST_RIGHT and len(self.stars) > 0 and self.locked_solution is not None and self.solution is not None and destroy == False:
+        if self.expo_code == star_finder.EXPO_JUST_RIGHT and len(self.stars) > 0 and self.locked_solution is not None and self.solution is not None:
             if self.solution.solved != False:
                 # find the brightest star and assume it's Polaris
                 brite_sorted = blobstar.sort_brightness(self.stars)
@@ -426,6 +430,7 @@ class PolarScope(object):
                 dy = bright_star.cy - self.locked_solution[1]
 
                 # update state for next frame comparison
+                self.solution.accel_sec = self.accel_sec
                 self.locked_solution[0] += dx
                 self.locked_solution[1] += dy
                 x, y, r = self.solution.get_pole_coords_for(bright_star)
@@ -492,7 +497,7 @@ class PolarScope(object):
                     if self.packjpeg:
                         self.compress_img()
                 self.cam.snapshot_start()
-                green_led.toggle()
+                #green_led.toggle()
                 return # this will skip solving
             # take the next frame with settings according to mode
             if self.highspeed == False:
@@ -508,7 +513,7 @@ class PolarScope(object):
             if self.packjpeg == False:
                 self.cam.snapshot_start()
                 self.snap_millis = pyb.millis()
-            green_led.toggle()
+            #green_led.toggle()
             self.solve()
             if self.packjpeg:
                 self.compress_img()
