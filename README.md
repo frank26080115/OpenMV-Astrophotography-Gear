@@ -25,7 +25,9 @@ A normal polar scope is used to polar-align star-tracking camera mounts and equa
 
 ![](doc/img/openmv.png)
 
-**Currently this project is feature-complete and requires outdoor testing.**
+**Currently this project is feature-complete, but requires outdoor testing.**
+
+[click here for the instructions document](Instructions.md)
 
 The journey it took to complete this project was quite the special learning experience. This is the story about what happens when a bird photographer with a EE degree gets lost and finds a telescope store.
 
