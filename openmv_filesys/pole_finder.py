@@ -1,18 +1,10 @@
+import micropython
+micropython.opt_level(2)
 import time
-try:
-    import numpy as np
-    pass
-except:
-    import math
-try:
-    import micropython
-    micropython.opt_level(2)
-    import pyb
-    import blobstar
-    import ujson
-    pass
-except:
-    pass
+import math
+import pyb
+import blobstar
+import ujson
 
 # NOTE: data table and image both respect computer image coordinate system (origin at top left corner)
 # positive angle is clockwise
@@ -69,10 +61,7 @@ class PoleSolution(object):
         self.x = None
         self.y = None
         self.solu_time = 0
-        try:
-            self.solu_time = int(round(pyb.millis() // 1000))
-        except:
-            self.solu_time = int(round(time.time()))
+        self.solu_time = int(round(pyb.millis() // 1000))
 
         if len(self.star_list) < SCORE_REQUIRED:
             return False # impossible to have a solution if not enough stars
@@ -249,10 +238,7 @@ class PoleSolution(object):
         if self.solu_time == 0 or compensate == False:
             return self.rotation
         # compensate for the rotation that occured between solution and now
-        try:
-            t = int(round(pyb.millis() // 1000))
-        except:
-            t = int(round(time.time()))
+        t = int(round(pyb.millis() // 1000))
         dt = t - self.solu_time
         dt += self.accel_sec # for simulation only
         rot = float(dt) * 360.0
@@ -277,14 +263,9 @@ class PoleSolution(object):
         radeg = (rahr * 360.0) / 24.0
         ra_adj = radeg + self.get_rotation()
         rho = (90.0 - dec) * self.pix_per_deg
-        try:
-            phi = np.radians(ra_adj)
-            dx = rho * np.cos(phi)
-            dy = rho * np.sin(phi)
-        except:
-            phi = math.radians(ra_adj)
-            dx = rho * math.cos(phi)
-            dy = rho * math.sin(phi)
+        phi = math.radians(ra_adj)
+        dx = rho * math.cos(phi)
+        dy = rho * math.sin(phi)
         x = star.cx + dx
         y = star.cy + dy # y is flipped!
         return x, y, self.get_rotation()

@@ -1,18 +1,7 @@
-try:
-    import micropython
-    micropython.opt_level(2)
-except:
-    pass
-
-try:
-    import numpy as np
-except:
-    pass
-try:
-    import math
-    import ujson
-except:
-    pass
+import micropython
+micropython.opt_level(2)
+import math
+import ujson
 
 """
 class BlobStarUidManager(object):
@@ -74,26 +63,12 @@ def to_jsonobj(star_list):
 def calc_dist(star1, star2):
     dx = star1.cx - star2.cx
     dy = star1.cy - star2.cy
-    try:
-        return math.sqrt((dx ** 2) + (dy ** 2))
-    except:
-        pass
-    try:
-        return np.sqrt((dx ** 2) + (dy ** 2))
-    except:
-        pass
+    return math.sqrt((dx ** 2) + (dy ** 2))
 
 def calc_angle(star1, star2):
     dx = star2.cx - star1.cx
     dy = star2.cy - star1.cy
-    try:
-        return math.degrees(math.atan2(dy, dx))
-    except:
-        pass
-    try:
-        return np.degrees(np.arctan2(dy, dx))
-    except:
-        pass
+    return math.degrees(math.atan2(dy, dx))
 
 def sort_brightness_func(star):
     if star.brightness > 0:

@@ -1,18 +1,7 @@
-#!/usr/bin/env python
+import micropython
+micropython.opt_level(2)
 
-try:
-    import numpy as np
-    pass
-except:
-    pass
-try:
-    import math
-    import micropython
-    micropython.opt_level(2)
-    pass
-except:
-    pass
-
+import math
 import time_location
 
 PIXELS_PER_DEGREE = micropython.const(875.677409 / 2.9063) # calibrated from camera but doesn't really change the math
@@ -61,23 +50,14 @@ def conv_ra_dec(x):
 
 def vector(ra, dec):
     rho = (90 - dec) * PIXELS_PER_DEGREE
-    try:
-        phi = np.radians(360.0 * ra / 24.0)
-        x = rho * np.cos(phi)
-        y = rho * np.sin(phi)
-    except:
-        phi = math.radians(360.0 * ra / 24.0)
-        x = rho * math.cos(phi)
-        y = rho * math.sin(phi)
+    phi = math.radians(360.0 * ra / 24.0)
+    x = rho * math.cos(phi)
+    y = rho * math.sin(phi)
     return x, y
 
 def star_coord(x, y):
-    try:
-        mag = np.sqrt((x ** 2) + (y ** 2))
-        ang = np.degrees(np.arctan2(y, x))
-    except:
-        mag = math.sqrt((x ** 2) + (y ** 2))
-        ang = math.degrees(math.atan2(y, x))
+    mag = math.sqrt((x ** 2) + (y ** 2))
+    ang = math.degrees(math.atan2(y, x))
     while ang < 0:
         ang += 360.0
     mag /= PIXELS_PER_DEGREE
