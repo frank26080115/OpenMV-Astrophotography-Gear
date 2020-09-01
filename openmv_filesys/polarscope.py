@@ -15,7 +15,7 @@ ir_leds   = pyb.LED(4)
 
 class PolarScope(object):
 
-    def __init__(self, debug = False, simulate_file = None):
+    def __init__(self, debug = False, simulate_file = None, use_leds = True):
         self.highspeed = False
         self.daymode = False
         self.simulate = False
@@ -24,6 +24,8 @@ class PolarScope(object):
         self.time_mgr = time_location.TimeLocationManager()
 
         self.debug = debug
+        self.use_leds = use_leds
+        self.sleeping = False
 
         t = pyb.millis()
         self.diag_cnt    = 0
@@ -79,6 +81,10 @@ class PolarScope(object):
             self.register_http_handlers()
         self.cam.snapshot_start()
         self.snap_millis = pyb.millis()
+
+        self.stream_sock = None
+        self.stream_sock_err = 0
+
 
     def try_parse_setting(self, v):
         try: # micropython doesn't have "is_numeric"
@@ -163,12 +169,13 @@ class PolarScope(object):
 
         # diagnostic info
         state.update({"frm_cnt":         self.frm_cnt})
-        state.update({"diag_cnt":        self.diag_cnt})
-        state.update({"diag_dur_all":    self.dur_all})
-        state.update({"diag_dur_ls":     self.dur_ls})
-        state.update({"diag_dur_hs":     self.dur_hs})
-        state.update({"diag_dur_ls_sol": self.solu_dur_ls})
-        state.update({"diag_dur_hs_sol": self.solu_dur_hs})
+        if self.debug:
+            state.update({"diag_cnt":        self.diag_cnt})
+            state.update({"diag_dur_all":    self.dur_all})
+            state.update({"diag_dur_ls":     self.dur_ls})
+            state.update({"diag_dur_hs":     self.dur_hs})
+            state.update({"diag_dur_ls_sol": self.solu_dur_ls})
+            state.update({"diag_dur_hs_sol": self.solu_dur_hs})
         if self.img_stats is not None:
             state.update({"img_mean":  self.img_stats.mean()})
             state.update({"img_stdev": self.img_stats.stdev()})
@@ -178,11 +185,13 @@ class PolarScope(object):
         json_str = ujson.dumps(state)
         client_stream.write(captive_portal.default_reply_header(content_type = "application/json", content_length = len(json_str)) + json_str)
         client_stream.close()
-        #red_led.on()
+        if self.use_leds:
+            red_led.on()
 
     def handle_getsettings(self, client_stream, req, headers, content):
         if self.debug:
             print("handle_getsettings")
+        self.kill_streamer()
         json_str = ujson.dumps(self.settings)
         client_stream.write(captive_portal.default_reply_header(content_type = "application/json", content_length = len(json_str)) + json_str)
         client_stream.close()
@@ -254,6 +263,21 @@ class PolarScope(object):
                     self.hot_pixels = star_finder.decode_hotpixels(v)
                 elif i == "accel_sec":
                     self.accel_sec = v
+                elif i == "use_debug":
+                    self.debug = v
+                elif i == "use_leds":
+                    self.use_leds = v
+                    if v == False:
+                        red_led.off()
+                        green_led.off()
+                        blue_led.off()
+                elif i == "sleep":
+                    self.sleeping = v
+                    if v == False:
+                        self.use_leds = False
+                        red_led.off()
+                        green_led.off()
+                        blue_led.off()
                 elif i == "save":
                     save = (v == True)
                     need_save = True
@@ -298,8 +322,61 @@ class PolarScope(object):
         micropython.mem_info(True)
         self.reply_ok(client_stream)
 
+    def handle_sleep(self, client_stream, req, headers, content):
+        if self.debug:
+            print("handle_sleep")
+        self.sleeping = True
+        self.use_leds = False
+        red_led.off()
+        green_led.off()
+        blue_led.off()
+        self.reply_ok(client_stream)
+
+    def handle_stream(self, client_stream, req, headers, content):
+        if self.debug:
+            print("handle_stream")
+        self.kill_streamer()
+        self.handle_query(client_stream, req, reply = False, save = False)
+        self.stream_sock = client_stream
+        self.stream_sock.settimeout(5.0)
+        self.stream_sock.send("HTTP/1.1 200 OK\r\n" \
+                    "Server: OpenMV\r\n" \
+                    "Content-Type: multipart/x-mixed-replace;boundary=openmv\r\n" \
+                    "Cache-Control: no-cache\r\n" \
+                    "Pragma: no-cache\r\n\r\n")
+        self.stream_sock_err = 0
+
     def handle_index(self, client_stream, req, headers, content):
+        self.sleeping = False
+        self.kill_streamer()
         captive_portal.gen_page(client_stream, "polarscope.htm", add_files = ["web/jquery-ui-1.12.1-darkness.css", "web/jquery-3.5.1.min.js", "web/jquery-ui-1.12.1.min.js", "web/magellan.js"], add_dir = "web", debug = self.debug)
+
+    def update_stream(self):
+        if self.stream_sock is None:
+            return
+        try:
+            self.portal.update_stream(self.stream_sock, self.img_compressed)
+            self.stream_sock_err = 0
+        except Exception as exc:
+            self.stream_sock_err += 1
+            if self.stream_sock_err > 5:
+                if self.debug:
+                    print("img stream too many errors")
+                exclogger.log_exception(exc)
+                self.kill_streamer()
+            pass
+
+    def kill_streamer(self):
+        if self.stream_sock is not None:
+            try:
+                self.stream_sock.close()
+            except:
+                pass
+            try:
+                del self.stream_sock
+            except:
+                pass
+        self.stream_sock = None
 
     def compress_img(self):
         if self.img is None:
@@ -347,6 +424,7 @@ class PolarScope(object):
         self.portal.install_handler("/getimg",         self.handle_getimg)
         self.portal.install_handler("/getimg.jpg",     self.handle_getimg)
         self.portal.install_handler("/getimg.jpeg",    self.handle_getimg)
+        self.portal.install_handler("/stream",         self.handle_stream)
         self.portal.install_handler("/updatesetting",  self.handle_updatesetting)
         self.portal.install_handler("/highspeed",      self.handle_highspeed)
         self.portal.install_handler("/lowspeed",       self.handle_lowspeed)
@@ -355,6 +433,7 @@ class PolarScope(object):
         self.portal.install_handler("/getsettings",    self.handle_getsettings)
         self.portal.install_handler("/getstate",       self.handle_getstate)
         self.portal.install_handler("/memory",         self.handle_memory)
+        self.portal.install_handler("/sleep",          self.handle_sleep)
 
     def stable_solution(self):
         #if self.solutions[0] is not None and self.solutions[1] is not None and self.solution is not None:
@@ -486,6 +565,11 @@ class PolarScope(object):
             # camera has finished an exposure
             self.img = self.cam.snapshot_finish()
             self.frm_cnt += 1
+            if self.sleeping:
+                red_led.off()
+                green_led.off()
+                blue_led.off()
+                return
 
             # day mode is just auto exposure for testing
             if self.daymode:
@@ -497,7 +581,8 @@ class PolarScope(object):
                     if self.packjpeg:
                         self.compress_img()
                 self.cam.snapshot_start()
-                #green_led.toggle()
+                if self.use_leds:
+                    green_led.toggle()
                 return # this will skip solving
             # take the next frame with settings according to mode
             if self.highspeed == False:
@@ -510,13 +595,17 @@ class PolarScope(object):
                 self.tick_ls = self.t
                 self.dur_ls = -1
                 self.cam.init(gain_db = self.settings["gain_hs"], shutter_us = self.settings["shutter_hs"], force_reset = False)
-            if self.packjpeg == False:
+            if self.packjpeg == False and self.stream_sock is None:
                 self.cam.snapshot_start()
                 self.snap_millis = pyb.millis()
-            #green_led.toggle()
-            self.solve()
-            if self.packjpeg:
+            if self.use_leds:
+                green_led.toggle()
+            if self.stream_sock is None:
+                self.solve()
+            if self.packjpeg or self.stream_sock is not None:
                 self.compress_img()
+                if self.stream_sock is not None:
+                    self.update_stream()
                 self.cam.snapshot_start()
                 self.snap_millis = pyb.millis()
         else:
@@ -533,8 +622,8 @@ class PolarScope(object):
                 self.snap_millis = pyb.millis()
 
 def main():
-    polarscope = PolarScope(debug = True, simulate_file = "simulate.bmp")
-    #polarscope = PolarScope(debug = True)
+    #polarscope = PolarScope(debug = True, simulate_file = "polaris_rot.bmp")
+    polarscope = PolarScope(debug = True)
     while True:
         try:
             polarscope.task()

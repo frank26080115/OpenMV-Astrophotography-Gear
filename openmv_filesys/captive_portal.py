@@ -262,6 +262,13 @@ class CaptivePortal(object):
         except Exception as exc:
             exclogger.log_exception(exc, to_print = False, to_file = False)
 
+    def update_stream(self, client, img):
+        client.send("\r\n--openmv\r\n" \
+             "Content-Type: image/jpeg\r\n"\
+             "Content-Length:%u\r\n\r\n" % img.size())
+        client.send(img)
+        self.last_http_time = pyb.millis()
+
     def task_dns(self):
         if self.winc_mode != network.WINC.MODE_AP:
             return STS_IDLE # no DNS server if we are not a soft-AP
@@ -631,7 +638,9 @@ def split_post_form(headers, content):
     return d
 
 def default_reply_header(content_type = "text/html", content_length = -1):
-    s = "HTTP/1.0 200 OK\r\ncontent-type: %s\r\ncache-control: no-cache\r\n" % content_type
+    s = "HTTP/1.0 200 OK\r\ncontent-type: %s\r\n" % content_type
+    if "x-icon" not in content_type:
+        s += "cache-control: no-cache\r\n"
     if content_length >= 0:
         s += "content_length: %u\r\n" % content_length
     return s + "\r\n"

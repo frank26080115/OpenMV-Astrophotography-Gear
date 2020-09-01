@@ -672,6 +672,11 @@ function onLoadAll()
         refreshUi(null);
     });;
 
+    $("#btn_streamimg" ).button().click(function( event ) {
+        console.log("click btn_streamimg");
+        window.location.href = "/stream";
+    });
+
     makeSlider("slider_gain_slow", 0, 128, settings["gain"], 8, function(obj, event, ui) {
         console.log("slider_gain_slow: " + ui.value);
         settings["gain"] = ui.value;
@@ -893,7 +898,7 @@ function onLoadAll()
     <input type="radio" name="speedmode-1" id="speedmode-2" />
     </form></fieldset></div>
     <p><label for="realmode-1">Real Image</label>
-    <input type="checkbox" name="realmode-1" id="realmode-1" /></p>
+    <input type="checkbox" name="realmode-1" id="realmode-1" /><button id="btn_streamimg">Stream Image Full Screen</button></p>
     <p>The normal mode will identify Polaris and the position of the North Celestial Pole (NCP) by pattern-matching the stars around it. The fast mode will assume the brightest star is Polaris, and track the NCP using previous data, making it easy to make adjustments on your mount.</p>
     <p>The real image mode is used to check exposure and focus. Note that the image is processed at a high resolution (for precise polar alignment) but is transmitted at a low quality (for faster WiFi file transfer speed).</p>
     <p>For the most precise alignment, please use the available zoom level buttons, not finger-pinch.</p>
