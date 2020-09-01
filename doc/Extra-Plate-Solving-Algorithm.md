@@ -96,3 +96,6 @@ For more info, look for Dustin Lang's PhD thesis title **Astrometry.net: Automat
 I have looked around for an open source plate solver in Java, so that it might work on Android, but found nothing useful.
 
 I've found somebody else who has coded a astrophotograph stacker in C++ and he talks about how he builds constellations out of these triangles, and kd-trees, in order to align multiple images for stacking: [https://benedikt-bitterli.me/astro/](https://benedikt-bitterli.me/astro/)
+
+[![](img/benedikt_star_stacking.gif)](https://benedikt-bitterli.me/astro/)
+
