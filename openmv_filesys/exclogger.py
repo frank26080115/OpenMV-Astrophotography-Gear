@@ -2,11 +2,14 @@ import micropython, sys, uos, uio, pyb, gc
 
 def log_exception(exc, time_str = "", to_print = True, to_file = True, fatal = False, reboot = False):
 
+    s = ""
     # use built-in exception formatter
-    with uio.StringIO(1024) as f:
-        sys.print_exception(exc,f)
-        f.seek(0)
-        s = f.read()
+    if exc is not None:
+        if "str" not in str(type(exc)):
+            with uio.StringIO(1024) as f:
+                sys.print_exception(exc,f)
+                f.seek(0)
+                s = f.read()
     gc.collect()
 
     # use sys time if real time is not provided
@@ -15,17 +18,22 @@ def log_exception(exc, time_str = "", to_print = True, to_file = True, fatal = F
     if len(time_str) <= 0:
         time_str = "%u" % pyb.millis()
 
-    headstr = "ERROR[%s]: %s" % (time_str, str(type(exc)))
-
-    # traceback made single line
-    s = s.replace("\n  ", " >> ")
+    if exc is not None:
+        if "str" not in str(type(exc)):
+            headstr = "ERROR[%s]: %s" % (time_str, str(type(exc)))
+            # traceback made single line
+            s = s.replace("\n  ", " >> ")
+        else:
+            headstr = "MESSAGE[%s]: %s" % (time_str, exc)
+    else:
+        headstr = "UNKNOWN-EVENT[%s]" % time_str
 
     if to_print:
         print(headstr)
         print(s)
     if to_file:
         # append to this file
-        fname = "exc_log.txt"
+        fname = "error_log.txt"
         fsize = 0
         retries = 0
         while retries < 2:
@@ -46,15 +54,7 @@ def log_exception(exc, time_str = "", to_print = True, to_file = True, fatal = F
             except:
                 # something wrong happened
                 # backup the old file, start a new one
-                try:
-                    nfn = "exc_log_old.txt"
-                    try:
-                        uos.remove(nfn)
-                    except OSError:
-                        pass
-                    uos.rename(fname, nfn)
-                except OSError:
-                    pass
+                backup_old()
                 continue
     if reboot:
         import machine
@@ -62,6 +62,28 @@ def log_exception(exc, time_str = "", to_print = True, to_file = True, fatal = F
     if fatal or "IDE interrupt" in s:
         raise exc
     return headstr + "\r\n" + s
+
+def backup_old():
+    try:
+        nfn = "error_log_old.txt"
+        try:
+            uos.remove(nfn)
+        except OSError:
+            pass
+        uos.rename("error_log.txt", nfn)
+        return True
+    except OSError:
+        pass
+    return False
+
+def init():
+    try:
+        fname = "error_log.txt"
+        fsize = uos.stat(fname)[6]
+        if fsize > (1024 * 1024):
+            backup_old()
+    except OSError:
+        pass
 
 """
 def testnest():

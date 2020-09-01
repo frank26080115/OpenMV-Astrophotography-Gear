@@ -122,6 +122,9 @@ def jdn(y, m, d):
     # http://www.cs.utsa.edu/~cs1063/projects/Spring2011/Project1/jdn-explanation.html
     return d + (((153 * m) + 2) // 5) + (356 * y) + (y // 4) - (y // 100) + (y // 400) - 32045
 
+def fmt_time(t):
+    return "%04u/%02u/%02u-%02u:%02u:%02u" % (t[0], t[1], t[2], t[3], t[4], t[5])
+
 def fixed_point_divide(x, y, dec):
     cnt = 0
     if x[1] < dec:
@@ -171,7 +174,7 @@ def test():
     ms = pyb.millis()
     while i < 5:
         mgr.tick()
-        print("tick " + str(mgr.get_time()))
+        print("tick " + fmt_time(mgr.get_time()))
         pyb.delay(1001)
         i += 1
     print("=============")
@@ -198,7 +201,7 @@ def test():
         mgr.set_utc_time(2021 + (pyb.rng() % 20), 1 + (pyb.rng() % 12), 1 + (pyb.rng() % 27), pyb.rng() % 24, pyb.rng() % 60, pyb.rng() % 60)
         ang = mgr.get_angle()
         if ang < 1 or ang > 359:
-            print("%d, %s, %0.4f" % (longitude, str(mgr.get_time()), ang))
+            print("%d, %s, %0.4f" % (longitude, fmt_time(mgr.get_time()), ang))
             i += 1
     print("=============")
 

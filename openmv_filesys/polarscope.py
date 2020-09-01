@@ -16,12 +16,14 @@ ir_leds   = pyb.LED(4)
 class PolarScope(object):
 
     def __init__(self, debug = False, simulate_file = None, use_leds = True):
+        exclogger.init()
         self.highspeed = False
         self.daymode = False
         self.simulate = False
         self.cam = astro_sensor.AstroCam(simulate = simulate_file)
         self.cam.init(gain_db = -1, shutter_us = 250000)
         self.time_mgr = time_location.TimeLocationManager()
+        self.has_time = False
 
         self.debug = debug
         self.use_leds = use_leds
@@ -57,6 +59,7 @@ class PolarScope(object):
         self.settings.update({"max_stars":   0})
         self.load_settings()
         self.time_mgr.readiness = False
+        exclogger.log_exception("Time Guessed (%u)" % pyb.millis(), time_str=time_location.fmt_time(self.time_mgr.get_time()))
 
         self.portal = captive_portal.CaptivePortal(debug = self.debug)
 
@@ -84,7 +87,6 @@ class PolarScope(object):
 
         self.stream_sock = None
         self.stream_sock_err = 0
-
 
     def try_parse_setting(self, v):
         try: # micropython doesn't have "is_numeric"
@@ -241,6 +243,9 @@ class PolarScope(object):
                         print("setting \"%s\" value \"%s\"" % (i, str(v)))
                     if i == "time":
                         self.time_mgr.set_utc_time_epoch(v)
+                        if self.has_time == False:
+                            exclogger.log_exception("Time Obtained (%u)" % pyb.millis(), time_str=time_location.fmt_time(self.time_mgr.get_time()))
+                        self.has_time = True
                     elif i == "longitude":
                         self.time_mgr.set_location(v, None)
                         self.settings[i] = self.time_mgr.longitude # normalized
@@ -362,7 +367,7 @@ class PolarScope(object):
             if self.stream_sock_err > 5:
                 if self.debug:
                     print("img stream too many errors")
-                exclogger.log_exception(exc)
+                exclogger.log_exception(exc, to_file=False)
                 self.kill_streamer()
             pass
 
