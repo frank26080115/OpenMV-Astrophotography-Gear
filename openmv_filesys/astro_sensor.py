@@ -15,6 +15,8 @@ class AstroCam(object):
         self.fileseq = 1
         self.img = None
         self.has_error = False
+        self.wait_init = 0
+        self.snap_started = False
 
         self.simulate = False
         if simulate is not None:
@@ -37,7 +39,7 @@ class AstroCam(object):
             self.gain = gain_db
             self.snap_started = False
             return
-        if force_reset or self.gain != gain_db or self.shutter != shutter_us or self.framesize != framesize or self.flip != flip:
+        if force_reset or self.has_error or self.gain != gain_db or self.shutter != shutter_us or self.framesize != framesize or self.flip != flip:
             sensor.reset()
             sensor.set_pixformat(self.pixfmt)
             sensor.set_framesize(framesize)
@@ -50,13 +52,14 @@ class AstroCam(object):
                 sensor.set_auto_exposure(True)
             else:
                 if shutter_us > 500000:
+                    sensor.__write_reg(0x3037, 0x08)   # slow down PLL
                     if shutter_us > 1000000:
+                        pyb.delay(100)
                         sensor.__write_reg(0x3037, 0x18)   # slow down PLL
                         if shutter_us > 1500000:
+                            pyb.delay(100)
                             sensor.__write_reg(0x3036, 80) # slow down PLL
                             # warning: doesn't work well, might crash
-                    else:
-                        sensor.__write_reg(0x3037, 0x08)   # slow down PLL
                     pyb.delay(200)
                 sensor.set_auto_exposure(False, shutter_us)
             self.shutter = shutter_us
@@ -65,17 +68,19 @@ class AstroCam(object):
             else:
                 sensor.set_auto_gain(False, gain_db)
             self.gain = gain_db
-            try:
-                sensor.skip_frames(time = 2000)
-                self.width = sensor.width()
-                self.height = sensor.height()
-                self.has_error = False
-            except RuntimeError as exc:
-                exclogger.log_exception(exc)
-                self.gain = -2
-                self.shutter = -2
-                self.has_error = True
-            self.snap_started = False
+            self.wait_init = 2
+            self.width = sensor.width()
+            self.height = sensor.height()
+
+    def check_init(self):
+        if self.wait_init > 0:
+            if self.snap_started == False:
+                self.snapshot_start()
+            elif self.snapshot_check():
+                self.snapshot_finish()
+                self.wait_init -= 1
+            return False
+        return True
 
     def snapshot(self, filename = None):
         if self.simulate:
@@ -133,9 +138,11 @@ class AstroCam(object):
             return self.img
         try:
             self.img = sensor.snapshot_finish()
+            self.has_error = False
         except RuntimeError as exc:
             exclogger.log_exception(exc)
             self.img = None
+            self.has_error = True
         self.snap_started = False
         return self.img
 
