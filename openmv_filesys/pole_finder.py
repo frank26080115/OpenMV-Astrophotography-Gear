@@ -264,7 +264,7 @@ class PoleSolution(object):
         radeg = (rahr * 360.0) / 24.0
         ra_adj = radeg + self.get_rotation()
         rho = (90.0 - dec) * self.pix_per_deg
-        phi = math.radians(ra_adj)
+        phi = math.radians(ra_adj + 180.0)
         dx = rho * math.cos(phi)
         dy = rho * math.sin(phi)
         x = star.cx + dx
