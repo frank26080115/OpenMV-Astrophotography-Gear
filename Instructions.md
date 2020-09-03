@@ -14,6 +14,7 @@ Required:
    * if you do not use the exact same lens that I used, you may need to re-calibrate all of the plate solving databases
  * [WiFi shield for OpenMV](https://openmv.io/collections/shields/products/wifi-shield-1)
  * 3x M3 nylon screw, 8mm long
+   * use three more M3 screws if you are using a QHY adapter
  * USB power bank and USB micro cable
 
 Optional:
@@ -23,6 +24,13 @@ Optional:
  * you can get a tiny screw to lock in the focus, but I don't know what size
 
 There are other screws that might be required depending on how you plan on mounting the camera
+
+3D Print
+--------
+
+There's a 3D printed mount you can print out to hold the camera. The 3D model is available in the [mech folder of my GitHub repo](../mech/README.md). It requires additional drilling and thread-tapping. Use a M3 thread tap on all the holes. The 1/4"-20 threaded insert being used is [McMaster-Carr 90594A024](https://www.mcmaster.com/90594A024/).
+
+If you do decide to use this 3D printed mount, you should enlarge the holes on the OpenMV with a 1/8" drill bit. Otherwise, the M3 screws will not fit.
 
 First Steps
 -----------
