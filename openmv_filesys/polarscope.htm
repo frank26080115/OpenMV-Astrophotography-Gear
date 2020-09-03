@@ -33,6 +33,7 @@ var updateQueue = [];
 var updatePending = [];
 var lastStatus = null;
 var prev_frm = -1;
+var old_settings_frm = -1;
 var needUiRefresh = false;
 var statusUpdateTimer;
 
@@ -284,10 +285,14 @@ function endStatusUpdate(obj) {
 
     updateTime();
 
+    if (old_settings_frm + 2 < obj["frm_cnt"]) {
+        document.getElementById("camera_hardware_wait").style.display = "none";
+    }
+
     if (prev_frm == obj["frm_cnt"] && needUiRefresh == false) {
         return;
     }
-    prev_frm = obj["diag_frm_cnt"];
+    prev_frm = obj["frm_cnt"];
 
     refreshUi(obj);
 }
@@ -609,6 +614,16 @@ function checkHotPixel(star) {
     return false;
 }
 
+function awaitCamReset() {
+    document.getElementById("camera_hardware_wait").style.display = "block";
+    if (lastStatus == null) {
+        old_settings_frm = -1;
+    }
+    else {
+        old_settings_frm = lastStatus["frm_cnt"];
+    }
+}
+
 function demoGhost()
 {
     var needGood = Math.random() < 0.5;
@@ -712,11 +727,13 @@ function onLoadAll()
         console.log("slider_gain_slow: " + ui.value);
         settings["gain"] = ui.value;
         queueSettingsUpdate("gain");
+        awaitCamReset();
     });
     makeSlider("slider_shutter_slow", 0, 1500, settings["shutter"] / 1000, 100, function(obj, event, ui) {
         console.log("slider_shutter_slow: " + ui.value);
         settings["shutter"] = ui.value * 1000;
         queueSettingsUpdate("shutter");
+        awaitCamReset();
     });
     makeSlider("slider_thresh_slow", 0, 255, settings["thresh"], 1, function(obj, event, ui) {
         console.log("slider_thresh_slow: " + ui.value);
@@ -727,11 +744,13 @@ function onLoadAll()
         console.log("slider_gain_fast: " + ui.value);
         settings["gain_hs"] = ui.value;
         queueSettingsUpdate("gain_hs");
+        awaitCamReset();
     });
     makeSlider("slider_shutter_fast", 0, 1500, settings["shutter_hs"] / 1000, 100, function(obj, event, ui) {
         console.log("slider_shutter_fast: " + ui.value);
         settings["shutter_hs"] = ui.value * 1000;
         queueSettingsUpdate("shutter_hs");
+        awaitCamReset();
     });
     makeSlider("slider_thresh_fast", 0, 255, settings["thresh_hs"], 1, function(obj, event, ui) {
         console.log("slider_thresh_fast: " + ui.value);
@@ -966,6 +985,7 @@ function onLoadAll()
 <div id="connection_lost" class="ui-widget" style="display: none;"><div id="connection_lost_inner" class="ui-state-error ui-corner-all .ui-state-error-text" ><p>&nbsp;&nbsp;Connection LOST! Attempting to re-establish...</p></div></div>
 <div id="memory_error" class="ui-widget" style="display: none;"><div id="memory_error_inner" class="ui-state-error ui-corner-all .ui-state-error-text" ><p>&nbsp;&nbsp;INTERNAL MEMORY ERROR! Please check the camera exposure settings!</p></div></div>
 <div id="camera_hardware_error" class="ui-widget" style="display: none;"><div id="camera_hardware_error_inner" class="ui-state-error ui-corner-all .ui-state-error-text" ><p>&nbsp;&nbsp;CAMERA HARDWARE ERROR! Please check the camera exposure settings.<br />&nbsp;&nbsp;Lower the shutter time.<br />&nbsp;&nbsp;Do a full power-off-power-on reset if the problem is not solved.</p></div></div>
+<div id="camera_hardware_wait" class="ui-widget" style="display: none;"><div id="camera_hardware_wait_inner" class="ui-state-error ui-corner-all .ui-state-error-text" ><p>&nbsp;&nbsp;WAITING for camera to load new exposure settings...</p></div></div>
 
 <div id="accordion">
   <h3>View Mode</h3>

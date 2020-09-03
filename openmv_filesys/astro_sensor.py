@@ -100,6 +100,7 @@ class AstroCam(object):
             return self.img
         except RuntimeError as exc:
             exclogger.log_exception(exc)
+            self.has_error = True
             return None
 
     def snapshot_start(self):
@@ -114,6 +115,7 @@ class AstroCam(object):
             self.snap_started = True
         except RuntimeError as exc:
             exclogger.log_exception(exc)
+            self.has_error = True
 
     def snapshot_check(self):
         if self.snap_started == False:

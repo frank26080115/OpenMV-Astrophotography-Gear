@@ -590,7 +590,11 @@ class PolarScope(object):
         if self.cam.snapshot_check():
             # camera has finished an exposure
             self.img = self.cam.snapshot_finish()
-            self.frm_cnt += 1
+            if self.img is not None:
+                self.frm_cnt += 1
+            else:
+                self.cam_err = True
+
             if self.sleeping:
                 red_led.off()
                 green_led.off()
@@ -660,6 +664,8 @@ class PolarScope(object):
                     self.cam.init(gain_db = self.settings["gain"], shutter_us = self.settings["shutter"], force_reset = True)
                 else:
                     self.cam.init(gain_db = self.settings["gain_hs"], shutter_us = self.settings["shutter_hs"], force_reset = True)
+                while self.cam.check_init() == False:
+                    self.task_network()
                 self.cam.snapshot_start()
                 self.snap_millis = pyb.millis()
 
