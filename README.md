@@ -1,4 +1,4 @@
-# OpemMV-Astrophotography-Gear
+# OpenMV-Astrophotography-Gear
 
 Using OpenMV to assist in astrophotography!
 
