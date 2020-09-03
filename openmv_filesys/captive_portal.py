@@ -12,10 +12,13 @@ STS_SERVED   = micropython.const(1)
 STS_KICKED   = micropython.const(-1)
 
 class CaptivePortal(object):
-    def __init__(self, debug = False):
+    def __init__(self, debug = False, enable_dns = False):
         self.debug = debug
+        self.enable_dns = enable_dns
 
         self.wlan = None
+        self.station_retries = 0
+        self.hw_retries = 0
 
         self.start_wifi()
 
@@ -25,8 +28,9 @@ class CaptivePortal(object):
         self.list_files()
 
         self.last_http_time = -1
+        self.full_reboot_timer = -1
 
-    def start_wifi(self):
+    def start_wifi(self, skip_file = False):
         obj = None
         valid = False
         try:
@@ -38,6 +42,7 @@ class CaptivePortal(object):
         except OSError as exc:
             valid = False
             exclogger.log_exception(exc)
+            exclogger.log_exception("setting file probably not found or unusable")
         except Exception as exc:
             valid = False
             exclogger.log_exception(exc)
@@ -75,9 +80,16 @@ class CaptivePortal(object):
                     self.winc_mode = network.WINC.MODE_AP
         else:
             valid = False
+            print("ERROR: could not load WiFi settings file")
+
+        # if failed to connect to an expected router
+        # start soft-AP
+        if self.station_retries > 8:
+            print("ERROR: too many failed connection attempts, starting soft AP")
+            valid = False
 
         if valid == False:
-            self.ssid = "PolarScope-?"
+            self.ssid = "OpenMV-?"
             self.password = "1234567890"
             self.winc_security = network.WINC.WEP
             self.winc_mode = network.WINC.MODE_AP
@@ -103,11 +115,18 @@ class CaptivePortal(object):
             except Exception as exc:
                 exclogger.log_exception(exc)
 
+        self.start_wifi_hw()
+
+    def start_wifi_hw(self):
         if self.wlan is None:
             try:
                 self.wlan = network.WINC(mode = self.winc_mode)
-            except OSError:
+                self.hw_retries = 0
+            except OSError as exc:
+                exclogger.log_exception(exc)
+                exclogger.log_exception("most likely hardware fault")
                 self.wlan = None
+                self.hw_retries += 1
 
         if self.wlan is None:
             self.wifi_timestamp = pyb.millis()
@@ -137,11 +156,13 @@ class CaptivePortal(object):
                 if self.ip != ip:
                     self.ip = ip
                     print("Connected! IP: " + self.ip)
+                self.station_retries = 0
                 return True
             else:
                 self.ip = "0.0.0.0"
                 if pyb.elapsed_millis(self.wifi_timestamp) > 2000:
                     self.start_wifi()
+                    self.station_retries += 1
                 return False
         else: # AP mode, no need to check connection
             return True
@@ -268,10 +289,15 @@ class CaptivePortal(object):
              "Content-Length:%u\r\n\r\n" % img.size())
         client.send(img)
         self.last_http_time = pyb.millis()
+        self.full_reboot_timer = self.last_http_time
 
     def task_dns(self):
         if self.winc_mode != network.WINC.MODE_AP:
             return STS_IDLE # no DNS server if we are not a soft-AP
+        if self.enable_dns == False:
+            return STS_IDLE
+        if self.wlan is None:
+            return STS_IDLE
         # some code borrowed from https://github.com/amora-labs/micropython-captive-portal/blob/master/captive.py
         if self.udps is None:
             self.start_dns()
@@ -315,6 +341,8 @@ class CaptivePortal(object):
         return STS_IDLE
 
     def task_http(self):
+        if self.wlan is None:
+            return STS_IDLE
         if self.s is None:
             self.start_http()
         if self.s is None:
@@ -336,6 +364,7 @@ class CaptivePortal(object):
             if self.debug:
                 print("http req[%s]: " % str(res[1]), end="")
             self.last_http_time = pyb.millis()
+            self.full_reboot_timer = self.last_http_time
             client_sock = res[0]
             client_addr = res[1]
             client_sock.settimeout(10)
@@ -376,6 +405,7 @@ class CaptivePortal(object):
                 else:
                     self.handle_default(client_stream, req, headers, content)
             self.last_http_time = pyb.millis()
+            self.full_reboot_timer = self.last_http_time
             try:
                 self.s.settimeout(0.3)
                 client_sock.settimeout(0.3)
@@ -397,6 +427,9 @@ class CaptivePortal(object):
         self.task_conn()
         if self.last_http_time > 0 and pyb.elapsed_millis(self.last_http_time) > 10000:
             self.kick()
+            return STS_KICKED
+        if self.last_http_time < 0 and self.full_reboot_timer > 0 and pyb.elapsed_millis(self.full_reboot_timer) > 12000:
+            self.reboot()
             return STS_KICKED
         x = self.task_dns()
         y = self.task_http()
@@ -430,6 +463,16 @@ class CaptivePortal(object):
         #except Exception as exc:
         #    exclogger.log_exception(exc, fatal = True, reboot = False)
         gc.collect()
+
+    def reboot(self):
+        self.kick()
+        try:
+            del self.wlan
+        except:
+            pass
+        self.wlan = None
+        self.start_wifi_hw()
+        self.full_reboot_timer = pyb.millis()
 
 # usocket implementation is missing readline
 def socket_readline(sock):

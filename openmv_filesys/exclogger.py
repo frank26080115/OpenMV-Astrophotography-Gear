@@ -6,10 +6,7 @@ def log_exception(exc, time_str = "", to_print = True, to_file = True, fatal = F
     # use built-in exception formatter
     if exc is not None:
         if "str" not in str(type(exc)):
-            with uio.StringIO(1024) as f:
-                sys.print_exception(exc,f)
-                f.seek(0)
-                s = f.read()
+            s = exc_to_str(exc)
     gc.collect()
 
     # use sys time if real time is not provided
@@ -62,6 +59,12 @@ def log_exception(exc, time_str = "", to_print = True, to_file = True, fatal = F
     if fatal or "IDE interrupt" in s:
         raise exc
     return headstr + "\r\n" + s
+
+def exc_to_str(exc):
+    with uio.StringIO(1024) as f:
+        sys.print_exception(exc, f)
+        f.seek(0)
+        return f.read()
 
 def backup_old():
     try:

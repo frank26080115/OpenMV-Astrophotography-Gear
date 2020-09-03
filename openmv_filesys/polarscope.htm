@@ -25,6 +25,7 @@ body
 
 var dataw = 2592;
 var datah = 1944;
+var def_pix_per_deg = 875.677409 / 2.9063;
 
 var first = true;
 var settings = null;
@@ -168,6 +169,8 @@ function startSendSettings()
     updateQueue = [];
     onSettingErr = function () {
         // setting saving failed
+        document.getElementById("connection_lost").style.display = "block";
+        document.getElementById("showme").style.display          = "block";
         // so queue them back up again
         // only re-send when status update is successful
         updatePending.forEach(function(ele) {
@@ -306,15 +309,29 @@ function refreshUi(obj)
         document.getElementById("memory_error").style.display = "none";
     }
 
+    if (obj["expo_code"] === 7) {
+        document.getElementById("camera_hardware_error").style.display = "block";
+    }
+    else {
+        document.getElementById("camera_hardware_error").style.display = "none";
+    }
+
     var stars = obj["stars"];
     var star_cnt = stars.length;
 
     var stats_str = "num of stars: " + star_cnt.toString() + "&nbsp;&nbsp;&nbsp;&nbsp;";
 
-    stats_str += "image mean: "  + math_roundPlaces(obj["img_mean"], 1).toString() + "/255    \t";
-    stats_str += "image stdev: " + math_roundPlaces(obj["img_stdev"], 1).toString() + "/255    \t";
-    stats_str += "image max: " + Math.round(obj["img_max"]).toString() + "/255    \t";
-    stats_str += "image min: " + Math.round(obj["img_min"]).toString() + "/255    \t";
+    try {
+        stats_str += "image mean: "  + math_roundPlaces(obj["img_mean"], 1).toString() + "/255    \t";
+        stats_str += "image stdev: " + math_roundPlaces(obj["img_stdev"], 1).toString() + "/255    \t";
+        stats_str += "image max: " + Math.round(obj["img_max"]).toString() + "/255    \t";
+        stats_str += "image min: " + Math.round(obj["img_min"]).toString() + "/255    \t";
+        if (obj["solution"]) {
+            stats_str += "solution stars: " + obj["solution"]["matches"].length.toString() + "&nbsp;&nbsp;&nbsp;&nbsp;";
+        }
+    }
+    catch (e) {
+    }
     stats_str += "exposure code: ";
     var exposure_code = obj["expo_code"];
     stats_str += getExposureCode(exposure_code);
@@ -364,6 +381,8 @@ function refreshUi(obj)
     }
 
     $("#btn_calibrate" ).button( "option", "disabled", canCalibrate == false );
+
+    document.getElementById("div_curcent").innerHTML = "X = " + math_roundPlaces(settings["center_x"], 1) + " , Y = " + math_roundPlaces(settings["center_y"], 1);
 
     draw_svg(obj, get_zoom(), needUiRefresh, false, jpgdata, ghost_results);
 
@@ -445,6 +464,9 @@ function getExposureCode(exposure_code) {
     else if (exposure_code == -1) {
         return "too dark";
     }
+    else if (exposure_code == -2) {
+        return "no image";
+    }
     else if (exposure_code == 1) {
         return "too bright";
     }
@@ -462,6 +484,9 @@ function getExposureCode(exposure_code) {
     }
     else if (exposure_code == 6) {
         return "INTERNAL MEMORY ERROR";
+    }
+    else if (exposure_code == 7) {
+        return "CAMERA HARDWARE ERROR";
     }
     return "unknown";
 }
@@ -522,9 +547,9 @@ function queueSettingsUpdate(key) {
 
 function computeRefraction() {
     if ($( "#chkrefraction-1").prop("checked") == false) {
-        document.getElementById("refraction_info").innerHTML = "";
+        //document.getElementById("refraction_info").innerHTML = "";
         refraction = null;
-        return;
+        //return;
     }
     var loc = getLocation();
     if (loc == false) {
@@ -554,6 +579,12 @@ function computeRefraction() {
         if (lastStatus["solution"]) {
             txtinfo += " = " + math_roundPlaces(lastStatus["pix_per_deg"] * refraction[0], 1) + " camera pixels";
         }
+        else {
+            txtinfo += " = " + math_roundPlaces(def_pix_per_deg * refraction[0], 1) + " camera pixels";
+        }
+    }
+    else {
+        txtinfo += " = " + math_roundPlaces(def_pix_per_deg * refraction[0], 1) + " camera pixels";
     }
     document.getElementById("refraction_info").innerHTML = txtinfo;
 }
@@ -787,6 +818,8 @@ function onLoadAll()
                     settings["center_y"] = ghost_results.cent_y;
                     queueSettingsUpdate("center_x");
                     queueSettingsUpdate("center_y");
+                    document.getElementById("txt_override_center_x").setAttribute("value", math_roundPlaces(settings["center_x"], 1));
+                    document.getElementById("txt_override_center_y").setAttribute("value", math_roundPlaces(settings["center_y"], 1));
                     alert("calibration done!");
                 }
                 else
@@ -805,6 +838,7 @@ function onLoadAll()
     });
 
     $("#btn_hotpixels").button().click(function( event ) {
+        console.log("click btn_hotpixels");
         hotpixels = [];
         var pixstr = "";
         var settingsStr = "";
@@ -841,11 +875,65 @@ function onLoadAll()
     });
 
     $("#btn_forgethotpixels").button().click(function( event ) {
+        console.log("click btn_forgethotpixels");
         hotpixels = [];
         var divele = document.getElementById("hotpixel_list");
         divele.innerHTML = "";
         settings["hotpixels"] = "";
         queueSettingsUpdate("hotpixels");
+    });
+
+    document.getElementById("txt_override_center_x").setAttribute("min", math_roundPlaces(dataw / 4, 1));
+    document.getElementById("txt_override_center_x").setAttribute("max", math_roundPlaces(dataw - (dataw / 4), 1));
+    document.getElementById("txt_override_center_x").setAttribute("value", math_roundPlaces(settings["center_x"], 1));
+    document.getElementById("txt_override_center_y").setAttribute("min", math_roundPlaces(datah / 4, 1));
+    document.getElementById("txt_override_center_y").setAttribute("max", math_roundPlaces(datah - (datah / 4), 1));
+    document.getElementById("txt_override_center_y").setAttribute("value", math_roundPlaces(settings["center_y"], 1));
+    $("#btn_override_center").button().click(function( event ) {
+        console.log("click btn_override_center");
+        try {
+            var cx = parseFloat(document.getElementById("txt_override_center_x").value);
+            var cy = parseFloat(document.getElementById("txt_override_center_y").value);
+            if (isNaN(cx) && isNaN(cy)) {
+                alert("Failed to parse center coordinates");
+                return;
+            }
+            else if (isNaN(cx)) {
+                alert("Failed to parse center X coordinate");
+                return;
+            }
+            else if (isNaN(cy)) {
+                alert("Failed to parse center Y coordinate");
+                return;
+            }
+            if ((cx < 0 || cx > dataw) && (cy < 0 || cy > datah)) {
+                alert("Failed: center coordinates out of range");
+                return;
+            }
+            else if (cx < 0 || cx > dataw) {
+                alert("Failed: center X coordinate out of range");
+                return;
+            }
+            else if (cy < 0 || cy > datah) {
+                alert("Failed: center Y coordinate out of range");
+                return;
+            }
+            ghost = null;
+            pre_ghost = null;
+            $("#btn_calibrate" ).button( "option", "disabled", true );
+            document.getElementById("div_caldata").innerHTML = "nothing";
+            refreshUi(null);
+            settings["center_x"] = cx;
+            settings["center_y"] = cy;
+            queueSettingsUpdate("center_x");
+            queueSettingsUpdate("center_y");
+            alert("new center coordinates set!");
+            return;
+        }
+        catch (e) {
+            alert("Failed to set center coordinate override values");
+            return;
+        }
     });
 
     document.getElementById("txt_location").onchange = function() {
@@ -877,6 +965,7 @@ function onLoadAll()
 
 <div id="connection_lost" class="ui-widget" style="display: none;"><div id="connection_lost_inner" class="ui-state-error ui-corner-all .ui-state-error-text" ><p>&nbsp;&nbsp;Connection LOST! Attempting to re-establish...</p></div></div>
 <div id="memory_error" class="ui-widget" style="display: none;"><div id="memory_error_inner" class="ui-state-error ui-corner-all .ui-state-error-text" ><p>&nbsp;&nbsp;INTERNAL MEMORY ERROR! Please check the camera exposure settings!</p></div></div>
+<div id="camera_hardware_error" class="ui-widget" style="display: none;"><div id="camera_hardware_error_inner" class="ui-state-error ui-corner-all .ui-state-error-text" ><p>&nbsp;&nbsp;CAMERA HARDWARE ERROR! Please check the camera exposure settings.<br />&nbsp;&nbsp;Lower the shutter time.<br />&nbsp;&nbsp;Do a full power-off-power-on reset if the problem is not solved.</p></div></div>
 
 <div id="accordion">
   <h3>View Mode</h3>
@@ -913,21 +1002,29 @@ function onLoadAll()
   <h3>Center Calibration</h3>
   <div>
     <p>The center of the camera view may not be perfectly aligned with the center-of-rotation of your star tracker. Two images of Polaris is required to calibrate the center-of-rotation. For the best result, the two images should be rotated about 90&deg; apart.</p>
-    <p>To start, rotate your star tracker's Right-Ascension (RA) to a position towards the west. Register the data in "First Image Data" when you are satisfied. Then, rotate your star tracker's RA about 90&deg; towards the east. Click the "calibrate" button when you are satisfied.</p>
+    <p>To start, rotate your star tracker's Right-Ascension (RA) to a position towards the west. Register the data by clicking the "Register Image Data" button when you are satisfied. Then, rotate your star tracker's RA about 90&deg; towards the east. Click the "calibrate" button when you are satisfied.</p>
     <p>Avoid using your hands to make these movements, use electronic control if possible. Do not move your tripod or adjust your mount during these movements. If the center-of-rotation is too far away from the center-of-view, you may need to adjust the mounting of the camera.</p>
+    <div><fieldset id="fldset_curcent"><legend>Current Center Point</legend>
+        <div id="div_curcent">nothing yet</div>
+    </fieldset></div>
     <div><fieldset id="fldset_curdata"><legend>Current Image Data</legend>
         <div id="div_curdata">nothing yet</div>
     </fieldset></div>
-    <div><fieldset id="fldset_caldata"><legend>First Image Data</legend>
+    <div><fieldset id="fldset_caldata"><legend>Registered Data</legend>
         <div id="div_caldata">nothing yet</div>
     </fieldset></div>
     <div><button id="btn_regimg">Register Image Data</button>&nbsp;&nbsp;<button id="btn_calibrate">Calibrate</button>&nbsp;&nbsp;<button id="btn_clearregimg">Clear Data</button></div>
+    <br />
+    <br />
+    <div><fieldset><legend>Manual Override Center</legend>
+        <div>USE WITH CAUTION! Specify a particular coordinate for the center point<br />X:&nbsp;<input type="number" name="txt_override_center_x" id="txt_override_center_x" style="width: 50%;" min="0" max="4000" step="0.1"/><br />Y:&nbsp;<input type="number" name="txt_override_center_y" id="txt_override_center_y" style="width: 50%;" min="0" max="4000" step="0.1" /><br /><button id="btn_override_center">Override</button></div>
+    </fieldset></div>
   </div>
   <h3>Time and Location</h3>
   <div>
     <div><fieldset><legend>Time and Date</legend><div><p>UTC Time: <span id="span_utc_time"></span></p><p>Epoch Seconds: <span id="span_utc_time_epoch"></span></p><p style="display: none;">Seconds Since 2020-Aug-10, 20:40:53&nbsp;= <span id="span_utc_time_epoch2020"></span></p><p style="display: none;"><button id="btn_time_update">Update</button></p><p style="display: none;"><button id="btn_time_accelerate">Accelerate</button></p></div></fieldset></div>
     <div><fieldset><legend>Location</legend><div><p>type in or paste in coordinates</p><p>latitude, longitude</p><p>comma separated, multiple formats supported (automatically detected)</p><p><input type="text" name="txt_location" id="txt_location" style="width: 100%;" /><button id="btn_location_update">Save</button></p></div></fieldset></div>
-    <p>The time and date information is used to calculate the position of Polaris while compensating for the very slow wobble of the Earth's rotation axis. The location information is used to help determine the atmospheric refraction compensation required.</p>
+    <p>These bits of info are used to calculate the position of Polaris, the camera orientation, and the atmospheric refraction.</p>
     <div><fieldset><legend>Atmosphere Conditions</legend><div><p>Pressure and temperature does affect the air's index of refraction, by very little amounts. Default values are 101 kPa and 10&deg;C.</p>
         <p><fieldset><legend>Pressure: <span id="span_pressure"></span></legend><div id="slider_pressure"></div></fieldset></p>
         <p><fieldset><legend>Temperature: <span id="span_temperature"></span></legend><div id="slider_temperature"></div></fieldset></p>

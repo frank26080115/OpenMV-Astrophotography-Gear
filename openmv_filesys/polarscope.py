@@ -28,6 +28,7 @@ class PolarScope(object):
         self.debug = debug
         self.use_leds = use_leds
         self.sleeping = False
+        self.cam_err = False
 
         t = pyb.millis()
         self.diag_cnt    = 0
@@ -150,8 +151,12 @@ class PolarScope(object):
         state.update({"highspeed": self.highspeed})
         state.update({"packjpeg": self.packjpeg})
         state.update({"daymode": self.daymode})
-        if self.img is not None:
+        if self.img is not None and self.cam_err == False:
             state.update({"expo_code": self.expo_code})
+        elif self.img is None:
+            state.update({"expo_code": star_finder.EXPO_NO_IMG})
+        elif self.cam_err:
+            state.update({"expo_code": star_finder.EXPO_CAMERA_ERR})
         stable_solution = self.stable_solution()
         if stable_solution is not None:
             state.update({"solution": stable_solution.to_jsonobj()})
@@ -178,6 +183,8 @@ class PolarScope(object):
             state.update({"diag_dur_hs":     self.dur_hs})
             state.update({"diag_dur_ls_sol": self.solu_dur_ls})
             state.update({"diag_dur_hs_sol": self.solu_dur_hs})
+            state.update({"diag_mem_alloc":  gc.mem_alloc()})
+            state.update({"diag_mem_free":   gc.mem_free()})
         if self.img_stats is not None:
             state.update({"img_mean":  self.img_stats.mean()})
             state.update({"img_stdev": self.img_stats.stdev()})
@@ -565,11 +572,21 @@ class PolarScope(object):
             ret = self.portal.task()
             if ret == captive_portal.STS_KICKED:
                 red_led.off()
+            if self.portal.hw_retries > 5:
+                print("ERROR: WiFi hardware failure")
+                green_led.off()
+                while True:
+                    red_led.toggle()
+                    pyb.delay(150)
 
         if self.cam.snapshot_check():
             # camera has finished an exposure
-            self.img = self.cam.snapshot_finish()
-            self.frm_cnt += 1
+            try:
+                self.img = self.cam.snapshot_finish()
+                self.frm_cnt += 1
+            except RuntimeError as exc:
+                exclogger.log_exception(exc)
+                self.cam_err = True
             if self.sleeping:
                 red_led.off()
                 green_led.off()
@@ -578,43 +595,53 @@ class PolarScope(object):
 
             # day mode is just auto exposure for testing
             if self.daymode:
-                self.cam.init(gain_db = -1, shutter_us = -1, force_reset = False)
-                self.snap_millis = pyb.millis()
-                if self.img is not None:
-                    self.histogram = self.img.get_histogram()
-                    self.img_stats = self.histogram.get_statistics()
-                    if self.packjpeg:
-                        self.compress_img()
-                self.cam.snapshot_start()
-                if self.use_leds:
-                    green_led.toggle()
+                try:
+                    self.cam.init(gain_db = -1, shutter_us = -1, force_reset = self.cam_err)
+                    self.snap_millis = pyb.millis()
+                    if self.img is not None:
+                        self.histogram = self.img.get_histogram()
+                        self.img_stats = self.histogram.get_statistics()
+                        if self.packjpeg:
+                            self.compress_img()
+                    self.cam.snapshot_start()
+                    if self.use_leds:
+                        green_led.toggle()
+                except RuntimeError as exc:
+                    exclogger.log_exception(exc)
+                    self.cam_err = True
                 return # this will skip solving
             # take the next frame with settings according to mode
-            if self.highspeed == False:
-                self.tick_ls, self.dur_ls = self.diag_tick(self.t, self.tick_ls, self.dur_ls) # debug loop speed
-                self.tick_hs = self.t
-                self.dur_hs = -1
-                self.cam.init(gain_db = self.settings["gain"], shutter_us = self.settings["shutter"], force_reset = False)
-            else:
-                self.tick_hs, self.dur_hs = self.diag_tick(self.t, self.tick_hs, self.dur_hs) # debug loop speed
-                self.tick_ls = self.t
-                self.dur_ls = -1
-                self.cam.init(gain_db = self.settings["gain_hs"], shutter_us = self.settings["shutter_hs"], force_reset = False)
-            if self.packjpeg == False and self.stream_sock is None:
-                self.cam.snapshot_start()
-                self.snap_millis = pyb.millis()
-            if self.use_leds:
-                green_led.toggle()
-            if self.stream_sock is None:
-                self.solve()
-            if self.packjpeg or self.stream_sock is not None:
-                self.compress_img()
-                if self.stream_sock is not None:
-                    self.update_stream()
-                self.cam.snapshot_start()
-                self.snap_millis = pyb.millis()
+            try:
+                if self.highspeed == False:
+                    self.tick_ls, self.dur_ls = self.diag_tick(self.t, self.tick_ls, self.dur_ls) # debug loop speed
+                    self.tick_hs = self.t
+                    self.dur_hs = -1
+                    self.cam.init(gain_db = self.settings["gain"], shutter_us = self.settings["shutter"], force_reset = self.cam_err)
+                else:
+                    self.tick_hs, self.dur_hs = self.diag_tick(self.t, self.tick_hs, self.dur_hs) # debug loop speed
+                    self.tick_ls = self.t
+                    self.dur_ls = -1
+                    self.cam.init(gain_db = self.settings["gain_hs"], shutter_us = self.settings["shutter_hs"], force_reset = self.cam_err)
+                if self.packjpeg == False and self.stream_sock is None:
+                    self.cam.snapshot_start()
+                    self.snap_millis = pyb.millis()
+                if self.use_leds:
+                    green_led.toggle()
+                if self.stream_sock is None:
+                    self.solve()
+                if self.packjpeg or self.stream_sock is not None:
+                    self.compress_img()
+                    if self.stream_sock is not None:
+                        self.update_stream()
+                    self.cam.snapshot_start()
+                    self.snap_millis = pyb.millis()
+                self.cam_err = self.cam.has_error # if we made it here, camera is working
+            except RuntimeError as exc:
+                exclogger.log_exception(exc)
+                self.cam_err = True
         else:
             if pyb.elapsed_millis(self.snap_millis) > 5000:
+                self.cam_err = True
                 if self.debug:
                     print("warning: camera timeout")
                 if self.daymode:
@@ -626,7 +653,7 @@ class PolarScope(object):
                 self.cam.snapshot_start()
                 self.snap_millis = pyb.millis()
 
-def main():
+def main(debug = False):
     #polarscope = PolarScope(debug = True, simulate_file = "polaris_rot.bmp")
     polarscope = PolarScope(debug = True)
     while True:
@@ -641,4 +668,4 @@ def main():
             exclogger.log_exception(exc)
 
 if __name__ == "__main__":
-    main()
+    main(debug = True)

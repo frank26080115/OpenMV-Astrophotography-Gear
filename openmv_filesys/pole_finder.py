@@ -225,6 +225,7 @@ class PoleSolution(object):
         # store the solution states
         self.Polaris = score_sorted[0]
         self.rotation = score_sorted[0].rotation
+        self.rotation = ang_normalize(self.rotation + 180.0) # everything needs to be flipped
         self.stars_matched = score_sorted[0].score_list # for debug purposes
         self.penalty = score_sorted[0].penalty
         dist_calibration = 0

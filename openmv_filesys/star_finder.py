@@ -8,6 +8,7 @@ import gc
 import blobstar
 import exclogger
 
+EXPO_NO_IMG       = micropython.const(-2)
 EXPO_TOO_LOW      = micropython.const(-1)
 EXPO_JUST_RIGHT   = micropython.const(0)
 EXPO_TOO_HIGH     = micropython.const(1)
@@ -16,8 +17,9 @@ EXPO_MOVEMENT     = micropython.const(3)
 EXPO_TOO_BIG      = micropython.const(4)
 EXPO_TOO_MANY     = micropython.const(5)
 EXPO_MEMORY_ERR   = micropython.const(6)
+EXPO_CAMERA_ERR   = micropython.const(7)
 
-def find_stars(img, hist = None, stats = None, thresh = 0, region = None, force_solve = False):
+def find_stars(img, hist = None, stats = None, thresh = 0, max_dia = 100, region = None, force_solve = False):
 
     # histogram and statistics might be computationally costly, use cached results if available
     if hist is None:
@@ -45,7 +47,7 @@ def find_stars(img, hist = None, stats = None, thresh = 0, region = None, force_
         region = (0, 0, img.width(), img.height())
 
     # custom firmware supports negative area for inverted area threshold
-    max_star_width = int(100)
+    max_star_width = int(round(max_dia))
     area = int(max_star_width * max_star_width)
     maxpix = int(round(((float(max_star_width) / 2.0) ** 2) * 3.14159))
 

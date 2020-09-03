@@ -14,6 +14,7 @@ class AstroCam(object):
         self.flip = False
         self.fileseq = 1
         self.img = None
+        self.has_error = False
 
         self.simulate = False
         if simulate is not None:
@@ -68,10 +69,12 @@ class AstroCam(object):
                 sensor.skip_frames(time = 2000)
                 self.width = sensor.width()
                 self.height = sensor.height()
+                self.has_error = False
             except RuntimeError as exc:
                 exclogger.log_exception(exc)
                 self.gain = -2
                 self.shutter = -2
+                self.has_error = True
             self.snap_started = False
 
     def snapshot(self, filename = None):
