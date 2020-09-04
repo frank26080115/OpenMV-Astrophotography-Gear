@@ -21,9 +21,9 @@ A normal polar scope is used to polar-align star-tracking camera mounts and equa
 ![](doc/img/platesolving.gif)
 
  * Accounts for current time and location to compensate for atmospheric refraction
- * All open source, [OpenMV](https://openmv.io/) is an open source embedded computer vision platform, and my code is in C, MicroPython, JavaScript, plus some HTML and CSS
+ * All open source, [OpenMV](https://openmv.io/) is an open source embedded computer vision platform, used frequently for things like self-driving robot cars. My code is written in C, MicroPython, JavaScript, plus some HTML and CSS
 
-![](doc/img/openmv.png)
+![](doc/img/openmv_ide.png)
 
 **Currently this project is feature-complete, but requires outdoor testing.**
 
@@ -138,7 +138,7 @@ I have previously played with a ESP32-CAM, which would have a OV2640 along with 
 
 I finally settled on OpenMV.
 
-![](doc/img/openmv.png)
+![](doc/img/openmv_ide.png)
 
 I first saw it in action when my friend invited me to a robo-car race, and his robot car used one to follow the race track. It's a microcontroller and camera module that can run MicroPython and has MicroPython libraries for image processing similar to OpenCV. The H7 Plus version has a 5 megapixel sensor plus extra RAM. After adding a WiFi module and an appropriate lens, the total cost was only $110. It's all open source so I can optimize cost later. (OpenMV offers a LCD module too but it's not a touch screen, so I decided on WiFi instead)
 
