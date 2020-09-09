@@ -19,6 +19,9 @@ body
 .platesolve_green {
     color: lime;
 }
+.hideable-msg {
+    padding-left: 1em;
+}
 </style>
 
 <script type="text/javascript">
@@ -40,6 +43,8 @@ var statusUpdateTimer;
 var ghost = null;
 var pre_ghost = null;
 var ghost_results = null;
+var advcali_data = [];
+var advcali_tmp = null;
 
 var jpgdata = false;
 var prev_jpg = -1;
@@ -332,7 +337,14 @@ function refreshUi(obj)
         stats_str += "image max: " + Math.round(obj["img_max"]).toString() + "/255    \t";
         stats_str += "image min: " + Math.round(obj["img_min"]).toString() + "/255    \t";
         if (obj["solution"]) {
-            stats_str += "solution stars: " + obj["solution"]["matches"].length.toString() + "&nbsp;&nbsp;&nbsp;&nbsp;";
+            stats_str += "solution stars: " + obj["solution"]["cnt"].toString() + "&nbsp;&nbsp;&nbsp;&nbsp;";
+            if (obj["solution"]["cnt"] <= 8 || obj["solution"]["penalty"] > 0) {
+                document.getElementById("low_confidence_warning").style.display = "block";
+                document.getElementById("low_confidence").innerHTML = "(stars: " + obj["solution"]["cnt"].toString() + " , penalty: " + obj["solution"]["penalty"].toString() + ")";
+            }
+            else {
+                document.getElementById("low_confidence_warning").style.display = "none";
+            }
         }
     }
     catch (e) {
@@ -362,6 +374,7 @@ function refreshUi(obj)
         curCalDataEle.innerHTML = s;
         pre_ghost = {star_x: obj["star_x"], star_y: obj["star_y"], pole_x: obj["pole_x"], pole_y: obj["pole_y"]};
         $("#btn_regimg" ).button( "option", "disabled", false );
+        $("#btn_advcali_snapshot" ).button( "option", "disabled", false );
     }
     else
     {
@@ -369,6 +382,7 @@ function refreshUi(obj)
         pre_ghost = null;
         canCalibrate = false;
         $("#btn_regimg" ).button( "option", "disabled", true );
+        $("#btn_advcali_snapshot" ).button( "option", "disabled", true );
     }
 
     var ghostDataEle = document.getElementById("div_caldata");
@@ -386,6 +400,28 @@ function refreshUi(obj)
     }
 
     $("#btn_calibrate" ).button( "option", "disabled", canCalibrate == false );
+
+    if (advcali_data.length < 3) {
+        $("#btn_advcali_calibrate" ).button( "option", "disabled", true );
+        advcali_tmp = null;
+    }
+    else {
+        $("#btn_advcali_calibrate" ).button( "option", "disabled", false );
+        advcali_tmp = circle_fit(advcali_data, [dataw, datah]);
+    }
+    if (advcali_data.length > 0) {
+        var advcali_str = "";
+        advcali_data.forEach(function(ele, idx) {
+            advcali_str += "(" + math_roundPlaces(ele[0], 1) + "&nbsp;,&nbsp;" + math_roundPlaces(ele[1], 1) + ")&nbsp;&nbsp; ";
+        });
+        if (advcali_tmp != null) {
+            advcali_str += "<br /><br />New Center: " + "(" + math_roundPlaces(advcali_tmp.coord[0], 1) + "&nbsp;,&nbsp;" + math_roundPlaces(advcali_tmp.coord[1], 1) + "), Radius: " + math_roundPlaces(advcali_tmp.avg, 1) + "&nbsp;&nbsp;, StDev: " + math_roundPlaces(advcali_tmp.stdev, 2);
+        }
+        document.getElementById("advcali_alldata").innerHTML = advcali_str;
+    }
+    else {
+        document.getElementById("advcali_alldata").innerHTML = "nothing";
+    }
 
     document.getElementById("div_curcent").innerHTML = "X = " + math_roundPlaces(settings["center_x"], 1) + " , Y = " + math_roundPlaces(settings["center_y"], 1);
 
@@ -955,6 +991,61 @@ function onLoadAll()
         }
     });
 
+    $("#btn_enable_advcali").button().click(function() {
+        document.getElementById("btn_enable_advcali_div").style.display = "none";
+        document.getElementById("adv_cali").style.display = "block";
+    });
+    $("#btn_advcali_snapshot").button().click(function() {
+        if (lastStatus != null) {
+            if (lastStatus["solution"] && lastStatus["pole_x"] && lastStatus["pole_y"]) {
+                var np = [lastStatus["pole_x"], lastStatus["pole_y"]];
+                var tooClose = false;
+                advcali_data.forEach(function(ele,idx){
+                    var v = math_getVector(np, ele);
+                    if (v[0] < 2) {
+                        tooClose = true;
+                    }
+                });
+                if (tooClose == false) {
+                    advcali_data.push(np);
+                    refreshUi(null);
+                }
+                else {
+                    alert("Error: NCP snapshot coordinate too close to existing coordinate, rotate more");
+                }
+            }
+        }
+    });
+    $("#btn_advcali_clear").button().click(function() {
+        advcali_data = [];
+        refreshUi(null);
+    });
+    $("#btn_advcali_calibrate").button().click(function() {
+        if (advcali_data.length >= 3) {
+            advcali_tmp = circle_fit(advcali_data, [dataw, datah]);
+            refreshUi(null);
+            settings["center_x"] = advcali_tmp.coord[0];
+            settings["center_y"] = advcali_tmp.coord[1];
+            queueSettingsUpdate("center_x");
+            queueSettingsUpdate("center_y");
+            alert("new center coordinates set!");
+        }
+    });
+    $("#btn_advcali_demo").button().click(function() {
+        var demo_x = Math.round((dataw * 0.2) + (Math.random() * dataw * 0.6));
+        var demo_y = Math.round((datah * 0.2) + (Math.random() * datah * 0.6));
+        var demo_r = Math.round((datah * 0.1) + (Math.random() * datah * 0.3));
+        var demo_cnt = 5 + Math.round(Math.random() * 15);
+        var demo_noise = 10;
+        advcali_data = [];
+        var i;
+        for (i = 0; i < demo_cnt; i++) {
+            var np = math_movePointTowards([demo_x, demo_y], [demo_r - (demo_noise / 2) + (Math.random() * demo_noise), Math.random() * 360]);
+            advcali_data.push(np);
+        }
+        refreshUi(null);
+    });
+
     document.getElementById("txt_location").onchange = function() {
         getLocation(); // just to validate and colorize
         computeRefraction();
@@ -982,10 +1073,11 @@ function onLoadAll()
 <div style="width:100%"><fieldset style="padding-top: 1em;"><legend>OpenMV PolarScope</legend><div id="viewme" style="display: inline-block; width:100%; padding: 0 0 0 0; margin: 0 0 0 0;"><div id="viewmejpeg" style="position: relative; z-index: 1"></div><div id="viewmesvg" style="position: relative; z-index: 2; top: 0; left: 0;">&nbsp;&nbsp;Please wait for image...</div>
 </div></fieldset></div>
 
-<div id="connection_lost" class="ui-widget" style="display: none;"><div id="connection_lost_inner" class="ui-state-error ui-corner-all .ui-state-error-text" ><p>&nbsp;&nbsp;Connection LOST! Attempting to re-establish...</p></div></div>
-<div id="memory_error" class="ui-widget" style="display: none;"><div id="memory_error_inner" class="ui-state-error ui-corner-all .ui-state-error-text" ><p>&nbsp;&nbsp;INTERNAL MEMORY ERROR! Please check the camera exposure settings!</p></div></div>
-<div id="camera_hardware_error" class="ui-widget" style="display: none;"><div id="camera_hardware_error_inner" class="ui-state-error ui-corner-all .ui-state-error-text" ><p>&nbsp;&nbsp;CAMERA HARDWARE ERROR! Please check the camera exposure settings.<br />&nbsp;&nbsp;Lower the shutter time.<br />&nbsp;&nbsp;Do a full power-off-power-on reset if the problem is not solved.</p></div></div>
-<div id="camera_hardware_wait" class="ui-widget" style="display: none;"><div id="camera_hardware_wait_inner" class="ui-state-error ui-corner-all .ui-state-error-text" ><p>&nbsp;&nbsp;WAITING for camera to load new exposure settings...</p></div></div>
+<div id="connection_lost" class="ui-widget" style="display: none;"><div id="connection_lost_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p>Connection LOST! Attempting to re-establish...</p></div></div>
+<div id="memory_error" class="ui-widget" style="display: none;"><div id="memory_error_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p>INTERNAL MEMORY ERROR! Please check the camera exposure settings!</p></div></div>
+<div id="camera_hardware_error" class="ui-widget" style="display: none;"><div id="camera_hardware_error_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p>CAMERA HARDWARE ERROR! Please check the camera exposure settings.<br />Lower the shutter time.<br />Do a full power-off-power-on reset if the problem is not solved.</p></div></div>
+<div id="camera_hardware_wait" class="ui-widget" style="display: none;"><div id="camera_hardware_wait_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p>WAITING for camera to load new exposure settings...</p></div></div>
+<div id="low_confidence_warning" class="ui-widget" style="display: none;"><div id="low_confidence_warning_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p>Warning: Polaris identified but with low confidence. <span id="low_confidence"></span></p></div></div>
 
 <div id="accordion">
   <h3>View Mode</h3>
@@ -1021,6 +1113,7 @@ function onLoadAll()
   </div>
   <h3>Center Calibration</h3>
   <div>
+    <div id="normal_calibration">
     <p>The center of the camera view may not be perfectly aligned with the center-of-rotation of your star tracker. Two images of Polaris is required to calibrate the center-of-rotation. For the best result, the two images should be rotated about 90&deg; apart.</p>
     <p>To start, rotate your star tracker's Right-Ascension (RA) to a position towards the west. Register the data by clicking the "Register Image Data" button when you are satisfied. Then, rotate your star tracker's RA about 90&deg; towards the east. Click the "calibrate" button when you are satisfied.</p>
     <p>Avoid using your hands to make these movements, use electronic control if possible. Do not move your tripod or adjust your mount during these movements. If the center-of-rotation is too far away from the center-of-view, you may need to adjust the mounting of the camera.</p>
@@ -1036,9 +1129,18 @@ function onLoadAll()
     <div><button id="btn_regimg">Register Image Data</button>&nbsp;&nbsp;<button id="btn_calibrate">Calibrate</button>&nbsp;&nbsp;<button id="btn_clearregimg">Clear Data</button></div>
     <br />
     <br />
+    </div>
     <div><fieldset><legend>Manual Override Center</legend>
         <div>USE WITH CAUTION! Specify a particular coordinate for the center point<br />X:&nbsp;<input type="number" name="txt_override_center_x" id="txt_override_center_x" style="width: 50%;" min="0" max="4000" step="0.1"/><br />Y:&nbsp;<input type="number" name="txt_override_center_y" id="txt_override_center_y" style="width: 50%;" min="0" max="4000" step="0.1" /><br /><button id="btn_override_center">Override</button></div>
     </fieldset></div>
+    <div id="btn_enable_advcali_div"><br /><br /><button id="btn_enable_advcali">Enable Advanced Calibration?</button></div>
+    <div id="adv_cali" style="display: none;">
+        <div>
+            <h3>Advanced Calibration:</h3><p>Snapshot a bunch of coordinates, which will be used to calculate a circle-of-best-fit. While keeping Polaris in the view, rotate the R.A. axis a little bit before each snapshot. Use electronic slewing if possible. The best results have many snapshots that make up an entire circle.</p>
+            <p><fieldset><legend>Collected Data</legend><p id="advcali_alldata">nothing</p><p><button id="btn_advcali_snapshot">Snapshot</button><button id="btn_advcali_clear">Clear Data</button></p></fieldset></p>
+            <p><button id="btn_advcali_calibrate">Calibrate (advanced)</button><span style="display:none;"><button id="btn_advcali_demo">Random Demo</button></span></p>
+        </div>
+    </div>
   </div>
   <h3>Time and Location</h3>
   <div>

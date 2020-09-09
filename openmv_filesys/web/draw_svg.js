@@ -424,6 +424,26 @@ function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, ghost_results)
         svgele.appendChild(gcir);
     }
 
+    if (advcali_data.length > 0) {
+        advcali_data.forEach(function(ele,idx){
+            var gcir = document.createElementNS(svgNS, "circle");
+            gcir.setAttribute("cx", Math.round((ele[0] / imgscale) - offset_x));
+            gcir.setAttribute("cy", Math.round((ele[1] / imgscale) - offset_y));
+            gcir.setAttribute("r", 4);
+            gcir.setAttribute("style", "fill:none;stroke:deepskyblue;stroke-width:2");
+            svgele.appendChild(gcir);
+        });
+    }
+
+    if (advcali_tmp != null) {
+        var gcir = document.createElementNS(svgNS, "circle");
+        gcir.setAttribute("cx", Math.round((advcali_tmp.coord[0] / imgscale) - offset_x));
+        gcir.setAttribute("cy", Math.round((advcali_tmp.coord[1] / imgscale) - offset_y));
+        gcir.setAttribute("r", Math.round(advcali_tmp.avg / imgscale));
+        gcir.setAttribute("style", "fill:none;stroke:deepskyblue;stroke-width:1");
+        svgele.appendChild(gcir);
+    }
+
     imgdiv.appendChild(svgele);
 }
 

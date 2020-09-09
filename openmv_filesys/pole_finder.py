@@ -60,6 +60,7 @@ class PoleSolution(object):
         self.polaris_ra_dec = polaris_ra_dec
         self.x = None
         self.y = None
+        self.lam_umi = None
         self.solu_time = 0
         self.solu_time = int(round(pyb.millis() // 1000))
 
@@ -83,6 +84,7 @@ class PoleSolution(object):
             i.rot_angj_sum = 0
             i.rot_dist_sum = 0
             i.pix_calibration = []
+            i.lam_umi = None
             ang_tol = 4
 
             for j in self.star_list:
@@ -156,6 +158,9 @@ class PoleSolution(object):
                         rot_ang = math.degrees(math.atan2(i.rot_angj_sum / i.rot_dist_sum, i.rot_angi_sum / i.rot_dist_sum))
                         i.rotation = rot_ang
 
+                        if STARS_NEAR_POLARIS[idx_tbl][0] == "* lam UMi":
+                            i.lam_umi = k
+
                         if k.ref_star_dist > max_dist:
                             max_dist = k.ref_star_dist # establishes maximum matching area
                         if k.brightness < min_brite or min_brite < 0:
@@ -228,6 +233,7 @@ class PoleSolution(object):
         self.rotation = ang_normalize(self.rotation + 180.0) # everything needs to be flipped
         self.stars_matched = score_sorted[0].score_list # for debug purposes
         self.penalty = score_sorted[0].penalty
+        self.lam_umi = score_sorted[0].lam_umi
         dist_calibration = 0
         for i in score_sorted[0].pix_calibration:
             dist_calibration += i
@@ -290,6 +296,11 @@ class PoleSolution(object):
         obj.update({"px": self.Polaris.cx})
         obj.update({"py": self.Polaris.cy})
         obj.update({"matches": blobstar.to_jsonobj(self.stars_matched)})
+        obj.update({"penalty": self.penalty})
+        if self.lam_umi is not None:
+            obj.update({"lam_umi": self.lam_umi.to_jsonobj()})
+        else:
+            obj.update({"lam_umi": None})
         return obj
 
 def dist_match(x, y):
