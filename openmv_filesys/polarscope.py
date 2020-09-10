@@ -363,7 +363,7 @@ class PolarScope(object):
     def handle_index(self, client_stream, req, headers, content):
         self.sleeping = False
         self.kill_streamer()
-        captive_portal.gen_page(client_stream, "polarscope.htm", add_files = ["web/jquery-ui-1.12.1-darkness.css", "web/jquery-3.5.1.min.js", "web/jquery-ui-1.12.1.min.js", "web/magellan.js"], add_dir = "web", debug = self.debug)
+        captive_portal.gen_page(client_stream, "polarscope.htm", add_files = ["web/jquery-ui-1.12.1-darkness.css", "web/jquery-3.5.1.min.js", "web/jquery-ui-1.12.1.min.js", "web/magellan.js", "web/draw_polarscope.js", "web/circle_fit.js", "web/mathutils.js", "web/platesolver.js"], debug = self.debug)
 
     def update_stream(self):
         if self.stream_sock is None:
