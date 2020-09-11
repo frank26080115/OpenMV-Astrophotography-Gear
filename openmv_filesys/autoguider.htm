@@ -1,0 +1,610 @@
+<html>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="initial-scale=1" />
+<title>OpenMV AutoGuider</title>
+
+<style type="text/css">
+body
+{
+    background-color: #000;
+    color: #EEE;
+    font-size: 10pt;
+}
+.tbl_platesolve table, th, td {
+    border: 1px solid white;
+    border-collapse: collapse;
+    padding: 2px 10px 2px 10px;
+}
+.platesolve_green {
+    color: lime;
+}
+.hideable-msg {
+    padding-left: 1em;
+}
+</style>
+
+<script type="text/javascript">
+
+var dataw = 2592;
+var datah = 1944;
+
+var settings = null;
+var updateQueue = [];
+var updatePending = [];
+var lastStatus = null;
+var prev_frm = -1;
+var old_settings_frm = -1;
+var needUiRefresh = false;
+var statusUpdateTimer;
+
+var ghost = null;
+var pre_ghost = null;
+var ghost_results = null;
+var advcali_data = [];
+var advcali_tmp = null;
+
+var jpgdata = false;
+var prev_jpg = -1;
+
+var hotpixels = [];
+
+var loadTries = 0;
+
+var refraction = null;
+
+var timeAccel = 0;
+
+function loadSettings(t)
+{
+    if (t == 0) {
+        setTimeout(() => { loadSettings(1); }, 500);
+        return;
+    }
+
+    $.ajax({
+        dataType: "json",
+        url: "getsettings",
+        data: null,
+        success: function(data) {
+            console.log("settings retrieved");
+            console.log(data);
+            settings = data;
+            try {
+                var multi = 10000.0;
+                document.getElementById("txt_location").value = (Math.round((settings["latitude"] + Number.EPSILON) * multi) / multi).toString() + " , " + (Math.round((settings["longitude"] + Number.EPSILON) * multi) / multi).toString();
+            }
+            catch (e) {
+                console.log("cannot parse location from settings: " + e.toString());
+            }
+            document.getElementById("loading").style.display        = "none";
+            document.getElementById("loading_failed").style.display = "none";
+            document.getElementById("loading_almost").style.display = "block";
+            onLoadAll();
+        },
+        fail: function(jqxhr, textStatus, error) {
+            console.log("getsettings failed");
+            console.log(txtStatus);
+            console.log(error);
+            loadSettingsFailed();
+        },
+        error: function() {
+            console.log("getsettings error");
+            loadSettingsFailed();
+        }
+    });
+}
+
+function loadSettingsFailed()
+{
+    loadTries += 1;
+    console.log("settings load reattempt " + loadTries);
+    document.getElementById("load_tries").innerHTML += ".";
+    loadSettings(0);
+}
+
+function startSendSettings()
+{
+    var i, ql = updateQueue.length;
+    var str = "";
+    for (i = 0; i < ql; i++)
+    {
+        var k = updateQueue[i];
+        try {
+            var ap = k + "=" + settings[k];
+            if (i != 0) {
+                str += "&";
+            }
+            str += ap;
+            if (updatePending.includes(k) == false) {
+                updatePending.push(k);
+            }
+        }
+        catch (e) {
+            
+        }
+    }
+    updateQueue = [];
+    onSettingErr = function () {
+        // setting saving failed
+        document.getElementById("connection_lost").style.display = "block";
+        document.getElementById("showme").style.display          = "block";
+        // so queue them back up again
+        // only re-send when status update is successful
+        updatePending.forEach(function(ele) {
+            if (updateQueue.includes(ele) == false) {
+                updateQueue.push(ele);
+            }
+        });
+        updatePending = [];
+        startStatusUpdate();
+    };
+
+    var url = "/updatesetting?" + str;
+    console.log(str);
+
+    $.get({
+        url: url,
+        success: function() {
+            updatePending = [];
+            startStatusUpdate();
+        },
+        fail:  function () { onSettingErr(); },
+        error: function () { onSettingErr(); }
+    });
+}
+
+function startStatusUpdate() {
+    var qstr = "";
+
+    // TODO: if any instant by instant updates are needed, add here
+
+    //qstr += "time=" + updateTime();
+
+    $.ajax({
+        dataType: "json",
+        url: "getstate?" + qstr,
+        success: endStatusUpdate,
+        fail: failStatusUpdate,
+        error: errorStatusUpdate,
+        timeout: 5000
+    });
+}
+
+function endStatusUpdate(obj) {
+    console.log("status: " + obj);
+
+    if (obj == null || obj == false || obj == undefined) {
+        document.getElementById("connection_lost").style.display = "block";
+        setTimeout(() => { startStatusUpdate(); }, 5000);
+    }
+
+    lastStatus = obj;
+
+    document.getElementById("loading_almost").style.display = "none";
+    document.getElementById("connection_lost").style.display = "none";
+    document.getElementById("showme").style.display = "block";
+
+    var nextSts;
+    nextSts = settings["shutter"] / 2;
+    nextSts /= 1000;
+    if (nextSts < 500) {
+        nextSts = 500;
+    }
+
+    if (updateQueue.length > 0)
+    {
+        startSendSettings();
+    }
+    else if (commandQueue.length > 0)
+    {
+        startSendCommands();
+    }
+    else {
+        setTimeout(() => { startStatusUpdate(); }, nextSts);
+    }
+
+    updateTime();
+
+    if (old_settings_frm + 2 < obj["frm_cnt"]) {
+        document.getElementById("camera_hardware_wait").style.display = "none";
+    }
+
+    if (prev_frm == obj["frm_cnt"] && needUiRefresh == false) {
+        return;
+    }
+    prev_frm = obj["frm_cnt"];
+
+    refreshUi(obj);
+}
+
+function refreshUi(obj)
+{
+    if (obj == null) {
+        obj = lastStatus;
+    }
+    if (obj == null) {
+        return;
+    }
+    lastStatus = obj;
+
+    if (obj["expo_code"] === 6) {
+        document.getElementById("memory_error").style.display = "block";
+    }
+    else {
+        document.getElementById("memory_error").style.display = "none";
+    }
+
+    if (obj["expo_code"] === 7) {
+        document.getElementById("camera_hardware_error").style.display = "block";
+    }
+    else {
+        document.getElementById("camera_hardware_error").style.display = "none";
+    }
+
+    var stars = obj["stars"];
+    var star_cnt = stars.length;
+
+    var stats_str = "num of stars: " + star_cnt.toString() + "&nbsp;&nbsp;&nbsp;&nbsp;";
+
+    try {
+        stats_str += "image mean: "  + math_roundPlaces(obj["img_mean"], 1).toString() + "/255    \t";
+        stats_str += "image stdev: " + math_roundPlaces(obj["img_stdev"], 1).toString() + "/255    \t";
+        stats_str += "image max: " + Math.round(obj["img_max"]).toString() + "/255    \t";
+        stats_str += "image min: " + Math.round(obj["img_min"]).toString() + "/255    \t";
+        if (obj["solution"]) {
+            stats_str += "solution stars: " + obj["solution"]["cnt"].toString() + "&nbsp;&nbsp;&nbsp;&nbsp;";
+            if (obj["solution"]["cnt"] <= 8 || obj["solution"]["penalty"] > 0) {
+                document.getElementById("low_confidence_warning").style.display = "block";
+                document.getElementById("low_confidence").innerHTML = "(stars: " + obj["solution"]["cnt"].toString() + " , penalty: " + obj["solution"]["penalty"].toString() + ")";
+            }
+            else {
+                document.getElementById("low_confidence_warning").style.display = "none";
+            }
+        }
+    }
+    catch (e) {
+    }
+    stats_str += "exposure code: ";
+    var exposure_code = obj["expo_code"];
+    stats_str += getExposureCode(exposure_code);
+    while (stats_str.includes(" ")) {
+        stats_str = stats_str.replace(" ", "&nbsp;");
+    }
+    document.getElementById("div_histogram").innerHTML = stats_str;
+
+    draw_svg(obj, get_zoom(), needUiRefresh, false);
+
+    needUiRefresh = false;
+}
+
+function updateTime() {
+    // warning, month is 0-11
+    var epoch2000 = new Date(Date.UTC(2000, 0, 1));
+    var epoch2020 = new Date(Date.UTC(2020, 7, 10, 20, 40, 46));
+    date = new Date();
+    var nowEpoch = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), date.getUTCHours(), date.getUTCMinutes(), date.getUTCSeconds()));
+    var nowEpoch2000 = nowEpoch - epoch2000;
+    nowEpoch2000 += timeAccel * 1000;
+    var nowEpoch2020 = nowEpoch - epoch2020;
+    nowEpoch2000 = Math.round(nowEpoch2000 / 1000.0);
+    document.getElementById("span_utc_time").innerHTML = date.toUTCString();
+    document.getElementById("span_utc_time_epoch").innerHTML = nowEpoch2000.toString();
+    document.getElementById("span_utc_time_epoch2020").innerHTML = Math.round(nowEpoch2020 / 1000.0).toString();
+    return nowEpoch2000;
+}
+
+function errorStatusUpdate() {
+    console.log("getstate error\r\n");
+    document.getElementById("connection_lost").style.display = "block";
+    document.getElementById("showme").style.display          = "block";
+    setTimeout(() => { startStatusUpdate(); }, 5000);
+}
+
+function failStatusUpdate(jqxhr, textStatus, error) {
+    console.log("getstate failed\r\n" + textStatus.toString() + "\r\n" + error.toString());
+    document.getElementById("connection_lost").style.display = "block";
+    document.getElementById("showme").style.display          = "block";
+    setTimeout(() => { startStatusUpdate(); }, 5000);
+}
+
+function getExposureCode(exposure_code) {
+    if (exposure_code == 0) {
+        return "correct";
+    }
+    else if (exposure_code == -1) {
+        return "too dark";
+    }
+    else if (exposure_code == -2) {
+        return "no image";
+    }
+    else if (exposure_code == 1) {
+        return "too bright";
+    }
+    else if (exposure_code == 2) {
+        return "too noisy";
+    }
+    else if (exposure_code == 3) {
+        return "movement";
+    }
+    else if (exposure_code == 4) {
+        return "big blob";
+    }
+    else if (exposure_code == 5) {
+        return "too many stars";
+    }
+    else if (exposure_code == 6) {
+        return "INTERNAL MEMORY ERROR";
+    }
+    else if (exposure_code == 7) {
+        return "CAMERA HARDWARE ERROR";
+    }
+    return "unknown";
+}
+
+function queueSettingsUpdate(key) {
+    if (updateQueue.includes(key) == false) {
+        updateQueue.push(key);
+        console.log("queueing setting update for " + key);
+    }
+}
+
+function checkHotPixel(star) {
+    if (hotpixels == undefined) {
+        return false;
+    }
+    if (hotpixels == null || hotpixels == false) {
+        return false;
+    }
+    if (hotpixels.length <= 0) {
+        return false;
+    }
+    var i, cnt = hotpixels.length;
+    for (i = 0; i < cnt; i++) {
+        var v = math_getVector([star.cx, star.cy], hotpixels[i]);
+        if (v[0] < 2) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function awaitCamReset() {
+    document.getElementById("camera_hardware_wait").style.display = "block";
+    if (lastStatus == null) {
+        old_settings_frm = -1;
+    }
+    else {
+        old_settings_frm = lastStatus["frm_cnt"];
+    }
+}
+
+function slew(ele, isdown) {
+    console.log("slew " + ele.id + " isdown " + isdown);
+    if (isdown) {
+        document.getElementById(ele.id + "_bottom").style.fill = "#08A";
+    }
+    else {
+        document.getElementById(ele.id + "_bottom").style.fill = "#F80";
+    }
+}
+
+function makeSlider(id, minval, maxval, defval, stepval, slide_func)
+{
+    if (defval < minval) {
+        defval = minval;
+    }
+    if (defval > maxval) {
+        defval = maxval;
+    }
+
+    var handle = $( "#" + id + "_handle" );
+    $( "#" + id ).slider({
+      create: function() {
+        handle.text( $( this ).slider( "value" ) );
+      },
+      min: minval,
+      max: maxval,
+      step: stepval,
+      value: defval,
+      slide: function( event, ui ) {
+        handle.text( ui.value );
+        if (slide_func) {
+            slide_func(this, event, ui);
+        }
+      }
+    });
+}
+
+function onLoadAll()
+{
+    document.getElementById("loading").style.display = "none";
+    $( "#accordion" ).accordion({heightStyle: "content"});
+
+    $("#btn_streamimg" ).button().click(function( event ) {
+        console.log("click btn_streamimg");
+        window.location.href = "/stream";
+    });
+
+    makeSlider("slider_gain", 0, 128, settings["gain"], 8, function(obj, event, ui) {
+        console.log("slider_gain: " + ui.value);
+        settings["gain"] = ui.value;
+        queueSettingsUpdate("gain");
+        awaitCamReset();
+    });
+    makeSlider("slider_shutter", 0, 1500, settings["shutter"] / 1000, 100, function(obj, event, ui) {
+        console.log("slider_shutter: " + ui.value);
+        settings["shutter"] = ui.value * 1000;
+        queueSettingsUpdate("shutter");
+        awaitCamReset();
+    });
+    makeSlider("slider_thresh", 0, 255, settings["thresh"], 1, function(obj, event, ui) {
+        console.log("slider_thresh: " + ui.value);
+        settings["thresh"] = ui.value;
+        queueSettingsUpdate("thresh");
+    });
+
+    $("#btn_hotpixels").button().click(function( event ) {
+        console.log("click btn_hotpixels");
+        hotpixels = [];
+        var pixstr = "";
+        var settingsStr = "";
+        if (lastStatus != null) {
+            var stars = lastStatus["stars"];
+            stars.forEach(function(ele, idx) {
+                //if (ele["brightness"] % 2 == 1) // odd number means contains saturated pixel
+                // nevermind, a hot pixel isn't necessarily saturated
+                {
+                    hotpixels.push([ele["cx"], ele["cy"]]);
+                }
+            });
+        }
+        else {
+            pixstr = "Error: no data from camera";
+        }
+        var divele = document.getElementById("hotpixel_list");
+        if (hotpixels.length > 0)
+        {
+            pixstr += "<ol>";
+            hotpixels.forEach(function(ele, idx) {
+                pixstr += "<li>( " + math_roundPlaces(ele[0], 1) + " , " + math_roundPlaces(ele[1], 1) + " )</li>";
+                settingsStr += math_roundPlaces(ele[0], 1) + "," + math_roundPlaces(ele[1], 1) + ";";
+            });
+            pixstr += "</ol>";
+            settings["hotpixels"] = settingsStr;
+            queueSettingsUpdate("hotpixels");
+        }
+        else
+        {
+            pixstr = "No hot-pixels detected by camera";
+        }
+        divele.innerHTML = pixstr;
+    });
+
+    $("#btn_forgethotpixels").button().click(function( event ) {
+        console.log("click btn_forgethotpixels");
+        hotpixels = [];
+        var divele = document.getElementById("hotpixel_list");
+        divele.innerHTML = "";
+        settings["hotpixels"] = "";
+        queueSettingsUpdate("hotpixels");
+    });
+
+    $( "#sel_mountinterface" ).selectmenu();
+
+    $(window).on('resize', function(e) {
+        needUiRefresh = true; // this will force a re-scaling of the drawn view
+    });
+
+    setTimeout(() => { startStatusUpdate(); }, 1000);
+}
+
+</script>
+
+</head>
+<body onload="loadSettings(0);">
+<div id="loading"><h2>OpenMV AutoGuider</h2><br /><h2>Loading, Please Wait! <span id="load_tries"></span></h2></div>
+<div id="loading_failed" style="display:none;"><h1>Loading FAILED! Please refresh the page.</h1></div>
+<div id="loading_almost" style="display:none;"><h2>OpenMV AutoGuider</h2><br /><h2>Settings loaded! Waiting for star data...</h2></div>
+<div id="showme" style="display:none;">
+
+<div style="width:100%"><fieldset style="padding-top: 1em;"><legend>OpenMV AutoGuider</legend><div id="viewme" style="display: inline-block; width:100%; padding: 0 0 0 0; margin: 0 0 0 0;"><div id="viewmejpeg" style="position: relative; z-index: 1"></div><div id="viewmesvg" style="position: relative; z-index: 2; top: 0; left: 0;">&nbsp;&nbsp;Please wait for image...</div>
+</div></fieldset></div>
+
+<div id="connection_lost" class="ui-widget" style="display: none;"><div id="connection_lost_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p>Connection LOST! Attempting to re-establish...</p></div></div>
+<div id="memory_error" class="ui-widget" style="display: none;"><div id="memory_error_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p>INTERNAL MEMORY ERROR! Please check the camera exposure settings!</p></div></div>
+<div id="camera_hardware_error" class="ui-widget" style="display: none;"><div id="camera_hardware_error_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p>CAMERA HARDWARE ERROR! Please check the camera exposure settings.<br />Lower the shutter time.<br />Do a full power-off-power-on reset if the problem is not solved.</p></div></div>
+<div id="mount_hardware_error" class="ui-widget" style="display: none;"><div id="mount_hardware_error_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p>MOUNT HARDWARE ERROR!<br />Do a full power-off-power-on reset if the problem is not solved.</p></div></div>
+<div id="camera_hardware_wait" class="ui-widget" style="display: none;"><div id="camera_hardware_wait_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p>WAITING for camera to load new exposure settings...</p></div></div>
+
+<div id="accordion">
+  <h3>Auto-Guidance</h3>
+  <div>
+    <p>TODO: main controls here</p>
+  </div>
+  <h3>Camera Config</h3>
+  <div>
+    <div><button id="btn_streamimg">Stream Image Full Screen</button></div>
+    <div><fieldset><legend>Image Statistics</legend>
+    <div id="div_histogram"></div>
+    </fieldset></div>
+    <div><fieldset><legend>Camera Gain: <span id="slider_gain_handle"></span> dB</legend>
+        <div id="slider_gain"></div>
+    </fieldset></div>
+    <div><fieldset><legend>Shutter Time: <span id="slider_shutter_handle"></span> ms</legend>
+        <div id="slider_shutter"></div>
+    </fieldset></div>
+    <div><fieldset><legend>Star Threshold: <span id="slider_thresh_handle"></span>/255</legend>
+        <div id="slider_thresh"></div>
+    </fieldset></div>
+  </div>
+  <h3>Mount Config</h3>
+  <div>
+    <div><fieldset><legend>Mount Interface</legend>
+        <div><select id="sel_mountinterface" name="sel_mountinterface">
+            <option value="st4">ST-4</option>
+            <option value="meadelx200">Meade LX200</option>
+            <option value="synscan">SynScan/NexStar</option>
+            <option value="ioptron">iOptron</option>
+            <option value="go2nova">Go2Nova</option>
+        </select></div>
+    </fieldset></div>
+    <div><fieldset><legend>Slew Speed: <span id="slider_slewspeed_handle"></span> %</legend>
+        <div id="slider_slewspeed"></div>
+    </fieldset></div>
+    <div><fieldset><legend>Minimum Pulse: <span id="slider_pulse_minimum_handle"></span> ms</legend>
+        <div id="slider_pulse_minimum"></div>
+    </fieldset></div>
+    <div><fieldset><legend>Maximum Pulse: <span id="slider_pulse_maximum_handle"></span> ms</legend>
+        <div id="slider_pulse_maximum"></div>
+    </fieldset></div>
+    <div><fieldset><legend>Calibration Step Pulse: <span id="slider_pulse_calistep_handle"></span> ms</legend>
+        <div id="slider_pulse_calistep"></div>
+    </fieldset></div>
+    <div><fieldset><legend>Backlash Pulse: <span id="slider_pulse_backlash_handle"></span> ms</legend>
+        <div id="slider_pulse_backlash"></div>
+    </fieldset></div>
+    <div><fieldset><legend>Settle Time: <span id="slider_pulse_settle_handle"></span> ms</legend>
+        <div id="slider_pulse_settle"></div>
+    </fieldset></div>
+    <div><fieldset><legend>Direction Change Hysteresis: <span id="slider_dirchangehyster_handle"></span></legend>
+        <div id="slider_dirchangehyster"></div>
+    </fieldset></div>
+    <div><fieldset><legend>Manual Slew</legend>
+        <div><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="300" height="300">
+            <circle id="slew_dec_plus_bottom"  cx="150" cy="75"  r="50" style="fill:#F80;stroke-width:2px;stroke:#FFF" />
+            <text x="150" y="82" text-anchor="middle" style="font-size:20px;fill:#FFF;">DEC+</text>
+            <circle id="slew_dec_plus"  cx="150" cy="75"  r="50" style="fill:#FFFFFF00;stroke:none;" onmousedown="slew(this, true)" onmouseup="slew(this, false)" onmouseout="slew(this, false)" />
+            <circle id="slew_dec_minus_bottom" cx="150" cy="225" r="50" style="fill:#F80;stroke-width:2px;stroke:#FFF" />
+            <text x="150" y="232" text-anchor="middle" style="font-size:20px;fill:#FFF;">DEC-</text>
+            <circle id="slew_dec_minus" cx="150" cy="225" r="50" style="fill:#FFFFFF00;stroke:none;" onmousedown="slew(this, true)" onmouseup="slew(this, false)" onmouseout="slew(this, false)" />
+            <circle id="slew_ra_plus_bottom"   cx="75"  cy="150" r="50" style="fill:#F80;stroke-width:2px;stroke:#FFF" />
+            <text x="75" y="158" text-anchor="middle" style="font-size:20px;fill:#FFF;">RA-</text>
+            <circle id="slew_ra_plus"   cx="75"  cy="150" r="50" style="fill:#FFFFFF00;stroke:none;" onmousedown="slew(this, true)" onmouseup="slew(this, false)" onmouseout="slew(this, false)" />
+            <circle id="slew_ra_minus_bottom"  cx="225" cy="150" r="50" style="fill:#F80;stroke-width:2px;stroke:#FFF" />
+            <text x="225" y="158" text-anchor="middle" style="font-size:20px;fill:#FFF;">RA+</text>
+            <circle id="slew_ra_minus"  cx="225" cy="150" r="50" style="fill:#FFFFFF00;stroke:none;" onmousedown="slew(this, true)" onmouseup="slew(this, false)" onmouseout="slew(this, false)" />
+        </svg></div>
+    </fieldset></div>
+  </div>
+  <h3>Calibration</h3>
+  <div>
+    <p>TODO: calibration visualization here</p>
+  </div>
+  <h3>Motion Graph</h3>
+  <div>
+    <p>TODO: motion graph here</p>
+  </div>
+  <h3>Hot Pixels</h3>
+  <div>
+    <p>If the camera gets too hot, there will be pixels that appear to be stuck as white. These stuck pixels will be falsely detected as stars. You will notice these pixels when you see stars that do not move even though you are moving the camera around.</p>
+    <p>It is possible to memorize which pixels are stuck so that they are removed from the list of stars. To do so: <ol><li>turn up the gain and shutter time slightly</li><li>cover up the camera completely</li><li>click the "capture hot pixels" button</li><li>restore your original settings</li></ol></p>
+    <p>Think of this as taking a "dark frame" but not really the same thing.</p>
+    <p>If a hot pixel is near where an important star exists, then rotate the camera.</p>
+    <p><button id="btn_hotpixels">Capture Hot Pixels</button><button id="btn_forgethotpixels">Forget Hot Pixels</button></p>
+    <p><fieldset><legend>Hot Pixel List</legend><div id="hotpixel_list"></div></fieldset></p>
+  </div>
+</div><!-- accordion -->
+</div><!-- showme -->
+</body>
+</html>
