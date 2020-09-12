@@ -1098,6 +1098,41 @@ DIN A3, landscape with extra doc field</description>
 </deviceset>
 </devicesets>
 </library>
+<library name="adafruit">
+<packages>
+<package name="FIDUCIAL_1MM">
+<smd name="1" x="0" y="0" dx="1" dy="1" layer="1" roundness="100" stop="no" cream="no"/>
+<polygon width="0.127" layer="29">
+<vertex x="-0.8" y="0" curve="90"/>
+<vertex x="0" y="-0.8" curve="90"/>
+<vertex x="0.8" y="0" curve="90"/>
+<vertex x="0" y="0.8" curve="90"/>
+</polygon>
+<circle x="0" y="0" radius="0.762" width="0.127" layer="41"/>
+</package>
+</packages>
+<symbols>
+<symbol name="DOT">
+<circle x="0" y="0" radius="2.54" width="0.254" layer="94"/>
+</symbol>
+</symbols>
+<devicesets>
+<deviceset name="FIDUCIAL">
+<description>For use by pick and place machines to calibrate the vision/machine, 1mm
+&lt;p&gt;By microbuilder.eu&lt;/p&gt;</description>
+<gates>
+<gate name="G$1" symbol="DOT" x="0" y="0"/>
+</gates>
+<devices>
+<device name="" package="FIDUCIAL_1MM">
+<technologies>
+<technology name=""/>
+</technologies>
+</device>
+</devices>
+</deviceset>
+</devicesets>
+</library>
 <library name="supply">
 <packages>
 </packages>
@@ -1532,6 +1567,8 @@ Source: http://www.semicon.toshiba.co.jp/td/en/Opto/Photocoupler/en_20050928_TLP
 <part name="X1" library="openmv" deviceset="OPENMV3" device=""/>
 <part name="P+1" library="iofault" deviceset="VIN" device=""/>
 <part name="GND1" library="supply1" deviceset="GND" device=""/>
+<part name="U$1" library="adafruit" deviceset="FIDUCIAL" device=""/>
+<part name="U$2" library="adafruit" deviceset="FIDUCIAL" device=""/>
 <part name="3V2" library="supply" deviceset="3V3" device=""/>
 <part name="U3" library="guider-shield" deviceset="TLP283-4" device="-SO016" value="TLP291"/>
 <part name="R5" library="sfe" deviceset="RESISTOR" device="0603-RES" value="4K7"/>
@@ -1566,6 +1603,8 @@ Source: http://www.semicon.toshiba.co.jp/td/en/Opto/Photocoupler/en_20050928_TLP
 <instance part="X1" gate="G$1" x="251.46" y="109.22"/>
 <instance part="P+1" gate="G$1" x="218.44" y="127"/>
 <instance part="GND1" gate="1" x="226.06" y="78.74"/>
+<instance part="U$1" gate="G$1" x="218.44" y="30.48"/>
+<instance part="U$2" gate="G$1" x="226.06" y="30.48"/>
 <instance part="3V2" gate="G$1" x="226.06" y="137.16"/>
 <instance part="U3" gate="A" x="144.78" y="205.74"/>
 <instance part="U3" gate="B" x="144.78" y="190.5"/>
