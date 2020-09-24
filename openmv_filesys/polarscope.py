@@ -171,7 +171,10 @@ class PolarScope(object):
         else:
             state.update({"solution": False})
         if self.stars is not None:
-            state.update({"stars": blobstar.to_jsonobj(self.stars)})
+            star_list = self.stars
+            if len(star_list) > 50:
+                star_list = blobstar.sort_brightness(star_list)[0:50]
+            state.update({"stars": blobstar.to_jsonobj(star_list)})
         state.update({"polar_clock": self.time_mgr.get_angle()})
 
         state.update({"max_stars": self.max_stars})

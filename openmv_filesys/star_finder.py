@@ -44,7 +44,7 @@ def find_stars(img, hist = None, stats = None, thresh = 0, max_dia = 100, region
         thresh = thresh_a
 
     if region is None:
-        region = (0, 0, img.width(), img.height())
+        region = (0, 0, img.width() - 150, img.height())
 
     # custom firmware supports negative area for inverted area threshold
     max_star_width = int(round(max_dia))
@@ -60,15 +60,15 @@ def find_stars(img, hist = None, stats = None, thresh = 0, max_dia = 100, region
         #micropython.mem_info(True)
         return [], EXPO_MEMORY_ERR
     stars = []
-    too_long = 0
-    too_big  = 0
+    #too_long = 0
+    #too_big  = 0
     for b in blobs:
         stars.append(blob_to_star(b, img, thresh))
     if force_solve == False:
-        if too_big > len(stars):
-            return stars, EXPO_TOO_BIG
-        if too_long > len(stars):
-            return stars, EXPO_MOVEMENT
+        #if too_big > len(stars):
+        #    return stars, EXPO_TOO_BIG
+        #if too_long > len(stars):
+        #    return stars, EXPO_MOVEMENT
         if len(stars) > 125:
             # we have a database of around 20 stars
             # only 4 are needed for a solution
