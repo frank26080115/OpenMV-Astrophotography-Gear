@@ -39,7 +39,7 @@ function get_zoom()
     return zoom;
 }
 
-function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, ghost_results)
+function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, simpcali_results)
 {
     var wrapdiv = document.getElementById("viewme");
     var imgdiv = document.getElementById("viewmesvg");
@@ -359,37 +359,37 @@ function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, ghost_results)
                 svgele.appendChild(tline);
             }
 
-            if (ghost_results !== null && ghost_results !== false)
+            if (simpcali_results !== null && simpcali_results !== false)
             {
-                if (ghost_results.cent_x != null && ghost_results.cent_x != 0 && ghost_results.cent_y != null && ghost_results.cent_y != 0)
+                if (simpcali_results.cent_x != null && simpcali_results.cent_x != 0 && simpcali_results.cent_y != null && simpcali_results.cent_y != 0)
                 {
                     // this draws the intersection lines for the calibration
                     var gline = document.createElementNS(svgNS, "line");
-                    gline.setAttribute("x1", Math.round((ghost_results.cent_x / imgscale) - offset_x));
-                    gline.setAttribute("x2", Math.round((ghost_results.mp1_x  / imgscale) - offset_x));
-                    gline.setAttribute("y1", Math.round((ghost_results.cent_y / imgscale) - offset_y));
-                    gline.setAttribute("y2", Math.round((ghost_results.mp1_y  / imgscale) - offset_y));
+                    gline.setAttribute("x1", Math.round((simpcali_results.cent_x / imgscale) - offset_x));
+                    gline.setAttribute("x2", Math.round((simpcali_results.mp1_x  / imgscale) - offset_x));
+                    gline.setAttribute("y1", Math.round((simpcali_results.cent_y / imgscale) - offset_y));
+                    gline.setAttribute("y2", Math.round((simpcali_results.mp1_y  / imgscale) - offset_y));
                     gline.setAttribute("style", "stroke:deepskyblue;stroke-width:1");
                     svgele.appendChild(gline);
                     gline = document.createElementNS(svgNS, "line");
-                    gline.setAttribute("x1", Math.round((ghost_results.cent_x / imgscale) - offset_x));
-                    gline.setAttribute("x2", Math.round((ghost_results.mp2_x  / imgscale) - offset_x));
-                    gline.setAttribute("y1", Math.round((ghost_results.cent_y / imgscale) - offset_y));
-                    gline.setAttribute("y2", Math.round((ghost_results.mp2_y  / imgscale) - offset_y));
+                    gline.setAttribute("x1", Math.round((simpcali_results.cent_x / imgscale) - offset_x));
+                    gline.setAttribute("x2", Math.round((simpcali_results.mp2_x  / imgscale) - offset_x));
+                    gline.setAttribute("y1", Math.round((simpcali_results.cent_y / imgscale) - offset_y));
+                    gline.setAttribute("y2", Math.round((simpcali_results.mp2_y  / imgscale) - offset_y));
                     gline.setAttribute("style", "stroke:blue;stroke-width:1");
                     svgele.appendChild(gline);
                     gline = document.createElementNS(svgNS, "line");
-                    gline.setAttribute("x1", Math.round((ghost_results.star_x   / imgscale) - offset_x));
-                    gline.setAttribute("x2", Math.round((ghost_results.ghost_sx / imgscale) - offset_x));
-                    gline.setAttribute("y1", Math.round((ghost_results.star_y   / imgscale) - offset_y));
-                    gline.setAttribute("y2", Math.round((ghost_results.ghost_sy / imgscale) - offset_y));
+                    gline.setAttribute("x1", Math.round((simpcali_results.star_x   / imgscale) - offset_x));
+                    gline.setAttribute("x2", Math.round((simpcali_results.ghost_sx / imgscale) - offset_x));
+                    gline.setAttribute("y1", Math.round((simpcali_results.star_y   / imgscale) - offset_y));
+                    gline.setAttribute("y2", Math.round((simpcali_results.ghost_sy / imgscale) - offset_y));
                     gline.setAttribute("style", "stroke:deepskyblue;stroke-width:1");
                     svgele.appendChild(gline);
                     gline = document.createElementNS(svgNS, "line");
-                    gline.setAttribute("x1", Math.round((ghost_results.pole_x   / imgscale) - offset_x));
-                    gline.setAttribute("x2", Math.round((ghost_results.ghost_px / imgscale) - offset_x));
-                    gline.setAttribute("y1", Math.round((ghost_results.pole_y   / imgscale) - offset_y));
-                    gline.setAttribute("y2", Math.round((ghost_results.ghost_py / imgscale) - offset_y));
+                    gline.setAttribute("x1", Math.round((simpcali_results.pole_x   / imgscale) - offset_x));
+                    gline.setAttribute("x2", Math.round((simpcali_results.ghost_px / imgscale) - offset_x));
+                    gline.setAttribute("y1", Math.round((simpcali_results.pole_y   / imgscale) - offset_y));
+                    gline.setAttribute("y2", Math.round((simpcali_results.ghost_py / imgscale) - offset_y));
                     gline.setAttribute("style", "stroke:blue;stroke-width:1");
                     svgele.appendChild(gline);
                 }
@@ -423,25 +423,42 @@ function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, ghost_results)
         gcir.setAttribute("style", "stroke:deepskyblue;stroke-width:2");
         svgele.appendChild(gcir);
     }
+    else
+    {
+        if (advcali_data.length > 0) {
+            advcali_data.forEach(function(ele,idx){
+                var gcir = document.createElementNS(svgNS, "circle");
+                gcir.setAttribute("cx", Math.round((ele.pole[0] / imgscale) - offset_x));
+                gcir.setAttribute("cy", Math.round((ele.pole[1] / imgscale) - offset_y));
+                gcir.setAttribute("r", 4);
+                gcir.setAttribute("style", "fill:none;stroke:deepskyblue;stroke-width:2");
+                svgele.appendChild(gcir);
+                gcir = document.createElementNS(svgNS, "circle");
+                gcir.setAttribute("cx", Math.round((ele.star[0] / imgscale) - offset_x));
+                gcir.setAttribute("cy", Math.round((ele.star[1] / imgscale) - offset_y));
+                gcir.setAttribute("r", 4);
+                gcir.setAttribute("style", "fill:none;stroke:deepskyblue;stroke-width:2");
+                svgele.appendChild(gcir);
+            });
+        }
 
-    if (advcali_data.length > 0) {
-        advcali_data.forEach(function(ele,idx){
+        if (advcali_tmp1 != null) {
             var gcir = document.createElementNS(svgNS, "circle");
-            gcir.setAttribute("cx", Math.round((ele[0] / imgscale) - offset_x));
-            gcir.setAttribute("cy", Math.round((ele[1] / imgscale) - offset_y));
-            gcir.setAttribute("r", 4);
-            gcir.setAttribute("style", "fill:none;stroke:deepskyblue;stroke-width:2");
+            gcir.setAttribute("cx", Math.round((advcali_tmp1.coord[0] / imgscale) - offset_x));
+            gcir.setAttribute("cy", Math.round((advcali_tmp1.coord[1] / imgscale) - offset_y));
+            gcir.setAttribute("r", Math.round(advcali_tmp1.avg / imgscale));
+            gcir.setAttribute("style", "fill:none;stroke:deepskyblue;stroke-width:1");
             svgele.appendChild(gcir);
-        });
-    }
+        }
 
-    if (advcali_tmp != null) {
-        var gcir = document.createElementNS(svgNS, "circle");
-        gcir.setAttribute("cx", Math.round((advcali_tmp.coord[0] / imgscale) - offset_x));
-        gcir.setAttribute("cy", Math.round((advcali_tmp.coord[1] / imgscale) - offset_y));
-        gcir.setAttribute("r", Math.round(advcali_tmp.avg / imgscale));
-        gcir.setAttribute("style", "fill:none;stroke:deepskyblue;stroke-width:1");
-        svgele.appendChild(gcir);
+        if (advcali_tmp2 != null) {
+            var gcir = document.createElementNS(svgNS, "circle");
+            gcir.setAttribute("cx", Math.round((advcali_tmp2.coord[0] / imgscale) - offset_x));
+            gcir.setAttribute("cy", Math.round((advcali_tmp2.coord[1] / imgscale) - offset_y));
+            gcir.setAttribute("r", Math.round(advcali_tmp2.avg / imgscale));
+            gcir.setAttribute("style", "fill:none;stroke:deepskyblue;stroke-width:1");
+            svgele.appendChild(gcir);
+        }
     }
 
     imgdiv.appendChild(svgele);

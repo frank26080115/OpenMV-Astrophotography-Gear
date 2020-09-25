@@ -241,7 +241,7 @@ class PoleSolution(object):
         self.pix_per_deg = PIXELS_PER_DEGREE * dist_calibration
         return True
 
-    def get_rotation(self, compensate = True):
+    def get_rotation(self, compensate = True, offset = 0):
         if self.solu_time == 0 or compensate == False:
             return self.rotation
         # compensate for the rotation that occured between solution and now
@@ -250,7 +250,8 @@ class PoleSolution(object):
         dt += self.accel_sec # for simulation only
         rot = float(dt) * 360.0
         rot /= 86164.09054 # sidereal day length
-        return self.rotation - rot
+        res = self.rotation - rot + offset
+        return ang_normalize(res)
 
     def get_pole_coords(self):
         if self.solved == False:

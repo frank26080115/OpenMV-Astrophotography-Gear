@@ -42,9 +42,10 @@ var statusUpdateTimer;
 
 var ghost = null;
 var pre_ghost = null;
-var ghost_results = null;
+var simpcali_results = null;
 var advcali_data = [];
-var advcali_tmp = null;
+var advcali_tmp1 = null;
+var advcali_tmp2 = null;
 
 var jpgdata = false;
 var prev_jpg = -1;
@@ -215,16 +216,17 @@ function startStatusUpdate() {
         }
         jpgdata = false;
     }
-    if ($( "#speedmode-2").prop("checked")) {
-        qstr += "highspeed=true&";
-    }
-    else {
-        qstr += "highspeed=false&";
-    }
     qstr += "zoom=" + get_zoom().toString() + "&";
 
     if (timeAccel != 0) {
         qstr += "accel_sec=" + timeAccel.toString() + "&";
+    }
+
+    if ($( "#chkturnonled-1").prop("checked")) {
+        qstr += "use_leds=true&";
+    }
+    else {
+        qstr += "use_leds=false&";
     }
 
     qstr += "time=" + updateTime();
@@ -254,12 +256,9 @@ function endStatusUpdate(obj) {
     document.getElementById("showme").style.display = "block";
 
     var nextSts;
-    if (obj["highspeed"] == false) {
-        nextSts = settings["shutter"] / 2;
-    }
-    else {
-        nextSts = settings["shutter_hs"] / 2;
-    }
+
+    nextSts = settings["shutter"] / 2;
+
     nextSts /= 1000;
     if (nextSts < 500) {
         nextSts = 500;
@@ -280,11 +279,7 @@ function endStatusUpdate(obj) {
 
     if (first)
     {
-        if (obj["highspeed"]) {
-            $( "#speedmode-1" ).prop("checked", false);
-            $( "#speedmode-2" ).prop("checked", true);
-        }
-        $( "#realmode-1" ).prop("checked", obj["packjpeg"]);
+        // TODO: add things to do on first connect
         first = false;
     }
 
@@ -360,94 +355,96 @@ function refreshUi(obj)
     }
     document.getElementById("div_histogram").innerHTML = stats_str;
 
-    var vg = validateGhost();
-    var canCalibrate = vg[0];
-    var reason = vg[1];
-
-    var curCalDataEle = document.getElementById("div_curdata");
-    if (obj["solution"] && obj["star_x"] && obj["star_y"] && obj["pole_x"] && obj["pole_y"])
+    if (advcali_data.length > 0 && advcali_data.length <= 2)
     {
-        var s = "Polaris = (" + math_roundPlaces(obj["star_x"], 1) + " , " + math_roundPlaces(obj["star_y"], 1) + ")  ;  NCP = (" + math_roundPlaces(obj["pole_x"], 1) + " , " + math_roundPlaces(obj["pole_y"], 1) + ")";
-        if (canCalibrate == false && ghost != null) {
-            s += " ; cannot calibrate with this" + reason;
+        var vg = validateSimpleCalib();
+        var canCalibrate = vg[0];
+        var reason = vg[1];
+
+        //var curCalDataEle = document.getElementById("div_curdata");
+        if (obj["solution"] && obj["star_x"] && obj["star_y"] && obj["pole_x"] && obj["pole_y"])
+        {
+            var s = "Polaris = (" + math_roundPlaces(obj["star_x"], 1) + " , " + math_roundPlaces(obj["star_y"], 1) + ")  ;  NCP = (" + math_roundPlaces(obj["pole_x"], 1) + " , " + math_roundPlaces(obj["pole_y"], 1) + ")";
+            if (canCalibrate == false && ghost != null) {
+                s += " ; cannot calibrate with this" + reason;
+            }
+            else if (canCalibrate == true && simpcali_results != null) {
+                s += "<br />New Center = (" + math_roundPlaces(simpcali_results.cent_x, 1) + " ," + math_roundPlaces(simpcali_results.cent_y, 1) + ")";
+            }
+            //curCalDataEle.innerHTML = s;
+            pre_ghost = {star_x: obj["star_x"], star_y: obj["star_y"], pole_x: obj["pole_x"], pole_y: obj["pole_y"]};
+            $("#btn_savecalpt" ).button( "option", "disabled", false );
         }
-        else if (canCalibrate == true && ghost_results != null) {
-            s += "<br />New Center = (" + math_roundPlaces(ghost_results.cent_x, 1) + " ," + math_roundPlaces(ghost_results.cent_y, 1) + ")";
+        else
+        {
+            //curCalDataEle.innerHTML = "nothing";
+            pre_ghost = null;
+            canCalibrate = false;
+            $("#btn_savecalpt" ).button( "option", "disabled", true );
         }
-        curCalDataEle.innerHTML = s;
-        pre_ghost = {star_x: obj["star_x"], star_y: obj["star_y"], pole_x: obj["pole_x"], pole_y: obj["pole_y"]};
-        $("#btn_regimg" ).button( "option", "disabled", false );
-        $("#btn_advcali_snapshot" ).button( "option", "disabled", false );
+
+        if (ghost != null)
+        {
+            $("#btn_clearcalpts" ).button( "option", "disabled",  false);
+        }
+        else
+        {
+            canCalibrate = false;
+            $("#btn_clearcalpts" ).button( "option", "disabled", true );
+        }
+
+        $("#btn_calibrate" ).button( "option", "disabled", canCalibrate == false );
     }
     else
     {
-        curCalDataEle.innerHTML = "nothing";
-        pre_ghost = null;
-        canCalibrate = false;
-        $("#btn_regimg" ).button( "option", "disabled", true );
-        $("#btn_advcali_snapshot" ).button( "option", "disabled", true );
-    }
+        ghost = null;
+        simpcali_results = null;
 
-    var ghostDataEle = document.getElementById("div_caldata");
-    if (ghost != null)
-    {
-        ghostDataEle.innerHTML = "Polaris = (" + math_roundPlaces(ghost.star_x, 1) + " , " + math_roundPlaces(ghost.star_y, 1) + ")  ;  NCP = (" + math_roundPlaces(ghost.pole_x, 1) + " , " + math_roundPlaces(ghost.pole_y, 1) + ")<br />Old Center = (" + math_roundPlaces(settings["center_x"], 1) + " , " + math_roundPlaces(settings["center_y"], 1) + ")";
-
-        $("#btn_clearregimg" ).button( "option", "disabled",  false);
-    }
-    else
-    {
-        ghostDataEle.innerHTML = "nothing";
-        canCalibrate = false;
-        $("#btn_clearregimg" ).button( "option", "disabled", true );
-    }
-
-    $("#btn_calibrate" ).button( "option", "disabled", canCalibrate == false );
-
-    if (advcali_data.length < 3) {
-        $("#btn_advcali_calibrate" ).button( "option", "disabled", true );
-        advcali_tmp = null;
-    }
-    else {
-        $("#btn_advcali_calibrate" ).button( "option", "disabled", false );
-        advcali_tmp = circle_fit(advcali_data, [dataw, datah]);
-    }
-    if (advcali_data.length > 0) {
-        var advcali_str = "";
-        advcali_data.forEach(function(ele, idx) {
-            advcali_str += "(" + math_roundPlaces(ele[0], 1) + "&nbsp;,&nbsp;" + math_roundPlaces(ele[1], 1) + ")&nbsp;&nbsp; ";
-        });
-        if (advcali_tmp != null) {
-            advcali_str += "<br /><br />New Center: " + "(" + math_roundPlaces(advcali_tmp.coord[0], 1) + "&nbsp;,&nbsp;" + math_roundPlaces(advcali_tmp.coord[1], 1) + "), Radius: " + math_roundPlaces(advcali_tmp.avg, 1) + "&nbsp;&nbsp;, StDev: " + math_roundPlaces(advcali_tmp.stdev, 2);
+        if (advcali_data.length < 3) {
+            $("#btn_calibrate" ).button( "option", "disabled", true );
+            advcali_tmp1 = null;
+            advcali_tmp2 = null;
         }
-        document.getElementById("advcali_alldata").innerHTML = advcali_str;
-    }
-    else {
-        document.getElementById("advcali_alldata").innerHTML = "nothing";
-    }
+        else {
+            $("#btn_calibrate" ).button( "option", "disabled", false );
+            advcali_tmp1 = circle_fit(advcal_getCoords(advcali_data, "pole"), [dataw, datah]);
+            advcali_tmp2 = circle_fit(advcal_getCoords(advcali_data, "star"), [dataw, datah]);
+        }
 
-    document.getElementById("div_curcent").innerHTML = "X = " + math_roundPlaces(settings["center_x"], 1) + " , Y = " + math_roundPlaces(settings["center_y"], 1);
+        if (obj["solution"] && obj["star_x"] && obj["star_y"] && obj["pole_x"] && obj["pole_y"]) {
+            $("#btn_savecalpt" ).button( "option", "disabled", false );
+        }
+        else {
+            $("#btn_savecalpt" ).button( "option", "disabled", true );
+        }
 
-    draw_svg(obj, get_zoom(), needUiRefresh, false, jpgdata, ghost_results);
+        if (advcali_data.length > 0) {
+            $("#btn_clearcalpts" ).button( "option", "disabled", false );
+        }
+        else {
+            $("#btn_clearcalpts" ).button( "option", "disabled", true );
+        }
+    }
+    draw_svg(obj, get_zoom(), needUiRefresh, false, jpgdata, simpcali_results);
 
     needUiRefresh = false;
 }
 
-function validateGhost()
+function validateSimpleCalib()
 {
-    ghost_results = math_getGhostResults(lastStatus, ghost);
+    simpcali_results = math_getGhostResults(lastStatus, ghost);
     var canCalibrate = pre_ghost != null;
     var reason = "";
-    if (ghost_results != null)
+    if (simpcali_results != null)
     {
-        if (ghost_results.cent_x != null && ghost_results.cent_x != 0)
+        if (simpcali_results.cent_x != null && simpcali_results.cent_x != 0)
         {
             // being too off-center will make plate-solving much harder
-            if (ghost_results.cent_x < dataw * 0.33 || ghost_results.cent_x > dataw * 0.67) {
+            if (simpcali_results.cent_x < dataw * 0.33 || simpcali_results.cent_x > dataw * 0.67) {
                 canCalibrate = false;
                 reason = ", too off-center";
             }
-            if (ghost_results.cent_y < datah * 0.33 || ghost_results.cent_y > datah * 0.67) {
+            if (simpcali_results.cent_y < datah * 0.33 || simpcali_results.cent_y > datah * 0.67) {
                 canCalibrate = false;
                 reason = ", too off-center";
             }
@@ -455,7 +452,7 @@ function validateGhost()
             // we want the angle to be close to perpendicular
             // if there lines where parallel then there would be no solution
             // perfectly perpendicular lines would give a very accurate solution
-            if (math_isNear90Apart(ghost_results.angle, 70) == false) {
+            if (math_isNear90Apart(simpcali_results.angle, 70) == false) {
                 canCalibrate = false;
                 reason = ", angle not good";
             }
@@ -469,6 +466,14 @@ function validateGhost()
         reason = ", unable to calculate";
     }
     return [canCalibrate, reason];
+}
+
+function advcal_getCoords(data, key) {
+    var x = [];
+    data.forEach(function (ele, idx) {
+        x.push(ele[key]);
+    });
+    return x;
 }
 
 function updateTime() {
@@ -663,28 +668,57 @@ function awaitCamReset() {
     }
 }
 
-function demoGhost()
+function demoCalibration()
 {
-    var needGood = Math.random() < 0.5;
-    var tries = 0;
-    while (tries < 50)
+    if (ghost == null) {
+        alert("ERROR: cannot demo calibration without first data point");
+        return;
+    }
+    var v = math_getVector([ghost.star_x, ghost.star_y], [ghost.pole_x, ghost.pole_y]);
+    if (advcali_data.length == 1)
     {
-        var v = math_getVector([ghost.star_x, ghost.star_y], [ghost.pole_x, ghost.pole_y]);
-        ghost.star_x = Math.round((dataw * 0.2) + (Math.random() * dataw * 0.6));
-        ghost.star_y = Math.round((datah * 0.2) + (Math.random() * datah * 0.6));
-        var p = math_movePointTowards([ghost.star_x, ghost.star_y], [v[0], v[1] + (90.0 * (-1.5 + (Math.random() * 3.0)))]);
-        ghost.pole_x = Math.round(p[0]);
-        ghost.pole_y = Math.round(p[1]);
-        if (needGood) {
-            var vg = validateGhost();
-            if (vg[0]) {
+        console.log("demo calibration simple mode");
+        var needGood = Math.random() < 0.5;
+        var tries = 0;
+        while (tries < 50)
+        {
+            ghost.star_x = Math.round((dataw * 0.2) + (Math.random() * dataw * 0.6));
+            ghost.star_y = Math.round((datah * 0.2) + (Math.random() * datah * 0.6));
+            var p = math_movePointTowards([ghost.star_x, ghost.star_y], [v[0], v[1] + (90.0 * (-1.5 + (Math.random() * 3.0)))]);
+            ghost.pole_x = Math.round(p[0]);
+            ghost.pole_y = Math.round(p[1]);
+            var ncal = {pole: [ghost.pole_x, ghost.pole_y], star: [ghost.star_x, ghost.star_y]};
+            if (needGood) {
+                var vg = validateSimpleCalib();
+                if (vg[0]) {
+                    advcali_data.push(ncal);
+                    break;
+                }
+            }
+            else if (needGood == false && ghost.pole_x > 0 && ghost.pole_x < dataw && ghost.pole_y > 0 && ghost.pole_y < datah) {
+                advcali_data.push(ncal);
                 break;
             }
+            tries += 1;
         }
-        else if (needGood == false && ghost.pole_x > 0 && ghost.pole_x < dataw && ghost.pole_y > 0 && ghost.pole_y < datah) {
-            break;
+    }
+    else
+    {
+        console.log("demo calibration advanced mode");
+        var demo_x = Math.round((dataw * 0.2) + (Math.random() * dataw * 0.6));
+        var demo_y = Math.round((datah * 0.2) + (Math.random() * datah * 0.6));
+        var demo_r = Math.round((datah * 0.1) + (Math.random() * datah * 0.3));
+        var demo_cnt = 5 + Math.round(Math.random() * 15);
+        var demo_noise = 10;
+        advcali_data = [];
+        var i;
+        for (i = 0; i < demo_cnt; i++) {
+            var np = math_movePointTowards([demo_x, demo_y], [demo_r - (demo_noise / 2) + (Math.random() * demo_noise), Math.random() * 360]);
+            var ns = math_movePointTowards([demo_x, demo_y], [demo_r + v[0] - (demo_noise / 2) + (Math.random() * demo_noise), Math.random() * 360]);
+            var ncal = {pole: np, star: ns};
+            advcali_data.push(ncal);
         }
-        tries += 1;
+        refreshUi(null);
     }
 }
 
@@ -718,12 +752,12 @@ function makeSlider(id, minval, maxval, defval, stepval, slide_func)
 function onLoadAll()
 {
     document.getElementById("loading").style.display = "none";
+    $( "#top_ctrls" ).droppable();
     $( "#accordion" ).accordion({heightStyle: "content"});
 
-    $( "#fldset_zoom  input" ).checkboxradio();
+    $( "#span_zoomopts input" ).checkboxradio();
     $( "#viewmode-1").prop("checked", true).checkboxradio("refresh");
     $( "#fldset_speed input" ).checkboxradio();
-    $( "#speedmode-1").prop("checked", true).checkboxradio("refresh");
     $( "#chkrefraction-1" ).checkboxradio().prop("checked", settings["use_refraction"]).on("change", function () {
         var x = getLocation();
         var y = $( "#chkrefraction-1").prop("checked");
@@ -745,56 +779,22 @@ function onLoadAll()
         refreshUi(null);
     }).checkboxradio("refresh");
 
-    $( "#realmode-1" ).checkboxradio().on("change", function () {
-        var x = $( "#realmode-1").prop("checked");
-        console.log("realmode click " + x);
-        //if (x) {
-        //    $( "#viewmode-4").prop("checked", false).checkboxradio("refresh");
-        //    $( "#viewmode-3").prop("checked", false).checkboxradio("refresh");
-        //    $( "#viewmode-2").prop("checked", false).checkboxradio("refresh");
-        //    $( "#viewmode-1").prop("checked", true).checkboxradio("refresh");
-        //}
-        refreshUi(null);
-    });;
-
-    $("#btn_streamimg" ).button().click(function( event ) {
-        console.log("click btn_streamimg");
-        window.location.href = "/stream";
-    });
-
-    makeSlider("slider_gain_slow", 0, 128, settings["gain"], 8, function(obj, event, ui) {
-        console.log("slider_gain_slow: " + ui.value);
+    makeSlider("slider_gain", 0, 128, settings["gain"], 8, function(obj, event, ui) {
+        console.log("slider_gain: " + ui.value);
         settings["gain"] = ui.value;
         queueSettingsUpdate("gain");
         awaitCamReset();
     });
-    makeSlider("slider_shutter_slow", 0, 1500, settings["shutter"] / 1000, 100, function(obj, event, ui) {
-        console.log("slider_shutter_slow: " + ui.value);
+    makeSlider("slider_shutter", 0, 1500, settings["shutter"] / 1000, 100, function(obj, event, ui) {
+        console.log("slider_shutter: " + ui.value);
         settings["shutter"] = ui.value * 1000;
         queueSettingsUpdate("shutter");
         awaitCamReset();
     });
-    makeSlider("slider_thresh_slow", 0, 255, settings["thresh"], 1, function(obj, event, ui) {
-        console.log("slider_thresh_slow: " + ui.value);
+    makeSlider("slider_thresh", 0, 255, settings["thresh"], 1, function(obj, event, ui) {
+        console.log("slider_thresh: " + ui.value);
         settings["thresh"] = ui.value;
         queueSettingsUpdate("thresh");
-    });
-    makeSlider("slider_gain_fast", 0, 128, settings["gain_hs"], 8, function(obj, event, ui) {
-        console.log("slider_gain_fast: " + ui.value);
-        settings["gain_hs"] = ui.value;
-        queueSettingsUpdate("gain_hs");
-        awaitCamReset();
-    });
-    makeSlider("slider_shutter_fast", 0, 1500, settings["shutter_hs"] / 1000, 100, function(obj, event, ui) {
-        console.log("slider_shutter_fast: " + ui.value);
-        settings["shutter_hs"] = ui.value * 1000;
-        queueSettingsUpdate("shutter_hs");
-        awaitCamReset();
-    });
-    makeSlider("slider_thresh_fast", 0, 255, settings["thresh_hs"], 1, function(obj, event, ui) {
-        console.log("slider_thresh_fast: " + ui.value);
-        settings["thresh_hs"] = ui.value;
-        queueSettingsUpdate("thresh_hs");
     });
     makeSlider("slider_pressure", 500, 1100, 1010, 1, function(obj, event, ui) {
         console.log("slider_pressure: " + ui.value);
@@ -811,6 +811,11 @@ function onLoadAll()
         refreshUi(null);
     });
     document.getElementById("span_temperature").innerHTML = "10&deg;C";
+
+    $("#btn_streamimg" ).button().click(function( event ) {
+        console.log("click btn_streamimg");
+        window.location.href = "/stream";
+    });
 
     $("#btn_time_update" ).button().click(function( event ) {
         console.log("click btn_time_update");
@@ -841,44 +846,109 @@ function onLoadAll()
         refreshUi(null);
     });
 
-    $("#btn_regimg" ).button().click(function( event ) {
-        console.log("click btn_regimg");
-        ghost = pre_ghost;
+    $("#btn_savecalpt" ).button().click(function( event ) {
+        console.log("click btn_savecalpt");
 
-        var demo = false;
-        if (demo)
-        {
-            demoGhost();
+        if (lastStatus != null) {
+            if (lastStatus["solution"] && lastStatus["pole_x"] && lastStatus["pole_y"] && lastStatus["pole_x"] && lastStatus["pole_y"]) {
+                var np = [lastStatus["pole_x"], lastStatus["pole_y"]];
+                var ns = [lastStatus["star_x"], lastStatus["star_y"]];
+                var tooClose = false;
+                advcali_data.forEach(function(ele, idx){
+                    var v1 = math_getVector(np, ele.pole);
+                    var v2 = math_getVector(ns, ele.star);
+                    if (v1[0] < 5 && v2[0] < 5) {
+                        tooClose = true;
+                    }
+                });
+                var ncal = {pole: np, star: ns};
+                if (tooClose == false) {
+                    advcali_data.push(ncal);
+                    if (advcali_data.length <= 1) {
+                        ghost = {star_x: ns[0], star_y: ns[1], pole_x: np[0], pole_y: np[1]};
+                    }
+                    refreshUi(null);
+                }
+                else {
+                    alert("Error: calibration snapshot coordinate too close to existing coordinate, rotate more");
+                }
+            }
+            else {
+                alert("Error: need to identify Polaris for calibration");
+            }
+        }
+        else {
+            alert("Error: need to identify Polaris for calibration");
         }
 
         // calibrate button is enabled when the solution is checked against
         refreshUi(null);
     });
 
-    $("#btn_clearregimg").button().click(function( event ) {
-        console.log("click btn_clearregimg");
+    $("#btn_clearcalpts").button().click(function( event ) {
+        console.log("click btn_clearcalpts");
+        advcali_data = [];
         ghost = null;
-        pre_ghost = null;
         $("#btn_calibrate" ).button( "option", "disabled", true );
-        document.getElementById("div_caldata").innerHTML = "nothing";
         refreshUi(null);
     });
 
     $("#btn_calibrate").button().click(function( event ) {
         console.log("click btn_calibrate");
-        if (ghost_results != null)
+        var sendme = false;
+        if (advcali_data.length >= 3) {
+            advcali_tmp1 = circle_fit(advcal_getCoords(advcali_data, "pole"), [dataw, datah]);
+            advcali_tmp2 = circle_fit(advcal_getCoords(advcali_data, "star"), [dataw, datah]);
+            var use1 = false;
+            var use2 = false;
+            if (advcali_tmp1.avg > 150 && advcali_tmp1.stdev < 20) {
+                use1 = true;
+            }
+            if (advcali_tmp2.avg > 150 && advcali_tmp2.stdev < 20) {
+                use2 = true;
+            }
+
+            if (use1 && use2) {
+                var v = math_getVector(advcali_tmp1.coord, advcali_tmp2.coord);
+                if (v[0] > 20) {
+                    console.log("warning: calibration circles too far apart");
+                    if (advcali_tmp1.avg > advcali_tmp2.avg) {
+                        use2 = false;
+                    }
+                    else {
+                        use1 = false;
+                    }
+                }
+            }
+
+            if (use1 && use2) {
+                settings["center_x"] = (advcali_tmp1.coord[0] + advcali_tmp2.coord[0]) / 2;
+                settings["center_y"] = (advcali_tmp1.coord[1] + advcali_tmp2.coord[1]) / 2;
+                sendme = true;
+            }
+            else if (use1) {
+                settings["center_x"] = advcali_tmp1.coord[0];
+                settings["center_y"] = advcali_tmp1.coord[1];
+                sendme = true;
+            }
+            else if (use2) {
+                settings["center_x"] = advcali_tmp2.coord[0];
+                settings["center_y"] = advcali_tmp2.coord[1];
+                sendme = true;
+            }
+            else {
+                alert("ERROR: bad data for calibration!");
+            }
+        }
+        else if (simpcali_results != null)
         {
-            if (ghost_results.cent_x != 0 && ghost_results.cent_x != null && ghost_results.cent_y != 0 && ghost_results.cent_y != null)
+            if (simpcali_results.cent_x != 0 && simpcali_results.cent_x != null && simpcali_results.cent_y != 0 && simpcali_results.cent_y != null)
             {
-                if (math_isNear90Apart(ghost_results.angle, 70))
+                if (math_isNear90Apart(simpcali_results.angle, 70))
                 {
-                    settings["center_x"] = ghost_results.cent_x;
-                    settings["center_y"] = ghost_results.cent_y;
-                    queueSettingsUpdate("center_x");
-                    queueSettingsUpdate("center_y");
-                    document.getElementById("txt_override_center_x").setAttribute("value", math_roundPlaces(settings["center_x"], 1));
-                    document.getElementById("txt_override_center_y").setAttribute("value", math_roundPlaces(settings["center_y"], 1));
-                    alert("calibration done!");
+                    settings["center_x"] = simpcali_results.cent_x;
+                    settings["center_y"] = simpcali_results.cent_y;
+                    sendme = true;
                 }
                 else
                 {
@@ -891,6 +961,13 @@ function onLoadAll()
         }
         else {
             alert("ERROR: no solution for calibration!");
+        }
+        if (sendme) {
+            queueSettingsUpdate("center_x");
+            queueSettingsUpdate("center_y");
+            document.getElementById("txt_override_center_x").setAttribute("value", math_roundPlaces(settings["center_x"], 1));
+            document.getElementById("txt_override_center_y").setAttribute("value", math_roundPlaces(settings["center_y"], 1));
+            alert("calibration done!");
         }
         refreshUi(null);
     });
@@ -994,66 +1071,15 @@ function onLoadAll()
         }
     });
 
-    $("#btn_enable_advcali").button().click(function() {
-        document.getElementById("btn_enable_advcali_div").style.display = "none";
-        document.getElementById("adv_cali").style.display = "block";
-    });
-    $("#btn_advcali_snapshot").button().click(function() {
-        if (lastStatus != null) {
-            if (lastStatus["solution"] && lastStatus["pole_x"] && lastStatus["pole_y"]) {
-                var np = [lastStatus["pole_x"], lastStatus["pole_y"]];
-                var tooClose = false;
-                advcali_data.forEach(function(ele,idx){
-                    var v = math_getVector(np, ele);
-                    if (v[0] < 2) {
-                        tooClose = true;
-                    }
-                });
-                if (tooClose == false) {
-                    advcali_data.push(np);
-                    refreshUi(null);
-                }
-                else {
-                    alert("Error: NCP snapshot coordinate too close to existing coordinate, rotate more");
-                }
-            }
-        }
-    });
-    $("#btn_advcali_clear").button().click(function() {
-        advcali_data = [];
-        refreshUi(null);
-    });
-    $("#btn_advcali_calibrate").button().click(function() {
-        if (advcali_data.length >= 3) {
-            advcali_tmp = circle_fit(advcali_data, [dataw, datah]);
-            refreshUi(null);
-            settings["center_x"] = advcali_tmp.coord[0];
-            settings["center_y"] = advcali_tmp.coord[1];
-            queueSettingsUpdate("center_x");
-            queueSettingsUpdate("center_y");
-            alert("new center coordinates set!");
-        }
-    });
-    $("#btn_advcali_demo").button().click(function() {
-        var demo_x = Math.round((dataw * 0.2) + (Math.random() * dataw * 0.6));
-        var demo_y = Math.round((datah * 0.2) + (Math.random() * datah * 0.6));
-        var demo_r = Math.round((datah * 0.1) + (Math.random() * datah * 0.3));
-        var demo_cnt = 5 + Math.round(Math.random() * 15);
-        var demo_noise = 10;
-        advcali_data = [];
-        var i;
-        for (i = 0; i < demo_cnt; i++) {
-            var np = math_movePointTowards([demo_x, demo_y], [demo_r - (demo_noise / 2) + (Math.random() * demo_noise), Math.random() * 360]);
-            advcali_data.push(np);
-        }
-        refreshUi(null);
-    });
-
     document.getElementById("txt_location").onchange = function() {
         getLocation(); // just to validate and colorize
         computeRefraction();
         refreshUi(null);
     };
+
+    $( "#chkturnonled-1" ).checkboxradio().prop("checked", true).on("change", function () {
+        // TODO
+    }).checkboxradio("refresh");
 
     $(window).on('resize', function(e) {
         needUiRefresh = true; // this will force a re-scaling of the drawn view
@@ -1076,6 +1102,25 @@ function onLoadAll()
 <div style="width:100%"><fieldset style="padding-top: 1em;"><legend>OpenMV PolarScope</legend><div id="viewme" style="display: inline-block; width:100%; padding: 0 0 0 0; margin: 0 0 0 0;"><div id="viewmejpeg" style="position: relative; z-index: 1"></div><div id="viewmesvg" style="position: relative; z-index: 2; top: 0; left: 0;">&nbsp;&nbsp;Please wait for image...</div>
 </div></fieldset></div>
 
+<div id="top_ctrls">
+    <div><fieldset id="fldset_zoom"><legend>Zoom</legend>
+        <span id="span_zoomopts">
+        <label for="viewmode-1">1x</label>
+        <input type="radio" name="viewmode-1" id="viewmode-1" />
+        <label for="viewmode-2">2x</label>
+        <input type="radio" name="viewmode-1" id="viewmode-2" />
+        <label for="viewmode-3">4x</label>
+        <input type="radio" name="viewmode-1" id="viewmode-3" />
+        <label for="viewmode-4">8x</label>
+        <input type="radio" name="viewmode-1" id="viewmode-4" /></span>
+        <button id="btn_streamimg">Stream Image Full Screen</button>
+    </fieldset></div>
+
+    <div><fieldset id="fldset_centcali"><legend>Center Calibration</legend>
+        <button id="btn_savecalpt">Save Cal. Pt.</button>&nbsp;&nbsp;<button id="btn_calibrate">Calibrate</button>&nbsp;&nbsp;<button id="btn_clearcalpts">Clear Cal. Pts.</button>
+    </fieldset></div>
+</div>
+
 <div id="connection_lost" class="ui-widget" style="display: none;"><div id="connection_lost_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p>Connection LOST! Attempting to re-establish...</p></div></div>
 <div id="memory_error" class="ui-widget" style="display: none;"><div id="memory_error_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p>INTERNAL MEMORY ERROR! Please check the camera exposure settings!</p></div></div>
 <div id="camera_hardware_error" class="ui-widget" style="display: none;"><div id="camera_hardware_error_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p>CAMERA HARDWARE ERROR! Please check the camera exposure settings.<br />Lower the shutter time.<br />Do a full power-off-power-on reset if the problem is not solved.</p></div></div>
@@ -1083,29 +1128,29 @@ function onLoadAll()
 <div id="low_confidence_warning" class="ui-widget" style="display: none;"><div id="low_confidence_warning_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p>Warning: Polaris identified but with low confidence. <span id="low_confidence"></span></p></div></div>
 
 <div id="accordion">
-  <h3>View Mode</h3>
+  <h3 id="title_platesolve">Welcome</h3>
   <div>
-    <div><fieldset id="fldset_zoom"><legend>Zoom</legend><form>
-    <label for="viewmode-1">1x</label>
-    <input type="radio" name="viewmode-1" id="viewmode-1" />
-    <label for="viewmode-2">2x</label>
-    <input type="radio" name="viewmode-1" id="viewmode-2" />
-    <label for="viewmode-3">4x</label>
-    <input type="radio" name="viewmode-1" id="viewmode-3" />
-    <label for="viewmode-4">8x</label>
-    <input type="radio" name="viewmode-1" id="viewmode-4" />
-    </form></fieldset></div>
-    <div><fieldset id="fldset_speed"><legend>Speed</legend><form>
-    <label for="speedmode-1">Normal</label>
-    <input type="radio" name="speedmode-1" id="speedmode-1" />
-    <label for="speedmode-2">Fast</label>
-    <input type="radio" name="speedmode-1" id="speedmode-2" />
-    </form></fieldset></div>
-    <p><label for="realmode-1">Real Image</label>
-    <input type="checkbox" name="realmode-1" id="realmode-1" /><button id="btn_streamimg">Stream Image Full Screen</button></p>
-    <p>The normal mode will identify Polaris and the position of the North Celestial Pole (NCP) by pattern-matching the stars around it. The fast mode will assume the brightest star is Polaris, and track the NCP using previous data, making it easy to make adjustments on your mount.</p>
-    <p>The real image mode is used to check exposure and focus. Note that the image is processed at a high resolution (for precise polar alignment) but is transmitted at a low quality (for faster WiFi file transfer speed).</p>
-    <p>For the most precise alignment, please use the available zoom level buttons, not finger-pinch.</p>
+    <p>The image above shows the stars. If the star Polaris is detected, it will show up as a green dot, and a red target will appear at where the North Celestial Pole is. The yellow cross-hair is where the camera is pointed at. To achieve polar alignment, adjust your mount until the yellow cross-hair is in the center of the red target.</p>
+    <p>Use the zoom function to achieve greater precision. Use the image stream to adjust focus. If stars are not detected properly, adjust the camera exposure settings (see below).</p>
+    <p>The camera center point (the yellow cross-hair position) must be calibrated if the camera is removed from the mount. For trackers like the Star Adventurer and SkyGuider, this means you need to recalibrate every night. For go-to equatorial mounts, you only need to calibrate when you attach the camera to the mount.</p>
+    <p>There's a blinking LED on the camera that you may turn off if it gets too annoying.</p>
+    <p><label for="chkturnonled-1">Turn ON LED?</label>
+    <input type="checkbox" name="chkturnonled-1" id="chkturnonled-1"></p>
+  </div>
+  <h3>Camera Exposure</h3>
+  <div>
+    <div><fieldset><legend>Statistics</legend>
+    <div id="div_histogram"></div>
+    </fieldset></div>
+    <div><fieldset><legend>Gain: <span id="slider_gain_handle"></span> dB</legend>
+        <div id="slider_gain"></div>
+    </fieldset></div>
+    <div><fieldset><legend>Shutter: <span id="slider_shutter_handle"></span> ms</legend>
+        <div id="slider_shutter"></div>
+    </fieldset></div>
+    <div><fieldset><legend>Star Threshold: <span id="slider_thresh_handle"></span>/255</legend>
+        <div id="slider_thresh"></div>
+    </fieldset></div>
   </div>
   <h3 id="title_platesolve">Plate Solve</h3>
   <div>
@@ -1114,36 +1159,15 @@ function onLoadAll()
     <p><button id="btn_platesolve">Plate Solve</button><button id="btn_platesolvehalt">Stop</button></p>
     <div><fieldset><legend>Solution</legend><div id="div_platesolvesolution"></div></fieldset></div>
   </div>
-  <h3>Center Calibration</h3>
+  <h3>Center Calibration Help</h3>
   <div>
-    <div id="normal_calibration">
-    <p>The center of the camera view may not be perfectly aligned with the center-of-rotation of your star tracker. Two images of Polaris is required to calibrate the center-of-rotation. For the best result, the two images should be rotated about 90&deg; apart.</p>
-    <p>To start, rotate your star tracker's Right-Ascension (RA) to a position towards the west. Register the data by clicking the "Register Image Data" button when you are satisfied. Then, rotate your star tracker's RA about 90&deg; towards the east. Click the "calibrate" button when you are satisfied.</p>
+    <p>The center of the camera view may not be perfectly aligned with the center-of-rotation of your star tracker. At least two images of Polaris is required to calibrate the center-of-rotation. For a quick calibration, the two images should be rotated about 90&deg; apart. For a more precise calibration, use many points that encompass an entire circle.</p>
+    <p>To start, rotate your star tracker's Right-Ascension (RA) to a position towards the west. Register the data by clicking the "Save Cal. Pt." button when you are satisfied. Then, rotate your star tracker's RA towards the east, and click the "Save Cal. Pt." button again to add a new data-point. The display will show the saved points and estimated new calibration (shown in blue). Click the "calibrate" button when you are satisfied.</p>
     <p>Avoid using your hands to make these movements, use electronic control if possible. Do not move your tripod or adjust your mount during these movements. If the center-of-rotation is too far away from the center-of-view, you may need to adjust the mounting of the camera.</p>
-    <div><fieldset id="fldset_curcent"><legend>Current Center Point</legend>
-        <div id="div_curcent">nothing yet</div>
-    </fieldset></div>
-    <div><fieldset id="fldset_curdata"><legend>Current Image Data</legend>
-        <div id="div_curdata">nothing yet</div>
-    </fieldset></div>
-    <div><fieldset id="fldset_caldata"><legend>Registered Data</legend>
-        <div id="div_caldata">nothing yet</div>
-    </fieldset></div>
-    <div><button id="btn_regimg">Register Image Data</button>&nbsp;&nbsp;<button id="btn_calibrate">Calibrate</button>&nbsp;&nbsp;<button id="btn_clearregimg">Clear Data</button></div>
-    <br />
-    <br />
-    </div>
+    <p>The calibration algorithm actually works better if you are not already polar-aligned while saving the calibration points. The points you save will form a curve, and it's better if this curve is larger, at least it needs some room for a decent circle to exist.</p>
     <div><fieldset><legend>Manual Override Center</legend>
-        <div>USE WITH CAUTION! Specify a particular coordinate for the center point<br />X:&nbsp;<input type="number" name="txt_override_center_x" id="txt_override_center_x" style="width: 50%;" min="0" max="4000" step="0.1"/><br />Y:&nbsp;<input type="number" name="txt_override_center_y" id="txt_override_center_y" style="width: 50%;" min="0" max="4000" step="0.1" /><br /><button id="btn_override_center">Override</button></div>
+        <div>USE WITH CAUTION! Specify a particular coordinate for the center point<div style="font-family:monospace;">X:&nbsp;<input type="number" name="txt_override_center_x" id="txt_override_center_x" style="width: 50%;" min="0" max="4000" step="0.1"/><br />Y:&nbsp;<input type="number" name="txt_override_center_y" id="txt_override_center_y" style="width: 50%;" min="0" max="4000" step="0.1" /></div><div><button id="btn_override_center">Override</button></div></div>
     </fieldset></div>
-    <div id="btn_enable_advcali_div"><br /><br /><button id="btn_enable_advcali">Enable Advanced Calibration?</button></div>
-    <div id="adv_cali" style="display: none;">
-        <div>
-            <h3>Advanced Calibration:</h3><p>Snapshot a bunch of coordinates, which will be used to calculate a circle-of-best-fit. While keeping Polaris in the view, rotate the R.A. axis a little bit before each snapshot. Use electronic slewing if possible. The best results have many snapshots that make up an entire circle.</p>
-            <p><fieldset><legend>Collected Data</legend><p id="advcali_alldata">nothing</p><p><button id="btn_advcali_snapshot">Snapshot</button><button id="btn_advcali_clear">Clear Data</button></p></fieldset></p>
-            <p><button id="btn_advcali_calibrate">Calibrate (advanced)</button><span style="display:none;"><button id="btn_advcali_demo">Random Demo</button></span></p>
-        </div>
-    </div>
   </div>
   <h3>Time and Location</h3>
   <div>
@@ -1157,30 +1181,6 @@ function onLoadAll()
     <p><label for="chkrefraction-1">Apply Refraction Compensation?</label>
     <input type="checkbox" name="chkrefraction-1" id="chkrefraction-1"></p>
     <p id="refraction_info"></p>
-  </div>
-  <h3>Camera Exposure</h3>
-  <div>
-    <div><fieldset><legend>Statistics</legend>
-    <div id="div_histogram"></div>
-    </fieldset></div>
-    <div><fieldset><legend>Gain - Slow Mode: <span id="slider_gain_slow_handle"></span> dB</legend>
-        <div id="slider_gain_slow"></div>
-    </fieldset></div>
-    <div><fieldset><legend>Shutter - Slow Mode: <span id="slider_shutter_slow_handle"></span> ms</legend>
-        <div id="slider_shutter_slow"></div>
-    </fieldset></div>
-    <div><fieldset><legend>Star Threshold - Slow Mode: <span id="slider_thresh_slow_handle"></span>/255</legend>
-        <div id="slider_thresh_slow"></div>
-    </fieldset></div>
-    <div><fieldset><legend>Gain - Fast Mode: <span id="slider_gain_fast_handle"></span> dB</legend>
-        <div id="slider_gain_fast"></div>
-    </fieldset></div>
-    <div><fieldset><legend>Shutter - Fast Mode: <span id="slider_shutter_fast_handle"></span> ms</legend>
-        <div id="slider_shutter_fast"></div>
-    </fieldset></div>
-    <div><fieldset><legend>Star Threshold - Fast Mode: <span id="slider_thresh_fast_handle"></span>/255</legend>
-        <div id="slider_thresh_fast"></div>
-    </fieldset></div>
   </div>
   <h3>Hot Pixels</h3>
   <div>
