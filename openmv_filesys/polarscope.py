@@ -157,6 +157,7 @@ class PolarScope(object):
             state.update({"pole_x": stable_solution.x})
             state.update({"pole_y": stable_solution.y})
             state.update({"rotation": stable_solution.get_rotation()})
+            state.update({"polaris_ra": (stable_solution.polaris_ra_dec[0] * 360.0) / 24.0})
             state.update({"pix_per_deg": stable_solution.pix_per_deg})
         else:
             state.update({"solution": False})
@@ -447,17 +448,11 @@ class PolarScope(object):
             if self.solution.solve(self.time_mgr.get_polaris()):
                 self.solu_dur = pyb.elapsed_millis(self.t) # debug solution speed
                 self.solution.accel_sec = self.accel_sec
-                accept = True
-                if accept:
-                    self.solution.get_pole_coords() # this caches x and y
-                    if self.stable_solution() is not None:
-                        if self.debug and prev_sol is None:
-                            print("new solution! matched %u, penalty %u" % (len(self.solution.stars_matched), self.solution.penalty))
-                    return True
-                else:
-                    # too much movement, invalidate all solutions
-                    self.invalidate_solutions()
-                    return False
+                self.solution.get_pole_coords() # this caches x and y
+                if self.stable_solution() is not None:
+                    if self.debug and prev_sol is None:
+                        print("new solution! matched %u, penalty %u" % (len(self.solution.stars_matched), self.solution.penalty))
+                return True
             else:
                 # no solution means invalidate all solutions
                 self.invalidate_solutions()
@@ -585,8 +580,8 @@ class PolarScope(object):
                 self.snap_millis = pyb.millis()
 
 def main(debug = False):
-    polarscope = PolarScope(debug = True, simulate_file = "polaris_rot.bmp")
-    #polarscope = PolarScope(debug = True)
+    #polarscope = PolarScope(debug = True, simulate_file = "polaris_rot.bmp")
+    polarscope = PolarScope(debug = True)
     while True:
         try:
             polarscope.task()

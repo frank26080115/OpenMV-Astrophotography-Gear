@@ -144,6 +144,11 @@ function math_getGhostResults(obj, ghost)
     if (ghost === null || ghost === false) {
         return null;
     }
+    var v1 = math_getVector([obj["star_x"], obj["star_y"]], [ghost["star_x"], ghost["star_y"]]);
+    var v2 = math_getVector([obj["pole_x"], obj["pole_y"]], [ghost["pole_x"], ghost["pole_y"]]);
+    if (v1[0] < 8 && v2[0] < 8) {
+        return null;
+    }
     var res = { star_x: obj["star_x"], star_y: obj["star_y"],
                 pole_x: obj["pole_x"], pole_y: obj["pole_y"],
                 ghost_sx: ghost["star_x"], ghost_sy: ghost["star_y"],

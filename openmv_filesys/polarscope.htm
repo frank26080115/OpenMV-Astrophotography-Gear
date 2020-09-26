@@ -47,9 +47,6 @@ var advcali_data = [];
 var advcali_tmp1 = null;
 var advcali_tmp2 = null;
 
-var jpgdata = false;
-var prev_jpg = -1;
-
 var hotpixels = [];
 
 var loadTries = 0;
@@ -110,48 +107,6 @@ function loadSettingsFailed()
     loadSettings(0);
 }
 
-function startLoadJpeg(t)
-{
-    loadJpeg();
-    if (t < 500) {
-        t = 500;
-    }
-    setTimeout(() => { startStatusUpdate(); }, t);
-}
-
-/*
-I did attempt to use AJAX to load the JPEG but it doesn't work
-The AJAX would actually complete but it would give an error
-It has trouble parsing the binary data as text
-The data is available but there's no way to convert it into base64
-
-Also I've attempted to send over the JPEG data as base64
-but this requires a lot more memory on the microcontroller
-and streaming it in chunks is extremely slow
-
-So for now, the best solution is to just use a plain <img> tag
-with a URL that prevents caching
-*/
-
-function loadJpeg()
-{
-    var divele = document.getElementById("viewmejpeg");
-    var jpegele = document.createElement("img");
-    var d = get_draw_scale(1, false);
-    jpegele.setAttribute("id", "jpegele");
-    jpegele.setAttribute("src", "/getimg.jpg?t=" + updateTime()); // the query string forces the browser to not cache the request
-    var imgw = d[2];
-    var imgh = d[3];
-    jpegele.style.width = imgw + "px";
-    jpegele.style.height = imgh + "px";
-    jpegele.style.opacity = "1.0";
-    while (divele.firstChild) {
-        divele.removeChild(divele.firstChild);
-    }
-    divele.appendChild(jpegele);
-    jpgdata = true;
-}
-
 function startSendSettings()
 {
     var i, ql = updateQueue.length;
@@ -205,17 +160,7 @@ function startSendSettings()
 
 function startStatusUpdate() {
     var qstr = "";
-    if ($( "#realmode-1").prop("checked")) {
-        qstr += "packjpeg=true&";
-    }
-    else {
-        qstr += "packjpeg=false&";
-        var divele = document.getElementById("viewmejpeg");
-        while (divele.firstChild) {
-            divele.removeChild(divele.firstChild);
-        }
-        jpgdata = false;
-    }
+
     qstr += "zoom=" + get_zoom().toString() + "&";
 
     if (timeAccel != 0) {
@@ -267,11 +212,6 @@ function endStatusUpdate(obj) {
     if (updateQueue.length > 0)
     {
         startSendSettings();
-    }
-    else if ($( "#realmode-1").prop("checked") && prev_jpg != obj["frm_cnt"])
-    {
-        prev_jpg = obj["frm_cnt"];
-        startLoadJpeg(nextSts);
     }
     else {
         setTimeout(() => { startStatusUpdate(); }, nextSts);
@@ -425,7 +365,7 @@ function refreshUi(obj)
             $("#btn_clearcalpts" ).button( "option", "disabled", true );
         }
     }
-    draw_svg(obj, get_zoom(), needUiRefresh, false, jpgdata, simpcali_results);
+    draw_svg(obj, get_zoom(), needUiRefresh, false, simpcali_results);
 
     needUiRefresh = false;
 }
@@ -1099,7 +1039,7 @@ function onLoadAll()
 <div id="loading_almost" style="display:none;"><h2>OpenMV PolarScope</h2><br /><h2>Settings loaded! Waiting for star data...</h2></div>
 <div id="showme" style="display:none;">
 
-<div style="width:100%"><fieldset style="padding-top: 1em;"><legend>OpenMV PolarScope</legend><div id="viewme" style="display: inline-block; width:100%; padding: 0 0 0 0; margin: 0 0 0 0;"><div id="viewmejpeg" style="position: relative; z-index: 1"></div><div id="viewmesvg" style="position: relative; z-index: 2; top: 0; left: 0;">&nbsp;&nbsp;Please wait for image...</div>
+<div style="width:100%"><fieldset style="padding-top: 1em;"><legend>OpenMV PolarScope</legend><div id="viewme" style="display: inline-block; width:100%; padding: 0 0 0 0; margin: 0 0 0 0;"><div id="viewmesvg" style="top: 0; left: 0; display: block;">&nbsp;&nbsp;Please wait for image...</div>
 </div></fieldset></div>
 
 <div id="top_ctrls">

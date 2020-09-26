@@ -39,14 +39,10 @@ function get_zoom()
     return zoom;
 }
 
-function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, simpcali_results)
+function draw_svg(obj, zoom, need_reload, scale_vert, simpcali_results)
 {
     var wrapdiv = document.getElementById("viewme");
     var imgdiv = document.getElementById("viewmesvg");
-    var jpegdiv = document.getElementById("viewmejpeg");
-    var jpegele = document.getElementById("imgjpeg");
-
-    var hasjpg = (jpgdata === false || jpgdata === null || jpgdata === undefined) == false;
 
     var stars = obj["stars"];
 
@@ -108,25 +104,8 @@ function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, simpcali_results)
     //imgdiv.style.height  = imgh + "px";
     imgdiv.style.top  = "-" + imgh + "px";
     wrapdiv.style.height = imgh + "px";
-    jpegdiv.style.height = imgh + "px";
 
     var cirele;
-
-    if (jpegele != null && jpegele != undefined)
-    {
-        if (hasjpg) {
-            jpegele.style.width = imgw + "px";
-            jpegele.style.height = imgh + "px";
-            jpegele.style.opacity = "1.0";
-        }
-        else {
-            var divele = document.getElementById("viewmejpeg");
-            while (divele.firstChild) {
-                divele.removeChild(divele.firstChild);
-            }
-            jpegele.style.opacity = "0.0";
-        }
-    }
 
     svgele.setAttribute("id", "imgsvg");
     svgele.setAttribute("width", imgw);
@@ -135,17 +114,15 @@ function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, simpcali_results)
     svgele.setAttribute("xmlns", "http://www.w3.org/2000/svg");
     svgele.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
 
-    if (hasjpg == false) {
-        // draw a background rectangle that represents the background colour
-        var bgrect = document.createElementNS(svgNS, "rect");
-        bgrect.setAttribute("width", imgw);
-        bgrect.setAttribute("height", imgh);
-        bgrect.setAttribute("x", 0);
-        bgrect.setAttribute("y", 0);
-        var bgc = Math.round(obj["img_mean"] * 0.9).toString();
-        bgrect.setAttribute("style", "fill:rgb(" + bgc + "," + bgc + "," + bgc + ");stroke:none;");
-        svgele.appendChild(bgrect);
-    }
+    // draw a background rectangle that represents the background colour
+    var bgrect = document.createElementNS(svgNS, "rect");
+    bgrect.setAttribute("width", imgw);
+    bgrect.setAttribute("height", imgh);
+    bgrect.setAttribute("x", 0);
+    bgrect.setAttribute("y", 0);
+    var bgc = Math.round(obj["img_mean"] * 0.9).toString();
+    bgrect.setAttribute("style", "fill:rgb(" + bgc + "," + bgc + "," + bgc + ");stroke:none;");
+    svgele.appendChild(bgrect);
 
     var maxr = 0; // find the biggest star, used for other things later
     var minr = 9999;
@@ -158,57 +135,54 @@ function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, simpcali_results)
         }
     });
 
-    if (hasjpg == false)
-    {
-        // draw each star
-        stars.forEach(function(ele, idx) {
-            var cx = ele["cx"];
-            var cy = ele["cy"];
+    // draw each star
+    stars.forEach(function(ele, idx) {
+        var cx = ele["cx"];
+        var cy = ele["cy"];
 
-            var ishot = checkHotPixel(ele);
-            if (ishot == false)
+        var ishot = checkHotPixel(ele);
+        if (ishot == false)
+        {
+            var drawn_rad = math_mapStarRadius(ele["r"], minr, maxr, imgh);
+            cirele = document.createElementNS(svgNS, "circle");
+            cirele.setAttribute("cx", Math.round((cx / imgscale) - offset_x));
+            cirele.setAttribute("cy", Math.round((cy / imgscale) - offset_y));
+            cirele.setAttribute("r", drawn_rad);
+            cirele.setAttribute("style", "fill:rgb(255,255,255);stroke:none;");
+            cirele.setAttribute("onclick", "star_onclick(" + cx + ", " + cy + ");");
+            svgele.appendChild(cirele);
+
+            // draw one that's bigger so that it's easier to click
+            // check distance to another nearby star to make sure we don't draw an overlapping clickable circle
+            var mindist = -1;
+            stars.forEach(function(ele2, idx2) {
+                if (idx == idx2) {
+                    return;
+                }
+                v = math_getVector([ele["cx"],ele["cy"]], [ele2["cx"],ele2["cy"]]);
+                if (mindist < 0 || v[0] < mindist) {
+                    mindist = v[0];
+                }
+            });
+            mindist = mindist / imgscale / 2;
+
+            // establish minimum and maximum size of 
+            if (mindist > drawn_rad)
             {
-                var drawn_rad = math_mapStarRadius(ele["r"], minr, maxr, imgh);
+                drawn_rad = mindist;
+                if (drawn_rad > imgh / 20) {
+                    drawn_rad = imgh / 20;
+                }
                 cirele = document.createElementNS(svgNS, "circle");
                 cirele.setAttribute("cx", Math.round((cx / imgscale) - offset_x));
                 cirele.setAttribute("cy", Math.round((cy / imgscale) - offset_y));
                 cirele.setAttribute("r", drawn_rad);
-                cirele.setAttribute("style", "fill:rgb(255,255,255);stroke:none;");
+                cirele.setAttribute("style", "fill:rgb(255,255,255, 0.001);stroke:none;");
                 cirele.setAttribute("onclick", "star_onclick(" + cx + ", " + cy + ");");
                 svgele.appendChild(cirele);
-
-                // draw one that's bigger so that it's easier to click
-                // check distance to another nearby star to make sure we don't draw an overlapping clickable circle
-                var mindist = -1;
-                stars.forEach(function(ele2, idx2) {
-                    if (idx == idx2) {
-                        return;
-                    }
-                    v = math_getVector([ele["cx"],ele["cy"]], [ele2["cx"],ele2["cy"]]);
-                    if (mindist < 0 || v[0] < mindist) {
-                        mindist = v[0];
-                    }
-                });
-                mindist = mindist / imgscale / 2;
-
-                // establish minimum and maximum size of 
-                if (mindist > drawn_rad)
-                {
-                    drawn_rad = mindist;
-                    if (drawn_rad > imgh / 20) {
-                        drawn_rad = imgh / 20;
-                    }
-                    cirele = document.createElementNS(svgNS, "circle");
-                    cirele.setAttribute("cx", Math.round((cx / imgscale) - offset_x));
-                    cirele.setAttribute("cy", Math.round((cy / imgscale) - offset_y));
-                    cirele.setAttribute("r", drawn_rad);
-                    cirele.setAttribute("style", "fill:rgb(255,255,255, 0.001);stroke:none;");
-                    cirele.setAttribute("onclick", "star_onclick(" + cx + ", " + cy + ");");
-                    svgele.appendChild(cirele);
-                }
             }
-        });
-    }
+        }
+    });
 
     if (platesolve_start_x > 0 && platesolve_start_y > 0)
     {
@@ -236,28 +210,23 @@ function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, simpcali_results)
     cline.setAttribute("style", "stroke:yellow;stroke-width:1");
     svgele.appendChild(cline);
 
-    var hassol = false;
-
     if (obj["solution"])
     {
         if (obj["star_x"] && obj["star_y"] && obj["pole_x"] && obj["pole_y"])
         {
             // we need to draw the matched stars even though the stars have already been draw
             // this will prevent hot pixels from hiding an important star
-            if (hasjpg == false && obj["highspeed"] == false)// && hotpixels.length > 0)
-            {
-                var solstars = obj["solution"]["matches"];
-                solstars.forEach(function(ele, idx) {
-                    var cx = ele["cx"];
-                    var cy = ele["cy"];
-                    var cirele = document.createElementNS(svgNS, "circle");
-                    cirele.setAttribute("cx", Math.round((cx / imgscale) - offset_x));
-                    cirele.setAttribute("cy", Math.round((cy / imgscale) - offset_y));
-                    cirele.setAttribute("r", math_mapStarRadius(ele["r"], minr, maxr, imgh));
-                    cirele.setAttribute("style", "fill:rgb(255,255,128);stroke:none;");
-                    svgele.appendChild(cirele);
-                });
-            }
+            var solstars = obj["solution"]["matches"];
+            solstars.forEach(function(ele, idx) {
+                var cx = ele["cx"];
+                var cy = ele["cy"];
+                var cirele = document.createElementNS(svgNS, "circle");
+                cirele.setAttribute("cx", Math.round((cx / imgscale) - offset_x));
+                cirele.setAttribute("cy", Math.round((cy / imgscale) - offset_y));
+                cirele.setAttribute("r", math_mapStarRadius(ele["r"], minr, maxr, imgh));
+                cirele.setAttribute("style", "fill:rgb(255,255,128);stroke:none;");
+                svgele.appendChild(cirele);
+            });
 
             var sc_x = obj["star_x"];
             var sc_y = obj["star_y"];
@@ -303,13 +272,14 @@ function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, simpcali_results)
                 len = maxr;
             }
 
+            var levelRotation = obj["rotation"] + obj["polar_clock"];
+
             if ($( "#chkrefraction-1").prop("checked") && refraction != null && refraction != false)
             {
                 // if we need to shift the target to compenssate for refraction
                 // then we need to account for the camera rotation vs the polar clock
-                var refractionRotation = obj["rotation"] - obj["polar_clock"];
                 // with this rotation accounted for, we know which direction to shift the target
-                var movedP = math_movePointTowards([px, py], [refraction[0] * obj["pix_per_deg"] / imgscale, refractionRotation + 90.0]);
+                var movedP = math_movePointTowards([px, py], [refraction[0] * obj["pix_per_deg"] / imgscale, levelRotation + 90.0]);
                 px = movedP[0];
                 py = movedP[1];
             }
@@ -396,7 +366,6 @@ function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, simpcali_results)
             }
 
             var drawLevel = true;
-            var levelRotation = obj["rotation"] - obj["polar_clock"];
             if (drawLevel)
             {
                 draw_level(30, [31, 31], levelRotation, svgele);
@@ -404,7 +373,7 @@ function draw_svg(obj, zoom, need_reload, scale_vert, jpgdata, simpcali_results)
         }
     }
 
-    if (ghost != null && ghost != false)
+    if (ghost != null && ghost != false && advcali_data.length <= 1)
     {
         // this draws the ghost star positions
         var gcir = document.createElementNS(svgNS, "circle");
