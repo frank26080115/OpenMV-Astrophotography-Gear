@@ -241,6 +241,8 @@ Here it is in action on the screen:
 
 When the user accepts the new location, the yellow crosshair will move to where the blue lines intersect.
 
+There is a secondary calibration mode that uses multiple points. When more points are registered, a circle-of-best-fit is calculated, and the center of the circle can be used as the new calibrated crosshair.
+
 Axis Wobble
 ===========
 
@@ -329,11 +331,6 @@ When the weather got hot, I faced a new problem. The camera started seeing stars
 
 The simple solution is to just add a button that makes the device remember where the hot pixels are. They can be removed from the image later. In my implementation, the hot pixels are still used during the image processing, but if the pixel is not a part of a pattern match, then it is removed from the visible image.
 
-Fast Mode
-=========
-
-Fast mode, or high-framerate mode, I added because you don't want to wait 1.5 seconds when you make a physical adjustment to the mount. But with a shorter shutter time, the camera wouldn't be able to see enough stars to identify Polaris. So when the user switches to fast mode, the firmware remembers the previous solution, then it simply assumes the brightest star in view is still Polaris, applying the previously calculated offset from the true North Celestial Pole to the brightest star.
-
 3D Printed Base Plate
 =====================
 
@@ -350,6 +347,36 @@ It has hole patterns that matches the QHYCCD PoleMaster. QHYCCD offers a variety
 The 3D model is open source, publicly hosted on OnShape and ready for export: [https://cad.onshape.com/documents/c9071d...a6bfdc](https://cad.onshape.com/documents/c9071d5019e566707bd722e9/w/00d826b3890ec75dd7440bb9/e/b73a27c8ab1a7c58eba6bfdc). If you want to make changes, simply fork it to your own OnShape account.
 
 The remaining mechanical problems are about cooling the camera sensor, and preventing damage from potential water drops. The OpenMV board itself does not make it easy for me to solve either of these problems, but luckily, it's open source!
+
+Results
+=======
+
+![](doc/img/andromeda_galaxy.jpg)
+
+![](doc/img/veil_nebula.jpg)
+
+Those are my first two deep sky astrophotographers. The specs of these photos:
+
+ * Sony a6000 camera, 20 megapixels, APS-C sensor, IR-UV filter removed (aka. astro-modified sensor)
+ * RedCat 51 telescope, 250mm focal length, 51mm objective diameter
+ * A bit over 3 hours total integration time for each photograph
+   * up to 120 seconds per exposure but 30 seconds during wind
+ * Sky-Watcher Star Adventurer tracking camera mount, running at 8V (normally it uses USB 5V or 6V from AA batteries)
+ * Optlong L-Pro filter was used for the Veil Nebula photo
+ * Stacking and editing with
+   * Siril: stacking, background calibration, colour balancing
+   * Starnet++, a machine learning neural network to remove stars from the nebula (I edited the nebula and stars separately, then merged them back together)
+   * Affinity Photo, for everything else
+
+To illustrate how well the tracking worked (which shows how well it was polar-aligned):
+
+![](doc/img/drift_zoomed.png)
+
+To illustrate other kind of errors you may encounter:
+
+![](doc/img/round_stars_annotated.jpg)
+![](doc/img/mech_jerk_annotated.jpg)
+![](doc/img/elongated_stars.jpg)
 
 Future Improvements
 ===================
