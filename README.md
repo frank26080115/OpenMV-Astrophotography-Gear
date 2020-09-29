@@ -365,8 +365,11 @@ Those are my first two deep sky astrophotographers. The specs of these photos:
  * Optlong L-Pro filter was used for the Veil Nebula photo
  * Stacking and editing with
    * Siril: stacking, background calibration, colour balancing
-   * Starnet++, a machine learning neural network to remove stars from the nebula (I edited the nebula and stars separately, then merged them back together)
-   * Affinity Photo, for everything else
+   * Starnet++: a machine learning neural network to remove stars from the nebula (I edited the nebula and stars separately, then merged them back together)
+   * Affinity Photo: for everything else
+   * I still need practice editing, most people will not like how I oversaturate the colours to an unrealistic degree
+
+![](doc/img/20200919_231408.jpg)
 
 To illustrate how well the tracking worked (which shows how well it was polar-aligned):
 
@@ -387,6 +390,8 @@ The equivalent focal-length lens for a CS lens mount would have about twice the 
 
 This would add another $40 to the cost.
 
+After extensive testing, I don't think the extra framerate will be worth the cost.
+
 Maybe I can figure out a way to cool the camera sensor. I can get a $10 extension cable made specifically for OpenMV
 
 ![](doc/img/openmv_extension_cable.png)
@@ -398,13 +403,18 @@ Next Project
 
 An auto-guiding camera is something that locks onto one star, and commands a computerized telescope mount to move in tiny steps to follow that one star, thus correcting for any errors in motor speed and alignment. Currently available auto-guiding cameras are still simply over-priced webcams that require a laptop, and I hope to cut the laptop out of the equation.
 
-I have already successfully adapted the M12 lens mount to a Svbony SV106 guide-scope (it is the cheapest I could find). It does focus properly on the sensor, as the focus adjustment range is huge.
+As a baseline test, I have successfully adapted the M12 lens mount to a Svbony SV106 guide-scope (it is the cheapest I could find). It does focus properly on the sensor, as the focus adjustment range is huge.
 
-![](doc/img/guidescope.jpg)
+![](doc/img_guidescope/guidescope.jpg)
 
-The guide-scope has a much larger objective diameter (50mm) than the tiny M12 lens I currently use, so I hope the framerate will be enough to avoid jerkiness.
+To make this even cheaper, I have developed a 3D printed guide scope, using a single 50mm wide 182.8mm focal length APO lens element. I also developed a PCB for OpenMV that provides opto-isolated ST-4 signals to provide the autoguiding signals to electronic tracking mounts. The PCB will also output the signal for a remote shutter, enabling automatic dithering (a technique to remove noise from images) throughout the night.
 
-I would need to add a GPIO expander to the OpenMV over the I2C bus. The majority of the firmware work will be about calibrating the pulse-widths of the movement commands to the movement of the stars.
+![](doc/img_guidescope/guide_scope_3d.png)
+![](doc/img_guidescope/guide_scope_side.jpg)
+![](doc/img_guidescope/guide_scope_redcat.jpg)
+![](doc/img_guidescope/guide_scope_top.jpg)
+![](doc/img_guidescope/guide_scope_test1.jpg)
 
-With the GPIO expander, I can also add a intervalometer port to help with remote controlling the actual camera being used to photograph the sky.
+This project will eventually completely eliminate the need to use the PHD2 software.
 
+After this is done, the next step is to add a declination motor to the Sky-Watcher Star Adventurer, and to give it extra load capacity. This will eliminate the need to own a fully computerized goto mount to take advantage of autoguidance.
