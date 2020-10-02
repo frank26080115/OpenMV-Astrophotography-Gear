@@ -1,4 +1,9 @@
+import micropython
+micropython.opt_level(2)
+
 import math
+import comutils
+from comutils import SENSOR_WIDTH, SENSOR_HEIGHT
 
 class PossibleMove(object):
     def __init__(self, dx, dy, dist, ang, star):
@@ -28,9 +33,7 @@ def eval_move(move, old_list, new_list, declination, tolerance):
         min_dist = 9999
         # find the closest match in the new list to the new star
         for k in new_list:
-            dx = k.cx - nx
-            dy = k.cy - ny
-            mag = math.sqrt((dx * dx) + (dy * dy))
+            mag = comutils.vector_between([nx, ny], [k.cx, k.cy], mag_only = True)
             if mag < min_dist:
                 min_dist = mag
         if min_dist < tolerance + (tolerance * abs(math.tan(math.radians(declination)))):
@@ -50,8 +53,7 @@ def get_star_movement(old_list, star, new_list, declination = 0, tolerance = 100
         # each star in the new list is a possible movement vector
         dx = i.cx - star.cx
         dy = i.cy - star.cy
-        mag = math.sqrt((dx * dx) + (dy * dy))
-        ang = math.degrees(math.atan2(dy, dx))
+        mag, ang = comutils.vector_between([star.cx, star.cy], [i.cx, i.cy])
         move = PossibleMove(dx, dy, mag, ang, i)
         possible_moves.append(move)
         if mag < closest_dist:

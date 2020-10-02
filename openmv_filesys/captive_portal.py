@@ -423,14 +423,20 @@ class CaptivePortal(object):
             pass
         return STS_IDLE
 
-    def task(self):
+    def task(self, allow_kick = True):
         self.task_conn()
-        if self.last_http_time > 0 and pyb.elapsed_millis(self.last_http_time) > 10000:
-            self.kick()
-            return STS_KICKED
-        if self.last_http_time < 0 and self.full_reboot_timer > 0 and pyb.elapsed_millis(self.full_reboot_timer) > 12000:
-            self.reboot()
-            return STS_KICKED
+        if allow_kick:
+            if self.last_http_time > 0 and pyb.elapsed_millis(self.last_http_time) > 10000:
+                self.kick()
+                return STS_KICKED
+            if self.last_http_time < 0 and self.full_reboot_timer > 0 and pyb.elapsed_millis(self.full_reboot_timer) > 12000:
+                self.reboot()
+                return STS_KICKED
+        else:
+            if self.last_http_time > 0:
+                self.last_http_time = pyb.millis()
+            if self.full_reboot_timer > 0:
+                self.full_reboot_timer = pyb.millis()
         x = self.task_dns()
         y = self.task_http()
         if x == STS_SERVED or y == STS_SERVED:

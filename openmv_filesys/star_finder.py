@@ -19,7 +19,7 @@ EXPO_TOO_MANY     = micropython.const(5)
 EXPO_MEMORY_ERR   = micropython.const(6)
 EXPO_CAMERA_ERR   = micropython.const(7)
 
-def find_stars(img, hist = None, stats = None, thresh = 0, max_dia = 100, region = None, force_solve = False):
+def find_stars(img, hist = None, stats = None, thresh = 0, max_dia = 100, region = None, force_solve = False, exponent = 1, advanced = False):
 
     # histogram and statistics might be computationally costly, use cached results if available
     if hist is None:
@@ -63,7 +63,7 @@ def find_stars(img, hist = None, stats = None, thresh = 0, max_dia = 100, region
     #too_long = 0
     #too_big  = 0
     for b in blobs:
-        stars.append(blob_to_star(b, img, thresh))
+        stars.append(blob_to_star(b, img, thresh, expo = exponent, adv = advanced))
     if force_solve == False:
         #if too_big > len(stars):
         #    return stars, EXPO_TOO_BIG
@@ -78,7 +78,7 @@ def find_stars(img, hist = None, stats = None, thresh = 0, max_dia = 100, region
             return stars, EXPO_TOO_MANY
     return stars, EXPO_JUST_RIGHT
 
-def blob_to_star(b, img, thresh):
+def blob_to_star(b, img, thresh, expo = 1, adv = False):
     # this function iterates over the blob's region of interest
     # performs summations and calculates a weighted centoid
     # and gathers brightness data
@@ -93,19 +93,27 @@ def blob_to_star(b, img, thresh):
     xlim = x + w
     brightness = 0
     maxbrite = 0
+    areacnt = 0
+    satcnt = 0
     # iterate the ROI
     while x < xlim:
         y = ystart
         ylim = y + h
         while y < ylim:
-            p = img.get_pixel(x, y)
+            br = img.get_pixel(x, y)
+            p = br
+            if expo > 1.0:
+                p = int(math.round(math.pow(br, expo)))
             if p > thresh: # is in blob ROI
+                areacnt += 1
                 # sum the brightness
                 xbucket[x - xstart] += p
                 ybucket[y - ystart] += p
-                brightness += p
-                if p > maxbrite:
-                    maxbrite = p
+                brightness += br
+                if br > maxbrite:
+                    maxbrite = br
+                if br >= 254:
+                    satcnt += 1
             y += 1
         x += 1
     # calculate weighted center for each axis
@@ -146,7 +154,10 @@ def blob_to_star(b, img, thresh):
     else:
         if (brightness % 2) != 0:
             brightness += 1
-    return blobstar.BlobStar(cx, cy, r, brightness)
+    if adv == False:
+        return blobstar.BlobStar(cx, cy, r, brightness)
+    else:
+        return blobstar.GuideStar(cx, cy, r, brightness, maxbrite, satcnt, areacnt)
 
 def decode_hotpixels(str):
     res = []

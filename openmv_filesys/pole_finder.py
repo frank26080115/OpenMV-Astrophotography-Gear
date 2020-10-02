@@ -6,6 +6,10 @@ import pyb
 import blobstar
 import ujson
 
+import comutils
+from comutils import PIXELS_PER_DEGREE
+from comutils import angle_diff, ang_normalize
+
 # NOTE: data table and image both respect computer image coordinate system (origin at top left corner)
 # positive angle is clockwise
 
@@ -39,7 +43,6 @@ STARS_NEAR_POLARIS = micropython.const([
     ["* del UMi",     1195.457555, -104.488215 ],
     ["HD 107113",     1264.471354, -170.201903 ]])
 
-PIXELS_PER_DEGREE = micropython.const(875.677409 / 2.9063) # calculated using "OV Cep"
 DIST_TOL = micropython.const(0.1)     # percentage
 SCORE_REQUIRED = micropython.const(4) # must have this many stars that match their estimated coordinates
 ENABLE_PENALTY = micropython.const(True)
@@ -309,21 +312,9 @@ def dist_match(x, y):
     abs_err = abs(x - y)
     return abs_err <= err_tol
 
-def angle_diff(x, y):
-    x = ang_normalize(x)
-    y = ang_normalize(y)
-    return ang_normalize(x - y)
-
 def angle_match(x, y, tol = 1.0):
     d = abs(angle_diff(x, y))
     return d <= tol
-
-def ang_normalize(x):
-    while x > 180.0:
-        x -= 360.0
-    while x < -180.0:
-        x += 360.0
-    return x
 
 def sort_score_func(x):
     return x.score
