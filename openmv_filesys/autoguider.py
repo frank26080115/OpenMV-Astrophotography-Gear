@@ -1,6 +1,7 @@
 import micropython
 micropython.opt_level(2)
 
+import comutils
 import blobstar, astro_sensor, time_location, captive_portal, pole_finder, star_finder, pole_movement
 import exclogger
 import pyb, uos, uio, gc, sys
@@ -46,7 +47,7 @@ class AutoguiderScope(object):
         self.settings.update({"force_solve": False})
         self.load_settings()
         self.time_mgr.readiness = False
-        exclogger.log_exception("Time Guessed (%u)" % pyb.millis(), time_str=time_location.fmt_time(self.time_mgr.get_time()))
+        exclogger.log_exception("Time Guessed (%u)" % pyb.millis(), time_str=comutils.fmt_time(self.time_mgr.get_time()))
 
         self.portal = captive_portal.CaptivePortal(debug = self.debug)
 
@@ -285,6 +286,7 @@ class AutoguiderScope(object):
         self.sleeping = False
         self.kill_streamer()
         captive_portal.gen_page(client_stream, "autoguider.htm", add_files = ["web/jquery-ui-1.12.1-darkness.css", "web/jquery-3.5.1.min.js", "web/jquery-ui-1.12.1.min.js"], debug = self.debug)
+        return True
 
     def update_stream(self):
         if self.stream_sock is None:
