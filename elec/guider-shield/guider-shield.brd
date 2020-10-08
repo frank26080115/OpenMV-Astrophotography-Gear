@@ -48,7 +48,7 @@
 <layer number="38" name="bTest" color="7" fill="1" visible="no" active="yes"/>
 <layer number="39" name="tKeepout" color="4" fill="11" visible="no" active="yes"/>
 <layer number="40" name="bKeepout" color="1" fill="11" visible="no" active="yes"/>
-<layer number="41" name="tRestrict" color="4" fill="10" visible="no" active="yes"/>
+<layer number="41" name="tRestrict" color="4" fill="10" visible="yes" active="yes"/>
 <layer number="42" name="bRestrict" color="1" fill="10" visible="no" active="yes"/>
 <layer number="43" name="vRestrict" color="2" fill="10" visible="no" active="yes"/>
 <layer number="44" name="Drills" color="7" fill="1" visible="no" active="yes"/>
@@ -220,6 +220,8 @@
 <text x="12.573" y="2.54" size="1.016" layer="21" ratio="10" rot="R180" align="center">GUIDE-SHEILD
 20200927A
 FRANK ZHAO</text>
+<wire x1="27.2415" y1="27.686" x2="27.2415" y2="27.813" width="0" layer="41"/>
+<wire x1="27.813" y1="27.813" x2="27.813" y2="27.686" width="0" layer="41"/>
 </plain>
 <libraries>
 <library name="sfe">
