@@ -4,7 +4,9 @@ micropython.opt_level(2)
 import pyb, uos, utime, math
 import pole_movement
 
-SIDEREAL_DAY_SECONDS = micropython.const(86164.09054)
+import comutils
+from comutils import SIDEREAL_DAY_SECONDS
+
 USE_FIXED_POINT = micropython.const(False)
 
 class TimeLocationManager(object):
@@ -28,7 +30,7 @@ class TimeLocationManager(object):
         self.set_location(-122.246086, 37.364107)
 
         # at Greenwich (longitude = 0), the solar time that matches sidereal time = 00:00
-        self.sidereal_sync_time = utc_to_epoch(2020, 8, 10, 20, 40, 53)
+        self.sidereal_sync_time = comutils.utc_to_epoch(2020, 8, 10, 20, 40, 53)
         # in Jan 1 2040 at 11:17:05 is another such epoch
 
         self.pole_move = pole_movement.PoleMovement()
@@ -47,7 +49,7 @@ class TimeLocationManager(object):
 
     def get_jdn(self):
         t = self.get_time()
-        return jdn(t[0], t[1], t[2])
+        return comutils.jdn(t[0], t[1], t[2])
 
     def get_sec(self):
         t = self.start_sec + (self.latest_millis // 1000)
@@ -57,7 +59,7 @@ class TimeLocationManager(object):
         return utime.localtime(int(round(self.get_sec())))
 
     def set_utc_time(self, utc_yr, utc_month, utc_day, utc_hr, utc_min, utc_sec):
-        s = utc_to_epoch(utc_yr, utc_month, utc_day, utc_hr, utc_min, utc_sec)
+        s = comutils.utc_to_epoch(utc_yr, utc_month, utc_day, utc_hr, utc_min, utc_sec)
         self.set_utc_time_epoch(s)
 
     def set_utc_time_epoch(self, s):
@@ -114,17 +116,6 @@ class TimeLocationManager(object):
     def get_polaris(self):
         return self.pole_move.calc_for_jdn(self.get_jdn())
 
-def utc_to_epoch(utc_yr, utc_month, utc_day, utc_hr, utc_min, utc_sec):
-    s = utime.mktime((utc_yr, utc_month, utc_day, utc_hr, utc_min, utc_sec, 0, 0))
-    return s
-
-def jdn(y, m, d):
-    # http://www.cs.utsa.edu/~cs1063/projects/Spring2011/Project1/jdn-explanation.html
-    return d + (((153 * m) + 2) // 5) + (356 * y) + (y // 4) - (y // 100) + (y // 400) - 32045
-
-def fmt_time(t):
-    return "%04u/%02u/%02u-%02u:%02u:%02u" % (t[0], t[1], t[2], t[3], t[4], t[5])
-
 def fixed_point_divide(x, y, dec):
     cnt = 0
     if x[1] < dec:
@@ -174,7 +165,7 @@ def test():
     ms = pyb.millis()
     while i < 5:
         mgr.tick()
-        print("tick " + fmt_time(mgr.get_time()))
+        print("tick " + comutils.fmt_time(mgr.get_time()))
         pyb.delay(1001)
         i += 1
     print("=============")
@@ -201,7 +192,7 @@ def test():
         mgr.set_utc_time(2021 + (pyb.rng() % 20), 1 + (pyb.rng() % 12), 1 + (pyb.rng() % 27), pyb.rng() % 24, pyb.rng() % 60, pyb.rng() % 60)
         ang = mgr.get_angle()
         if ang < 1 or ang > 359:
-            print("%d, %s, %0.4f" % (longitude, fmt_time(mgr.get_time()), ang))
+            print("%d, %s, %0.4f" % (longitude, comutils.fmt_time(mgr.get_time()), ang))
             i += 1
     print("=============")
 

@@ -2,7 +2,7 @@ import micropython
 micropython.opt_level(2)
 
 import pyb, uos, uio, time, gc
-import ubinascii, ujson
+import ubinascii, uhashlib, ujson
 import network
 import usocket as socket
 import exclogger
@@ -368,6 +368,7 @@ class CaptivePortal(object):
             client_sock = res[0]
             client_addr = res[1]
             client_sock.settimeout(10)
+            can_drop = True
             client_stream = client_sock
             req = socket_readline(client_stream)
             if req is None:
@@ -377,40 +378,30 @@ class CaptivePortal(object):
             if self.debug:
                 print(req)
             req_split = req.split(' ')
+            request_page, request_urlparams = split_get_request(req)
+            headers = []
+            content = ""
             if req_split[0] == "GET":
-                request_page, request_urlparams = split_get_request(req)
                 if request_page in self.handlers:
-                    self.handlers[request_page](client_stream, req, {}, "")
+                    can_drop = self.handlers[request_page](client_stream, req, headers, content)
                 else:
-                    self.handle_default(client_stream, req, {}, "")
+                    self.handle_default(client_stream, req, headers, content)
             elif req_split[0] == "POST":
                 # WARNING: POST requests are not used or tested right now
-                request_page = req_split[1]
-                headers = {}
-                content = ""
-                while True:
-                    line = socket_readline(client_stream)
-                    if line is None:
-                        break
-                    if ':' in line:
-                        header_key = line[0:line.index(':')].lower()
-                        header_value = line[line.index(':'):].lstrip()
-                        headers.update({header_key: header_value})
-                        if header_key == "content-length":
-                            socket_readline(client_stream) # extra line
-                            content = socket_readall(client_stream)
-                            break
+                # note: we have full control as to what the webpages will send, POST requests are not used for our applications
+                headers, content = get_all_headers(client_stream)
                 if request_page in self.handlers:
-                    self.handlers[request_page](client_stream, req, headers, content)
+                    can_drop = self.handlers[request_page](client_stream, req, headers, content)
                 else:
                     self.handle_default(client_stream, req, headers, content)
             self.last_http_time = pyb.millis()
             self.full_reboot_timer = self.last_http_time
-            try:
-                self.s.settimeout(0.3)
-                client_sock.settimeout(0.3)
-            except Exception as exc:
-                exclogger.log_exception(exc, to_print = False, to_file = False)
+            if can_drop:
+                try:
+                    self.s.settimeout(0.3)
+                    client_sock.settimeout(0.3) # might be closed by request
+                except Exception as exc:
+                    exclogger.log_exception(exc, to_print = False, to_file = False)
             return STS_SERVED
         except KeyboardInterrupt:
             raise
@@ -423,14 +414,20 @@ class CaptivePortal(object):
             pass
         return STS_IDLE
 
-    def task(self):
+    def task(self, allow_kick = True):
         self.task_conn()
-        if self.last_http_time > 0 and pyb.elapsed_millis(self.last_http_time) > 10000:
-            self.kick()
-            return STS_KICKED
-        if self.last_http_time < 0 and self.full_reboot_timer > 0 and pyb.elapsed_millis(self.full_reboot_timer) > 12000:
-            self.reboot()
-            return STS_KICKED
+        if allow_kick:
+            if self.last_http_time > 0 and pyb.elapsed_millis(self.last_http_time) > 10000:
+                self.kick()
+                return STS_KICKED
+            if self.last_http_time < 0 and self.full_reboot_timer > 0 and pyb.elapsed_millis(self.full_reboot_timer) > 12000:
+                self.reboot()
+                return STS_KICKED
+        else:
+            if self.last_http_time > 0:
+                self.last_http_time = pyb.millis()
+            if self.full_reboot_timer > 0:
+                self.full_reboot_timer = pyb.millis()
         x = self.task_dns()
         y = self.task_http()
         if x == STS_SERVED or y == STS_SERVED:
@@ -457,7 +454,8 @@ class CaptivePortal(object):
             finally:
                 self.udps = None
         gc.collect()
-        self.wlan.closeall()
+        if self.wlan is not None:
+            self.wlan.closeall()
         #try:
         #    self.start_wifi()
         #except Exception as exc:
@@ -503,19 +501,22 @@ def socket_readall(sock):
     chunk = 1024
     res = ""
     while True:
-        x = sock.recv(chunk)
-        if x is None:
-            if len(res) > 0:
+        try:
+            x = sock.recv(chunk)
+            if x is None:
+                if len(res) > 0:
+                    return res
+                else:
+                    return None
+            if len(x) <= 0:
+                if len(res) > 0:
+                    return res
+                else:
+                    return None
+            res += x.decode('utf-8')
+            if len(x) < chunk:
                 return res
-            else:
-                return None
-        if len(x) <= 0:
-            if len(res) > 0:
-                return res
-            else:
-                return None
-        res += x.decode('utf-8')
-        if len(x) < chunk:
+        except:
             return res
     return res
 
@@ -657,6 +658,23 @@ def split_get_request(req):
         request_urlparams = d
     return request_page, request_urlparams
 
+def get_all_headers(client_stream):
+    headers = {}
+    content = ""
+    while True:
+        line = socket_readline(client_stream)
+        if line is None:
+            break
+        if ':' in line:
+            header_key = line[0:line.index(':')].lower()
+            header_value = line[line.index(':'):].lstrip()
+            headers.update({header_key: header_value})
+            if header_key == "content-length":
+                socket_readline(client_stream) # extra line
+                content = socket_readall(client_stream)
+                break
+    return headers, content
+
 def split_post_form(headers, content):
     d = {}
     if "content-type" in headers:
@@ -687,6 +705,22 @@ def default_reply_header(content_type = "text/html", content_length = -1):
     if content_length >= 0:
         s += "content_length: %u\r\n" % content_length
     return s + "\r\n"
+
+def handle_websocket(client_stream, req, headers):
+    # hints taken from https://github.com/micropython/webrepl/blob/master/websocket_helper.py
+    webkey = None
+    for i in headers:
+        if i.k == "Sec-WebSocket-Key":
+            webkey = i.p
+            break
+    if webkey is None:
+        return False
+    respkey = webkey + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+    respkey = uhashlib.sha1(respkey).digest()
+    respkey = ubinascii.b2a_base64(respkey)[:-1]
+    resp = "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: %s\r\n\r\n" % respkey
+    client_stream.send(resp)
+    return True
 
 MIME_TABLE = [ # https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_types/Common_types
 #["aac",    "audio/aac"],
@@ -789,6 +823,8 @@ def stream_img_continue(img, conn):
                "content-length:%u\r\n\r\n" % cframe.size())
     conn.send(cframe)
 
+"""
+
 def handle_test(client_stream, req, headers, content):
     print("test handler")
     client_stream.write(default_reply_header() + "<html>test<br />" + req + "</html>\r\n")
@@ -808,4 +844,3 @@ if __name__ == "__main__":
         if portal.debug or (dbg_cnt % 100) == 0:
             print("%u - %0.2f" % (dbg_cnt, fps))
             pass
-"""

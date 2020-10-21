@@ -2,9 +2,9 @@ import micropython
 micropython.opt_level(2)
 
 import math
-import time_location
+import comutils
+from comutils import PIXELS_PER_DEGREE
 
-PIXELS_PER_DEGREE = micropython.const(875.677409 / 2.9063) # calibrated from camera but doesn't really change the math
 POLARIS_2000 = micropython.const([2, 31, 51.56, 89, 15, 51.5]) # obtained from Stellarium
 POLARIS_2020 = micropython.const([2, 57, 39.08, 89, 20, 57.4]) # obtained from Stellarium
 
@@ -25,8 +25,8 @@ class PoleMovement(object):
         ra2020, dec2020 = conv_ra_dec(POLARIS_2020)
         self.x2000, self.y2000 = vector(ra2000, dec2000)
         self.x2020, self.y2020 = vector(ra2020, dec2020)
-        self.jdn2000 = time_location.jdn(2000, 1, 1)
-        self.jdn2020 = time_location.jdn(2020, 1, 1)
+        self.jdn2000 = comutils.jdn(2000, 1, 1)
+        self.jdn2020 = comutils.jdn(2020, 1, 1)
         dx = self.x2020 - self.x2000
         dy = self.y2020 - self.y2000
         days = self.jdn2020 - self.jdn2000
@@ -34,7 +34,7 @@ class PoleMovement(object):
         self.dyr = dy / days
 
     def calc_for_date(self, year, month, day):
-        jdn_now = time_location.jdn(year, month, day)
+        jdn_now = comutils.jdn(year, month, day)
         return self.calc_for_jdn(jdn_now)
 
     def calc_for_jdn(self, x):
@@ -56,8 +56,7 @@ def vector(ra, dec):
     return x, y
 
 def star_coord(x, y):
-    mag = math.sqrt((x ** 2) + (y ** 2))
-    ang = math.degrees(math.atan2(y, x))
+    mag, ang = comutils.vector_between([0, 0], [x, y])
     while ang < 0:
         ang += 360.0
     mag /= PIXELS_PER_DEGREE
