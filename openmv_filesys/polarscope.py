@@ -1,6 +1,7 @@
 import micropython
 micropython.opt_level(2)
 
+import comutils
 import blobstar, astro_sensor, time_location, captive_portal, pole_finder, star_finder, pole_movement
 import exclogger
 import pyb, uos, uio, gc, sys
@@ -52,7 +53,7 @@ class PolarScope(object):
         self.settings.update({"max_stars":   0})
         self.load_settings()
         self.time_mgr.readiness = False
-        exclogger.log_exception("Time Guessed (%u)" % pyb.millis(), time_str=time_location.fmt_time(self.time_mgr.get_time()))
+        exclogger.log_exception("Time Guessed (%u)" % pyb.millis(), time_str=comutils.fmt_time(self.time_mgr.get_time()))
 
         self.portal = captive_portal.CaptivePortal(debug = self.debug)
 
@@ -189,6 +190,7 @@ class PolarScope(object):
         client_stream.close()
         if self.use_leds:
             red_led.on()
+        return True
 
     def handle_getsettings(self, client_stream, req, headers, content):
         if self.debug:
@@ -197,23 +199,27 @@ class PolarScope(object):
         json_str = ujson.dumps(self.settings)
         client_stream.write(captive_portal.default_reply_header(content_type = "application/json", content_length = len(json_str)) + json_str)
         client_stream.close()
+        return True
 
     def handle_daymode(self, client_stream, req, headers, content):
         self.daymode = True
         if self.debug:
             print("go day mode")
         self.reply_ok(client_stream)
+        return True
 
     def handle_nightmode(self, client_stream, req, headers, content):
         self.daymode = False
         if self.debug:
             print("go night mode")
         self.reply_ok(client_stream)
+        return True
 
     def handle_updatesetting(self, client_stream, req, headers, content):
         if self.debug:
             print("handle_updatesetting", end="")
         self.handle_query(client_stream, req, reply = True)
+        return True
 
     def handle_query(self, client_stream, req, reply = True, save = True):
         need_save = False
@@ -232,7 +238,7 @@ class PolarScope(object):
                     if i == "time":
                         self.time_mgr.set_utc_time_epoch(v)
                         if self.has_time == False:
-                            exclogger.log_exception("Time Obtained (%u)" % pyb.millis(), time_str=time_location.fmt_time(self.time_mgr.get_time()))
+                            exclogger.log_exception("Time Obtained (%u)" % pyb.millis(), time_str=comutils.fmt_time(self.time_mgr.get_time()))
                         self.has_time = True
                     elif i == "longitude":
                         self.time_mgr.set_location(v, None)
@@ -284,6 +290,7 @@ class PolarScope(object):
             s = exclogger.log_exception(exc)
             if reply:
                 self.reply_ok(client_stream, sts=False, err=s)
+        return True
 
     def handle_getimg(self, client_stream, req, headers, content):
         if self.debug:
@@ -306,12 +313,14 @@ class PolarScope(object):
         except Exception as exc:
             s = exclogger.log_exception(exc)
             self.reply_ok(client_stream, sts=False, err=s)
+        return True
 
     def handle_memory(self, client_stream, req, headers, content):
         if self.debug:
             print("handle_memory")
         micropython.mem_info(True)
         self.reply_ok(client_stream)
+        return True
 
     def handle_sleep(self, client_stream, req, headers, content):
         if self.debug:
@@ -322,6 +331,7 @@ class PolarScope(object):
         green_led.off()
         blue_led.off()
         self.reply_ok(client_stream)
+        return True
 
     def handle_stream(self, client_stream, req, headers, content):
         if self.debug:
@@ -336,11 +346,13 @@ class PolarScope(object):
                     "Cache-Control: no-cache\r\n" \
                     "Pragma: no-cache\r\n\r\n")
         self.stream_sock_err = 0
+        return False
 
     def handle_index(self, client_stream, req, headers, content):
         self.sleeping = False
         self.kill_streamer()
         captive_portal.gen_page(client_stream, "polarscope.htm", add_files = ["web/jquery-ui-1.12.1-darkness.css", "web/jquery-3.5.1.min.js", "web/jquery-ui-1.12.1.min.js", "web/magellan.js", "web/draw_polarscope.js", "web/circle_fit.js", "web/mathutils.js", "web/platesolver.js"], debug = self.debug)
+        return True
 
     def update_stream(self):
         if self.stream_sock is None:

@@ -322,9 +322,9 @@ function draw_svg(obj, zoom, need_reload, scale_vert, simpcali_results)
             {
                 var tline = document.createElementNS(svgNS, "line");
                 tline.setAttribute("x1", Math.round(cent_x - offset_x));
-                tline.setAttribute("x2", Math.round(px - offset_x));
+                tline.setAttribute("x2", Math.round(px));
                 tline.setAttribute("y1", Math.round(cent_y - offset_y));
-                tline.setAttribute("y2", Math.round(py - offset_y));
+                tline.setAttribute("y2", Math.round(py));
                 tline.setAttribute("style", "stroke:red;stroke-width:1");
                 svgele.appendChild(tline);
             }
