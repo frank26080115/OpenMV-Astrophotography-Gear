@@ -299,7 +299,7 @@ The first two huge annoyances that I had to deal with:
 
 Then as development and testing went further on, I ran into a out-of-memory issue. It seems like there was a limit to how many blobs can be detected by `find_blobs()` before it runs out of memory and throws an exception. To fix this, I dug into the firmware back-end again. First, I removed many properties from the blob data structure so that it consumes less memory. Second, I added a way for the `find_blobs()` to reject blobs that are too big (it already rejects blobs that are too small).
 
-The web interface had some reliability issues, seems like occasionally, AJAX requests would simply fail and the OpenMV never receives it. Of course, it will reattempt the request, but it seems like once one request is lost, all subsequent requests are lost. To solve this problem, I tried to simply reboot the WiFi module when a server-side timeout occurs, but this was super annoying. The better solution was to make another change to the back-end firmware. When the timeout occurs, the new back-end code will reset all TCP and UDP sockets without resetting the WiFi connection. This solved the reliability problem.
+The web interface originally utilized AJAX requests to communicate with the MicroPython server. This method had some reliability issues, seems like occasionally, AJAX requests would simply fail and the OpenMV never receives it. Of course, it will reattempt the request, but it seems like once one request is lost, all subsequent requests are lost. It seemed like the WiFi module had issues managing old and new sockets. The first fix I attempted was to add server-side timeouts that cleared all open sockets, and if that timeout failed, it would reset the whole WiFi module. But the final solution was to rewrite both the front-end and back-end using WebSockets instead of AJAX, which meant only one socket is needed, and the user experience became much more reliable.
 
 Streaming live JPG images is a requirement because the camera may need to have its focus adjusted. It would also help with the exposure adjustments. But the data size could be huge and the transfer rate is slow. Also, AJAX cannot be used to transport binary JPG data. Base64 encoded data could be transported by AJAX but since it makes the data even longer, it was not fast enough. In the end, at 1x zoom, the image is first shrunk by half and compressed before transmission. At other zoom levels, the image is cropped instead of shrunk. The resulting responsiveness is enough.
 
@@ -307,7 +307,7 @@ Streaming live JPG images is a requirement because the camera may need to have i
 
 (that video shows how it works but it's slower in real life as the shutter speed needs to be much slower)
 
-Since I didn't want to rely on the browser for local storage, when the user wants to save a setting, it's sent back to the HTTP server as an AJAX request. The server will save it as a JSON file in the OpenMV's flash memory.
+Since I didn't want to rely on the browser for local storage, when the user wants to save a setting, it's sent back to the HTTP server. The server will save it as a JSON file in the OpenMV's flash memory.
 
 The UI used a lot of [jQuery UI](https://jqueryui.com/), which made great looking and easy to use UI elements on mobile browsers. I had to hack the theme CSS to keep only the checkbox tick image to lighten up the payload.
 
