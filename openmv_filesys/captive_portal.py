@@ -283,11 +283,14 @@ class CaptivePortal(object):
         except Exception as exc:
             exclogger.log_exception(exc, to_print = False, to_file = False)
 
-    def update_stream(self, client, img):
+    def update_imgstream(self, client, img):
         client.send("\r\n--openmv\r\n" \
              "Content-Type: image/jpeg\r\n"\
              "Content-Length:%u\r\n\r\n" % img.size())
         client.send(img)
+        self.tickle()
+
+    def tickle(self):
         self.last_http_time = pyb.millis()
         self.full_reboot_timer = self.last_http_time
 
@@ -370,7 +373,7 @@ class CaptivePortal(object):
             client_sock.settimeout(10)
             can_drop = True
             client_stream = client_sock
-            req = socket_readline(client_stream)
+            req = socket_readline(client_stream, blocking = True)
             if req is None:
                 if self.debug:
                     print("None")
@@ -390,15 +393,16 @@ class CaptivePortal(object):
                 # WARNING: POST requests are not used or tested right now
                 # note: we have full control as to what the webpages will send, POST requests are not used for our applications
                 headers, content = get_all_headers(client_stream)
+                client_sock.settimeout(10) # needs to be re-established
                 if request_page in self.handlers:
                     can_drop = self.handlers[request_page](client_stream, req, headers, content)
                 else:
                     self.handle_default(client_stream, req, headers, content)
             self.last_http_time = pyb.millis()
             self.full_reboot_timer = self.last_http_time
+            self.s.settimeout(0.3)
             if can_drop:
                 try:
-                    self.s.settimeout(0.3)
                     client_sock.settimeout(0.3) # might be closed by request
                 except Exception as exc:
                     exclogger.log_exception(exc, to_print = False, to_file = False)
@@ -473,31 +477,38 @@ class CaptivePortal(object):
         self.full_reboot_timer = pyb.millis()
 
 # usocket implementation is missing readline
-def socket_readline(sock):
+def socket_readline(sock, blocking = False):
+    if blocking == False:
+        sock.settimeout(0)
     res = ""
     while True:
-        x = sock.recv(1)
-        if x is None:
-            if len(res) > 0:
+        try:
+            x = sock.recv(1)
+            if x is None:
+                if len(res) > 0:
+                    return res
+                else:
+                    return None
+            if len(x) <= 0:
+                if len(res) > 0:
+                    return res
+                else:
+                    return None
+            y = x.decode('utf-8')
+            if y == "\n":
+                if len(res) > 0:
+                    if res[-1] == "\r":
+                        res = res[:-1]
                 return res
-            else:
-                return None
-        if len(x) <= 0:
-            if len(res) > 0:
-                return res
-            else:
-                return None
-        y = x.decode('utf-8')
-        if y == "\n":
-            if len(res) > 0:
-                if res[-1] == "\r":
-                    res = res[:-1]
-            return res
-        res += y
+            res += y
+        except:
+            break
     return res
 
 # usocket implementation is missing readall
-def socket_readall(sock):
+def socket_readall(sock, blocking = False):
+    if blocking == False:
+        sock.settimeout(0)
     chunk = 1024
     res = ""
     while True:
@@ -519,6 +530,58 @@ def socket_readall(sock):
         except:
             return res
     return res
+
+def websocket_readmsg(sock):
+    sock.settimeout(0)
+    try:
+        hd1 = sock.recv(2)
+        sock.settimeout(0.1)
+        if len(hd1) != 2:
+            if len(hd1) != 0:
+                print("incomplete websocket reply")
+            return None
+        sock.settimeout(0.5)
+    except:
+        return None
+    try:
+        # assume no fragmentation
+        mask = False
+        opcode0 = hd1[0]
+        opcode1 = hd1[1]
+        if (opcode1 & 0x80) != 0:
+            mask = True
+            opcode1 &= 0x7F
+        paylen = opcode1
+        datalen = 0
+        if paylen <= 125:
+            datalen = paylen
+        elif paylen == 126:
+            hd2 = sock.recv(2)
+            datalen = hd2[0] << 8
+            datalen += hd2[1]
+        elif paylen == 127:
+            hd2 = sock.recv(8)
+            i = 0
+            while i < 8:
+                datalen += hd2[i] << (8 * (7 - i))
+                i += 1
+        if mask:
+            mask = sock.recv(4)
+
+        data = sock.recv(datalen)
+        data = bytearray(data)
+        if mask != False:
+            i = 0
+            while i < datalen:
+                data[i] = data[i] ^ mask[i % 4]
+                i += 1
+        if (opcode0 & 0x0F) == 0x01:
+            return data.decode('utf-8')
+        return data
+    except Exception as exc:
+        print("incomplete websocket reply")
+        exclogger.log_exception(exc, to_file=False)
+        return None
 
 def gen_page(conn, main_file, add_files = [], add_dir = None, debug = False):
     total_size = 0
@@ -658,20 +721,20 @@ def split_get_request(req):
         request_urlparams = d
     return request_page, request_urlparams
 
-def get_all_headers(client_stream):
+def get_all_headers(client_stream, blocking = False):
     headers = {}
     content = ""
     while True:
-        line = socket_readline(client_stream)
+        line = socket_readline(client_stream, blocking = blocking)
         if line is None:
             break
         if ':' in line:
             header_key = line[0:line.index(':')].lower()
-            header_value = line[line.index(':'):].lstrip()
+            header_value = line[line.index(':') + 1:].lstrip()
             headers.update({header_key: header_value})
             if header_key == "content-length":
                 socket_readline(client_stream) # extra line
-                content = socket_readall(client_stream)
+                content = socket_readall(client_stream, blocking = blocking)
                 break
     return headers, content
 
@@ -709,18 +772,72 @@ def default_reply_header(content_type = "text/html", content_length = -1):
 def handle_websocket(client_stream, req, headers):
     # hints taken from https://github.com/micropython/webrepl/blob/master/websocket_helper.py
     webkey = None
-    for i in headers:
-        if i.k == "Sec-WebSocket-Key":
-            webkey = i.p
+    header_keys = headers.keys()
+    for i in header_keys:
+        if i.lower() == "sec-websocket-key":
+            webkey = headers[i]
             break
     if webkey is None:
         return False
-    respkey = webkey + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
-    respkey = uhashlib.sha1(respkey).digest()
-    respkey = ubinascii.b2a_base64(respkey)[:-1]
-    resp = "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: %s\r\n\r\n" % respkey
+    respkey = calc_websocket_resp(webkey)
+    resp = "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: %s\r\n\r\n" % str(respkey)
+    client_stream.settimeout(10)
     client_stream.send(resp)
     return True
+
+def websocket_send(sock, data):
+    dlen = int(len(data))
+    if dlen <= 125:
+        header = bytearray(2)
+        paylen = dlen
+        header[1] = paylen
+    elif dlen <= 65535:
+        header = bytearray(4)
+        paylen = 126
+        header[1] = paylen
+        header[2] = (dlen & 0xFF00) >> 8
+        header[3] = (dlen & 0x00FF) >> 0
+    else:
+        header = bytearray(10)
+        paylen = 127
+        header[1] = paylen
+        # I'm not going to deal with a 64 bit data length
+        # there's just no way a packet is that big
+        header[2] = 0
+        header[3] = 0
+        header[4] = 0
+        header[5] = 0
+        header[6] = (dlen & 0xFF000000) >> 24
+        header[7] = (dlen & 0x00FF0000) >> 16
+        header[8] = (dlen & 0x0000FF00) >> 8
+        header[9] = (dlen & 0x000000FF) >> 0
+    # mask bytes to zero, no need to XOR anything
+    #header[-1] = 0
+    #header[-2] = 0
+    #header[-3] = 0
+    #header[-4] = 0
+    # opcode
+    if type(data) == str:
+        header[0] = 0x81
+    else:
+        header[0] = 0x82
+    sock.settimeout(0.5)
+    sock.send(header)
+    sock.send(data)
+
+def calc_websocket_resp(key):
+    concatkey = key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+    binarr = uhashlib.sha1(concatkey).digest()
+    #hexstr = ubinascii.hexlify(binarr)
+    #print(hexstr)
+    respkey = ubinascii.b2a_base64(binarr).decode('utf-8').rstrip()
+    #respkey = respkey[:-1] # strips the \n
+    return respkey
+
+def debug_headers(headers):
+    header_keys = headers.keys()
+    for i in header_keys:
+        print("%s: %s" % (i, headers[i]))
 
 MIME_TABLE = [ # https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_types/Common_types
 #["aac",    "audio/aac"],

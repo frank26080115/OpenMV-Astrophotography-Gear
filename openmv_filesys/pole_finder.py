@@ -301,10 +301,10 @@ class PoleSolution(object):
         obj.update({"py": self.Polaris.cy})
         obj.update({"matches": blobstar.to_jsonobj(self.stars_matched)})
         obj.update({"penalty": self.penalty})
-        if self.lam_umi is not None:
-            obj.update({"lam_umi": self.lam_umi.to_jsonobj()})
-        else:
-            obj.update({"lam_umi": None})
+        #if self.lam_umi is not None:
+        #    obj.update({"lam_umi": self.lam_umi.to_jsonobj()})
+        #else:
+        #    obj.update({"lam_umi": None})
         return obj
 
 def dist_match(x, y):

@@ -33,12 +33,11 @@ var def_pix_per_deg = 875.677409 / 2.9063;
 var first = true;
 var settings = null;
 var updateQueue = [];
-var updatePending = [];
 var lastStatus = null;
 var prev_frm = -1;
 var old_settings_frm = -1;
 var needUiRefresh = false;
-var statusUpdateTimer;
+var websock_timer = null;
 
 var ghost = null;
 var pre_ghost = null;
@@ -107,58 +106,29 @@ function loadSettingsFailed()
     loadSettings(0);
 }
 
-function startSendSettings()
+function websock_onmessage(evt)
 {
-    var i, ql = updateQueue.length;
-    var str = "";
-    for (i = 0; i < ql; i++)
-    {
-        var k = updateQueue[i];
-        try {
-            var ap = k + "=" + settings[k];
-            if (i != 0) {
-                str += "&";
-            }
-            str += ap;
-            if (updatePending.includes(k) == false) {
-                updatePending.push(k);
-            }
-        }
-        catch (e) {
-            
-        }
+    var jobj = JSON.parse(evt.data);
+    endStatusUpdate(jobj);
+    if (websock_timer != null) {
+        clearTimeout(websock_timer);
     }
-    updateQueue = [];
-    onSettingErr = function () {
-        // setting saving failed
+    websock_timer = setTimeout(function(){
+        console.log("websocket timeout");
         document.getElementById("connection_lost").style.display = "block";
-        document.getElementById("showme").style.display          = "block";
-        // so queue them back up again
-        // only re-send when status update is successful
-        updatePending.forEach(function(ele) {
-            if (updateQueue.includes(ele) == false) {
-                updateQueue.push(ele);
-            }
-        });
-        updatePending = [];
-        startStatusUpdate();
-    };
-
-    var url = "/updatesetting?" + str;
-    console.log(str);
-
-    $.get({
-        url: url,
-        success: function() {
-            updatePending = [];
-            startStatusUpdate();
-        },
-        fail:  function () { onSettingErr(); },
-        error: function () { onSettingErr(); }
-    });
+        websocket_init("websocket");
+    }, 5000);
 }
 
-function startStatusUpdate() {
+function websock_onerror(evt)
+{
+    socket = null;
+    console.log("websocket error " + evt);
+    document.getElementById("connection_lost").style.display = "block";
+    websocket_init("websocket");
+}
+
+function getReplyStr() {
     var qstr = "";
 
     qstr += "zoom=" + get_zoom().toString() + "&";
@@ -176,14 +146,48 @@ function startStatusUpdate() {
 
     qstr += "time=" + updateTime();
 
-    $.ajax({
-        dataType: "json",
-        url: "getstate?" + qstr,
-        success: endStatusUpdate,
-        fail: failStatusUpdate,
-        error: errorStatusUpdate,
-        timeout: 5000
-    });
+    if (updateQueue.length > 0)
+    {
+        if (updateQueue.includes("rand_id") == false) {
+            updateQueue.push("rand_id");
+            settingsNewRand();
+        }
+
+        var i, ql = updateQueue.length;
+        var ustr = "";
+        for (i = 0; i < ql; i++)
+        {
+            var k = updateQueue[i];
+            try {
+                var ap = k + "=" + settings[k];
+                if (i != 0) {
+                    ustr += "&";
+                }
+                ustr += ap;
+            }
+            catch (e) {
+                
+            }
+        }
+        qstr += "&" + ustr + "&save=true";
+    }
+
+    return qstr;
+}
+
+function settingsNewRand()
+{
+    var rand_id = 0;
+    while (rand_id == 0) {
+        rand_id = Math.floor(Math.random() * 100000);
+    }
+    settings["rand_id"] = rand_id;
+    if (updateQueue.length > 0)
+    {
+        if (updateQueue.includes("rand_id") == false) {
+            updateQueue.push("rand_id");
+        }
+    }
 }
 
 function endStatusUpdate(obj) {
@@ -191,7 +195,8 @@ function endStatusUpdate(obj) {
 
     if (obj == null || obj == false || obj == undefined) {
         document.getElementById("connection_lost").style.display = "block";
-        setTimeout(() => { startStatusUpdate(); }, 5000);
+        //setTimeout(() => { startStatusUpdate(); }, 5000);
+        websocket_init("websocket");
     }
 
     lastStatus = obj;
@@ -200,21 +205,23 @@ function endStatusUpdate(obj) {
     document.getElementById("connection_lost").style.display = "none";
     document.getElementById("showme").style.display = "block";
 
-    var nextSts;
-
-    nextSts = settings["shutter"] / 2;
-
-    nextSts /= 1000;
-    if (nextSts < 500) {
-        nextSts = 500;
-    }
-
+    // check if the server acknowledges last settings message
     if (updateQueue.length > 0)
     {
-        startSendSettings();
+        if (updateQueue.includes("rand_id"))
+        {
+            if ("rand_id" in obj)
+            {
+                if (obj["rand_id"] == settings["rand_id"]) {
+                    updateQueue = [];
+                }
+            }
+        }
     }
-    else {
-        setTimeout(() => { startStatusUpdate(); }, nextSts);
+
+    var replyStr = getReplyStr();
+    if (socket != null) {
+        socket.send(replyStr);
     }
 
     if (first)
@@ -532,6 +539,7 @@ function queueSettingsUpdate(key) {
         updateQueue.push(key);
         console.log("queueing setting update for " + key);
     }
+    settingsNewRand();
 }
 
 function computeRefraction() {
@@ -1027,7 +1035,8 @@ function onLoadAll()
 
     computeRefraction();
 
-    setTimeout(() => { startStatusUpdate(); }, 1000);
+    //setTimeout(() => { startStatusUpdate(); }, 1000);
+    websocket_init("websocket");
 }
 
 </script>

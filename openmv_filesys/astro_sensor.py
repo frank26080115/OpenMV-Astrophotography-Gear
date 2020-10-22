@@ -20,6 +20,7 @@ class AstroCam(object):
 
         self.simulate = False
         if simulate is not None:
+            sensor.shutdown(True)
             gc.collect()
             #print("about to load simulation file, checking memory")
             #micropython.mem_info(False)
