@@ -290,6 +290,42 @@ class CaptivePortal(object):
         client.send(img)
         self.tickle()
 
+    def websocket_send(self, sock, data):
+        dlen = int(len(data))
+        if dlen <= 125:
+            header = bytearray(2)
+            paylen = dlen
+            header[1] = paylen
+        elif dlen <= 65535:
+            header = bytearray(4)
+            paylen = 126
+            header[1] = paylen
+            header[2] = (dlen & 0xFF00) >> 8
+            header[3] = (dlen & 0x00FF) >> 0
+        else:
+            header = bytearray(10)
+            paylen = 127
+            header[1] = paylen
+            # I'm not going to deal with a 64 bit data length
+            # there's just no way a packet is that big
+            header[2] = 0
+            header[3] = 0
+            header[4] = 0
+            header[5] = 0
+            header[6] = (dlen & 0xFF000000) >> 24
+            header[7] = (dlen & 0x00FF0000) >> 16
+            header[8] = (dlen & 0x0000FF00) >> 8
+            header[9] = (dlen & 0x000000FF) >> 0
+        # opcode
+        if type(data) == str:
+            header[0] = 0x81
+        else:
+            header[0] = 0x82
+        sock.settimeout(0.5)
+        sock.send(header)
+        sock.send(data)
+        self.tickle()
+
     def tickle(self):
         self.last_http_time = pyb.millis()
         self.full_reboot_timer = self.last_http_time
@@ -784,46 +820,6 @@ def handle_websocket(client_stream, req, headers):
     client_stream.settimeout(10)
     client_stream.send(resp)
     return True
-
-def websocket_send(sock, data):
-    dlen = int(len(data))
-    if dlen <= 125:
-        header = bytearray(2)
-        paylen = dlen
-        header[1] = paylen
-    elif dlen <= 65535:
-        header = bytearray(4)
-        paylen = 126
-        header[1] = paylen
-        header[2] = (dlen & 0xFF00) >> 8
-        header[3] = (dlen & 0x00FF) >> 0
-    else:
-        header = bytearray(10)
-        paylen = 127
-        header[1] = paylen
-        # I'm not going to deal with a 64 bit data length
-        # there's just no way a packet is that big
-        header[2] = 0
-        header[3] = 0
-        header[4] = 0
-        header[5] = 0
-        header[6] = (dlen & 0xFF000000) >> 24
-        header[7] = (dlen & 0x00FF0000) >> 16
-        header[8] = (dlen & 0x0000FF00) >> 8
-        header[9] = (dlen & 0x000000FF) >> 0
-    # mask bytes to zero, no need to XOR anything
-    #header[-1] = 0
-    #header[-2] = 0
-    #header[-3] = 0
-    #header[-4] = 0
-    # opcode
-    if type(data) == str:
-        header[0] = 0x81
-    else:
-        header[0] = 0x82
-    sock.settimeout(0.5)
-    sock.send(header)
-    sock.send(data)
 
 def calc_websocket_resp(key):
     concatkey = key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"

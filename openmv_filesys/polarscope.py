@@ -435,8 +435,7 @@ class PolarScope(object):
         json_str = ujson.dumps(state)
         self.websock.settimeout(10)
         try:
-            captive_portal.websocket_send(self.websock, json_str)
-            self.portal.tickle()
+            self.portal.websocket_send(self.websock, json_str)
             self.stream_sock_err = 0
             self.websock_millis = pyb.millis()
         except Exception as exc:
