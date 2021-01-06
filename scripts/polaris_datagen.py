@@ -67,13 +67,18 @@ def draw_stars(stars):
     im = Image.new("RGB", (SENSOR_WIDTH, SENSOR_HEIGHT), (0, 0, 0))
     draw = ImageDraw.Draw(im)
     # draw center crosshair at NCP
-    draw.line([(0, SENSOR_HEIGHT / 2), (SENSOR_WIDTH, SENSOR_HEIGHT / 2)], fill=(128, 128, 0))
-    draw.line([(SENSOR_WIDTH / 2, 0), (SENSOR_WIDTH / 2, SENSOR_HEIGHT)], fill=(128, 128, 0))
+    draw.line([(0, SENSOR_HEIGHT / 2), (SENSOR_WIDTH, SENSOR_HEIGHT / 2)], fill=(255, 255, 0), width = 4)
+    draw.line([(SENSOR_WIDTH / 2, 0), (SENSOR_WIDTH / 2, SENSOR_HEIGHT)], fill=(255, 255, 0), width = 4)
     # draw each star with azimuthal equidistant projection
     for star in stars:
-        radius = 20.0 / star.bmag
+        radius = 80.0 / star.bmag
         x, y = star.get_coord_xy()
-        draw.ellipse([(x - radius, y - radius), (x + radius, y + radius)], fill=(255, 255, 255))
+        #draw.ellipse([(x - radius, y - radius), (x + radius, y + radius)], fill=(255, 255, 255))
+        i = 0
+        while i < 4:
+            draw.ellipse([(x - radius, y - radius), (x + radius, y + radius)], fill=None, outline=(255, 255, 255))
+            i += 1
+            radius -= 0.5
     return im, draw
 
 def get_polaris(stars):
