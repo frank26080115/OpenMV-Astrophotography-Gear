@@ -85,6 +85,19 @@ class PolarScope(object):
         self.websock_randid = 0
         self.stream_sock_err = 0
 
+        self.extdisp = None
+        try:
+            import extdisp
+            self.extdisp = extdisp.ExtDisp()
+            if self.extdisp.oled.test_connect():
+                self.extdisp.oled.init_display()
+                self.extdisp.oled_ok = True
+                print("OLED initialized on boot")
+            if self.extdisp.gps.test_connect():
+                print("GPS module found on boot")
+        except Exception as exc:
+            exclogger.log_exception(exc)
+
     def try_parse_setting(self, v):
         try: # micropython doesn't have "is_numeric"
             v = v.lstrip().rstrip()
@@ -184,6 +197,10 @@ class PolarScope(object):
         state.update({"polar_clock": self.time_mgr.get_angle()})
 
         state.update({"max_stars": self.max_stars})
+
+        if self.extdisp is not None:
+            state.update({"oled_avail": self.extdisp.oled_ok})
+            state.update({"gps_avail": self.extdisp.gps_ok})
 
         # diagnostic info
         state.update({"frm_cnt":         self.frm_cnt})
@@ -592,9 +609,15 @@ class PolarScope(object):
             if self.portal.hw_retries > 5:
                 print("ERROR: WiFi hardware failure")
                 green_led.off()
-                while True:
-                    red_led.toggle()
-                    pyb.delay(150)
+                if (self.t % 300) < 150:
+                    red_led.on()
+                else:
+                    red_led.off()
+                if self.extdisp is not None:
+                    self.extdisp.set_ip("WIFI HW ERR")
+            else:
+                if self.extdisp is not None:
+                    self.extdisp.set_ip(self.portal.ip)
 
     def task(self):
         gc.collect()
@@ -623,9 +646,16 @@ class PolarScope(object):
                 self.cam_err = True
 
             if self.sleeping:
-                red_led.off()
+                #red_led.off()
                 green_led.off()
                 blue_led.off()
+                if self.extdisp is not None:
+                    if self.cam_err:
+                        self.extdisp.set_error("ERR + SLP")
+                    else:
+                        self.extdisp.set_error("SLEEP")
+                    self.extdisp.prep(None, None, None)
+                    self.extdisp.show()
                 return
 
             # day mode is just auto exposure for testing
@@ -673,7 +703,43 @@ class PolarScope(object):
             self.cam_err = self.cam.has_error
 
             self.update_websocket()
+
+            if self.extdisp is not None:
+                if self.cam_err:
+                    self.extdisp.set_error("CAM ERR")
+                elif self.img is None:
+                    self.extdisp.set_error("IMG ERR")
+                elif self.expo_code != star_finder.EXPO_JUST_RIGHT:
+                    self.extdisp.set_error("EXPO ERR")
+                else:
+                    self.extdisp.set_error(None)
+                stable_solution = self.stable_solution()
+                if stable_solution is None:
+                    self.extdisp.prep(None, None, None)
+                    self.extdisp.show()
+                else:
+                    stable_solution.get_pole_coords()
+                    rot = stable_solution.get_rotation() + self.time_mgr.get_angle()
+                    polecoords = (stable_solution.x, stable_solution.y)
+                    if settings["use_refraction"]:
+                        refrac = comutils.get_refraction(self.time_mgr.latitude)
+                        polecoords = comutils.move_point_vector(polecoods, (refrac * stable_solution.pix_per_deg, rot + 90))
+                    self.extdisp.prep(polecoords, (settings["center_x"], settings["center_y"]), rot)
+                    self.extdisp.show()
+
         else:
+            if self.extdisp is not None:
+                self.extdisp.task()
+                t = self.extdisp.get_date()
+                if t != 0:
+                    self.time_mgr.set_utc_time_epoch(t)
+                    self.time_mgr.set_location(self.extdisp.get_longitude(), self.extdisp.get_latitude())
+                    self.settings["longitude"] = self.time_mgr.longitude
+                    self.settings["latitude"]  = self.time_mgr.latitude
+                    if self.has_time == False:
+                        exclogger.log_exception("Time Obtained (%u)" % pyb.millis(), time_str=comutils.fmt_time(self.time_mgr.get_time()))
+                    self.has_time = True
+
             if pyb.elapsed_millis(self.snap_millis) > 5000:
                 self.cam_err = True
                 if self.debug:
@@ -686,6 +752,9 @@ class PolarScope(object):
                     self.task_network()
                 self.cam.snapshot_start()
                 self.snap_millis = pyb.millis()
+                if self.extdisp is not None:
+                    self.extdisp.set_error("CAM ERR")
+                    self.extdisp.show()
 
             if self.websock is not None and pyb.elapsed_millis(self.websock_millis) > 500:
                 self.update_websocket()
