@@ -42,5 +42,20 @@ def vector_between(p1, p2, mag_only = False):
     ang = math.degrees(math.atan2(dy, dx))
     return mag, ang
 
+def get_refraction(lat, pressure = 101.0, temperature = 10.0):
+    x = math.radians(lat + (10.3 / (lat + 5.11)))
+    x = 1.02 / math.tan(x)
+    tempcomp = (pressure / 101) * (283 / (273 + temperature))
+    arcmin = x * tempcomp
+    if arcmin < 0:
+        arcmin = 0
+    return arcmin / 60.0
+
+def move_point_vector(xy, vect):
+    phi = math.radians(vect[1])
+    dx = vect[0] * math.cos(phi)
+    dy = vect[0] * math.sin(phi)
+    return (xy[0] + dx), (xy[1] + dy)
+
 def map_val(x, in_min, in_max, out_min, out_max):
     return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
