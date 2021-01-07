@@ -154,10 +154,17 @@ class Ublox6M(object):
                 if parts[6] == "A":
                     self.has_fix = True
             did = True
+        elif parts[0] == "$GPRMC":
+            if self.has_fix:
+                self.parse_time(parts[1])
+                self.parse_latitude(parts[3], parts[4])
+                self.parse_longitude(parts[5], parts[6])
+                self.parse_date_rmc(parts[9])
+            did = True
         elif parts[0] == "$GPZDA":
             if self.has_fix:
                 self.parse_time(parts[1])
-                self.parse_date(parts[2], parts[3], parts[4])
+                self.parse_date_zda(parts[2], parts[3], parts[4])
             did = True
         if self.has_fix == False:
             self.has_date = False
@@ -167,10 +174,21 @@ class Ublox6M(object):
         self.time_minute = int(str[2:4])
         self.time_second = int(round(float(str[4:])))
 
-    def parse_date(self, s1, s2, s3):
+    def parse_date_zda(self, s1, s2, s3):
         self.date_day   = int(s1)
         self.date_month = int(s2)
         self.date_year  = int(s3)
+        if self.date_year < 2000:
+            self.date_year += 2000
+        if self.has_fix:
+            self.has_date = True
+
+    def parse_date_rmc(self, str):
+        self.date_day   = int(str[0:2])
+        self.date_month = int(str[2:4])
+        self.date_year  = int(str[4:6])
+        if self.date_year < 2000:
+            self.date_year += 2000
         if self.has_fix:
             self.has_date = True
 
@@ -402,6 +420,9 @@ def test_gps_parser(disp):
     disp.gps.parse_nmea("$GPGLL,4916.45,N,12311.12,W,225444,A")
     print("%f %f %s" % (disp.get_longitude(), disp.get_latitude(), comutils.fmt_time(utime.localtime(disp.get_date()))))
     # -123.185325 49.274168 2021/07/12-22:54:44
+    disp.gps.parse_nmea("$GPRMC,041425.00,A,4916.45,N,12311.12,W,0.068,,070121,,,D")
+    print("%f %f %s" % (disp.get_longitude(), disp.get_latitude(), comutils.fmt_time(utime.localtime(disp.get_date()))))
+    # -123.185325 49.274168 2021/01/07-04:14:25
     disp.gps.has_fix  = False
     disp.gps.has_date = False
 
@@ -411,7 +432,7 @@ def test_gps(disp):
     if disp.has_gps_fix():
         t = disp.get_date()
         if t == 0:
-            timestr = "no GPZDA"
+            timestr = "no time data"
         else:
             timestr = comutils.fmt_time(utime.localtime(t))
         print("GPS[%u]: long= %f , lat= %f , time= %s" % (now, disp.get_longitude(), disp.get_latitude(), timestr))
