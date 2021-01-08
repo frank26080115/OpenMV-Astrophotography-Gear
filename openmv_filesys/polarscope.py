@@ -721,10 +721,10 @@ class PolarScope(object):
                     stable_solution.get_pole_coords()
                     rot = stable_solution.get_rotation() + self.time_mgr.get_angle()
                     polecoords = (stable_solution.x, stable_solution.y)
-                    if settings["use_refraction"]:
+                    if self.settings["use_refraction"]:
                         refrac = comutils.get_refraction(self.time_mgr.latitude)
                         polecoords = comutils.move_point_vector(polecoods, (refrac * stable_solution.pix_per_deg, rot + 90))
-                    self.extdisp.prep(polecoords, (settings["center_x"], settings["center_y"]), rot)
+                    self.extdisp.prep(polecoords, (self.settings["center_x"], self.settings["center_y"]), rot)
                     self.extdisp.show()
 
         else:

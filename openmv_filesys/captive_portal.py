@@ -730,7 +730,10 @@ def stream_file(dest, f, bufsz = -1, buflim = 2048):
 
 def split_get_request(req):
     req_split = req.split(' ')
-    request_url = req_split[1]
+    if len(req_split) > 1:
+        request_url = req_split[1]
+    else:
+        request_url = ""
     request_page = request_url
     request_urlparams = {}
     if '?' in request_page:
