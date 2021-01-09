@@ -1,5 +1,5 @@
 var errgraph_height = 300;
-var errgraph_stepwidth = 5;
+var errgraph_stepwidth = 15;
 var errgraph_totallimit = 4096 * 2;
 var errgraph_data = [];
 var errgraph_lasttime = 0;
@@ -10,7 +10,7 @@ var errgraph_lasthoricnt = 0;
 function errgraph_draw()
 {
     var wrap_div = document.getElementById("div_errgraph");
-    var cli_wid = wrapdiv.clientWidth;
+    var cli_wid = wrap_div.clientWidth;
 
     // here we figure out how many items to draw
     var show_cnt = Math.floor(cli_wid / errgraph_stepwidth);
@@ -32,13 +32,14 @@ function errgraph_draw()
         show_cnt = errgraph_lasthoricnt;
     }
 
-    var hori_labels  = [];
-    var zero_data    = []
-    var err_ra_data  = [];
-    var err_dec_data = [];
-    var pul_ra_data  = [];
-    var pul_dec_data = [];
-    var shutter_data = [];
+    var hori_labels   = [];
+    var zero_data     = [];
+    var err_ra_data   = [];
+    var err_dec_data  = [];
+    var pul_ra_data   = [];
+    var pul_dec_data  = [];
+    var shutter_data1 = [];
+    var shutter_data2 = [];
     var i, j;
     var first_ts;
 
@@ -58,73 +59,86 @@ function errgraph_draw()
         else if ((i % 5) == 0 && pkt[0] != 0)
         {
             // only put a label on every 5th data point
-            hori_labels.push((Math.round((pkt[0] - first_ts) / 100.0) / 10.0).toString());
+            hori_labels.push((Math.abs(Math.round((pkt[0] - first_ts) / 100.0)) / 10.0).toString());
         }
         else
         {
             hori_labels.push(" ");
         }
 
-        err_ra_data .push(pkt[1]);
-        err_dec_data.push(pkt[2]);
-        pul_ra_data .push(pkt[3]);
-        pul_dec_data.push(pkt[4]);
-        shutter_data.push(pkt[5] == 0 ? 0 : 750);
-        zero_data   .push(0);
+        err_ra_data  .push(pkt[1]);
+        err_dec_data .push(pkt[2]);
+        pul_ra_data  .push(pkt[3]);
+        pul_dec_data .push(pkt[4]);
+        shutter_data1.push(pkt[5] == 0 ? 0 : 1500);
+        shutter_data2.push(pkt[5] == 0 ? 0 : -1500);
+        zero_data    .push(0);
     }
 
     var chart = new Chartist.Line('#errgraph-chart', {
         labels: hori_labels,
         series: [{
-                name: 'series-1',
+                name: 'series-err-ra',
                 data: err_ra_data
             }, {
-                name: 'series-2',
+                name: 'series-err-dec',
                 data: err_dec_data
+            },
+            //{
+            //    name: 'series-pul-ra',
+            //    data: pul_ra_data
+            //}, {
+            //    name: 'series-pul-dec',
+            //    data: pul_dec_data
+            //},
+            {
+                name: 'series-shutter1',
+                data: shutter_data1
             }, {
-                name: 'series-3',
-                data: pul_ra_data
+                name: 'series-shutter2',
+                data: shutter_data2
             }, {
-                name: 'series-4',
-                data: pul_dec_data
-            }, {
-                name: 'series-5',
-                data: shutter_data
-            }, {
-                name: 'series-6',
+                name: 'series-zero',
                 data: zero_data
             }]
         }, {
         fullWidth: true,
         series: {
-            'series-1': {
+            'series-err-ra': {
               //lineSmooth: Chartist.Interpolation.simple(),
               lineSmooth: Chartist.Interpolation.none(),
               showPoint: true,
               showArea:  false
             },
-            'series-2': {
+            'series-err-dec': {
               //lineSmooth: Chartist.Interpolation.simple(),
               lineSmooth: Chartist.Interpolation.none(),
               showPoint: true,
               showArea:  false
             },
-            'series-3': {
+            'series-pul-ra': {
               lineSmooth: Chartist.Interpolation.step(),
               showPoint: false,
               showArea:  true
             },
-            'series-4': {
+            'series-pul-dec': {
               lineSmooth: Chartist.Interpolation.step(),
               showPoint: false,
               showArea:  true
             },
-            'series-5': {
+            'series-shutter1': {
               lineSmooth: Chartist.Interpolation.step(),
               showPoint: false,
-              showArea:  true
+              showArea:  false,
+              showLine:  true
             },
-            'series-6': {
+            'series-shutter2': {
+              lineSmooth: Chartist.Interpolation.step(),
+              showPoint: false,
+              showArea:  false,
+              showLine:  true
+            },
+            'series-zero': {
               lineSmooth: Chartist.Interpolation.none(),
               showPoint: false,
               showArea:  false
@@ -136,6 +150,28 @@ function errgraph_draw()
         setTimeout(function(){
             errgraph_draw();
         }, 100);
+    }
+}
+
+function errgraph_onresize()
+{
+    var ele = document.getElementById("errgraph-chart");
+    try
+    {
+        if (window.innerHeight > window.innerWidth)
+        {
+            ele.classList.add("ct-square");
+            ele.classList.remove(".ct-minor-seventh");
+        }
+        else
+        {
+            ele.classList.remove("ct-square");
+            ele.classList.add(".ct-minor-seventh");
+        }
+    }
+    catch
+    {
+        console.log("boo");
     }
 }
 
@@ -184,6 +220,7 @@ function errgraph_save()
 {
     try
     {
+        var filename = "guideerror-" + Date.now().toString() + ".csv";
         var textdata = "timestamp, err_ra, err_dec, pulse_ra, pulse_dec, shutter, \r\n";
         errgraph_data.forEach(function(ele, idx) {
             ele.forEach(function(num, col) {
