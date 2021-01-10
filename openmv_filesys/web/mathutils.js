@@ -226,3 +226,12 @@ function math_roundPlaces(x, places)
     }
     return Math.round(x * f) / f;
 }
+
+function time_getNowEpoch()
+{
+    var epoch2000 = new Date(Date.UTC(2000, 0, 1));
+    var nowEpoch = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), date.getUTCHours(), date.getUTCMinutes(), date.getUTCSeconds()));
+    var nowEpoch2000 = nowEpoch - epoch2000;
+    nowEpoch2000 = Math.round(nowEpoch2000 / 1000.0);
+    return nowEpoch2000;
+}
