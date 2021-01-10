@@ -157,7 +157,51 @@ def blob_to_star(b, img, thresh, expo = 1, adv = False):
     if adv == False:
         return blobstar.BlobStar(cx, cy, r, brightness)
     else:
-        return blobstar.GuideStar(cx, cy, r, brightness, maxbrite, satcnt, areacnt)
+        sums, pointiness = guide_star_analyze(img, cx, cy, r)
+        return blobstar.GuideStar(cx, cy, r, brightness, maxbrite, satcnt, areacnt, pointiness)
+
+def guide_star_analyze(img, cx, cy, r):
+    left   = cx - r
+    right  = cx + r
+    top    = cy - r
+    bottom = cy + r
+    sums = [0 for i in range(r)]
+    cnts = [0 for i in range(r)]
+    x = left
+    while x <= right:
+        y = top
+        while y <= bottom:
+            dx = x - cx
+            dy = y - cy
+            mag = math.round(math.sqrt((dx * dx) + (dy + dy)))
+            if (dx != 0 or dy != 0) and mag == 0:
+                mag = 1
+            if mag > r:
+                y += 1
+                continue
+            sums[mag] += img.get_pixel(x, y)
+            cnts[mag] += 1
+            y += 1
+        x += 1
+    i = 0
+    j = r
+    pointiness = 0
+    px = -1
+    while i < len(sums):
+        x = sums[i] / cnts[i]
+        sums[i] = x
+        if i != 0 and j > 0:
+            dx = px - x
+            dx *= j
+            dx /= px
+            if dx < 0:
+                dx *= 2
+            pointiness += dx
+            j -= 1
+        px = x
+        i += 1
+    pointiness = comutils.map_val(pointiness, 0, r, 0, 100)
+    return sums, pointiness
 
 def decode_hotpixels(str):
     res = []

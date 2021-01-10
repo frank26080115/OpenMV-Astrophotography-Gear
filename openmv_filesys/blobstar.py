@@ -5,31 +5,6 @@ from comutils import SENSOR_WIDTH, SENSOR_HEIGHT
 import math
 import ujson
 
-"""
-class BlobStarUidManager(object):
-
-    def __init__(self):
-        self.used = []
-
-    def generate(self):
-        x = 0
-        while True:
-            try:
-                import pyd
-                x = pyd.rng()
-            except:
-                pass
-            try:
-                import random
-                x = random.randint(0, 0x7FFFFFFF)
-            except:
-                pass
-            if x != 0:
-                if x not in self.used:
-                    self.used.append(x)
-                    return x
-"""
-
 class BlobStar(object):
 
     def __init__(self, cx, cy, r, brightness):
@@ -59,7 +34,7 @@ class BlobStar(object):
 
 class GuideStar(object):
 
-    def __init__(self, cx, cy, r, brightness, maxbrite, saturated, area):
+    def __init__(self, cx, cy, r, brightness, maxbrite, saturated, area, pointiness):
         self.cx = cx
         self.cy = cy
         self.r  = r
@@ -68,6 +43,7 @@ class GuideStar(object):
         self.saturated = saturated
         self.area = area
         self.saturation = saturated * 100.0 / area
+        self.pointiness = pointiness
         self.rating = self._eval()
 
     def _eval(self):
@@ -88,9 +64,9 @@ class GuideStar(object):
         if self.maxbrite == best_maxbrite:
             score_maxbrite = 100
         elif self.maxbrite < best_maxbrite:
-            score_maxbrite = map_val(self.maxbrite, 64, best_maxbrite, 0, 100)
+            score_maxbrite = comutils.map_val(self.maxbrite, 64, best_maxbrite, 0, 100)
         elif self.maxbrite > best_maxbrite:
-            score_maxbrite = 100 - map_val(self.maxbrite, best_maxbrite, 255, 0, 25)
+            score_maxbrite = 100 - comutils.map_val(self.maxbrite, best_maxbrite, 255, 0, 25)
 
         # fully saturated stars are bad for tracking because it's harder to find the center
         score_saturation = 100 - self.saturation
@@ -99,10 +75,12 @@ class GuideStar(object):
         center_x = SENSOR_WIDTH / 2
         center_y = SENSOR_HEIGHT / 2
         mag = comutils.vector_between([center_x, center_y], [self.cx, self.cy], mag_only = True)
-        score_centerdist = 100 - map_val(mag, 0, SENSOR_HEIGHT / 6, 0, 100)
+        score_centerdist = 100 - comutils.map_val(mag, 0, SENSOR_HEIGHT / 6, 0, 100)
+
+        score_pointiness = self.pointiness
 
         # place weights on each item
-        return (score_maxbrite * 0.9) + (score_saturation * 0.9) + (score_centerdist * 0.5)
+        return (score_pointiness * 0.9) + (score_maxbrite * 0.7) + (score_saturation * 0.7) + (score_centerdist * 0.5)
 
     def to_jsonobj(self):
         obj = {}
