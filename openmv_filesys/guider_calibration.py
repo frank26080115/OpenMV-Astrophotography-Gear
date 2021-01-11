@@ -3,14 +3,29 @@ micropython.opt_level(2)
 
 import comutils
 
+RECOMMENDED_POINTS       = micropython.const(10)
+MINIMUM_REQUIRED_POINTS  = micropython.const(5)
+
 class GuiderCalibration(object):
     def __init__(self, x, y, pulse_width):
         self.points = [[x, y]]
-        self.pulse_width
+        self.pulse_width = pulse_width
         self.has_cal = False
+
+    def set_origin(self, x, y):
+        self.points = [[x, y]]
 
     def append(self, x, y):
         self.points.append([x, y])
+
+    def append_pt(self, pt):
+        self.points.append(pt)
+
+    def append_all(self, pts):
+        self.points.extend(pts)
+        
+    def reset_pts(self):
+        self.points = [self.points[0]]
 
     def get_span(self):
         p0 = self.points[0]
@@ -34,6 +49,7 @@ class GuiderCalibration(object):
             if x > max_mag:
                 max_mag = x
             i += 1
+        return max_mag
 
     def analyze(self):
         i = 0
@@ -67,7 +83,7 @@ class GuiderCalibration(object):
         self.pix_per_ms = self.avg_step_mag / self.pulse_width
         self.ms_per_pix = self.pulse_width / self.avg_step_mag
         i = 1
-        accepted_points = []
+        self.accepted_points = []
         farthest_point = None
         farthest = 0
         pstart = self.points[0]
@@ -81,15 +97,15 @@ class GuiderCalibration(object):
             mag2 = comutils.vector_between(p1, p2, mag_only = True)
             mag_start = comutils.vector_between(pstart, p2, mag_only = True)
             if mag1 >= mag_limit and mag2 >= mag_limit: # "good" point
-                accepted_points.append(p1)
+                self.accepted_points.append(p1)
             if i == 0 and mag1 >= mag_limit: # "good" point
-                accepted_points.append(p0)
+                self.accepted_points.append(p0)
             if i == len(self.points) - 2 and mag2 >= mag_limit: # "good" point
-                accepted_points.append(p2)
+                self.accepted_points.append(p2)
             if mag_start > farthest:
                 farthest = mag_start
                 farthest_point = p2
-        self.line_est_center, self.angle = line_est(accepted_points)
+        self.line_est_center, self.angle = line_est(self.accepted_points)
         # we have a line-of-best-fit but there are two possible directions
         # use the start point and the farthest point to see if the direction needs to be flipped
         mag, ang = comutils.vector_between(pstart, farthest_point)
@@ -99,14 +115,14 @@ class GuiderCalibration(object):
         self.angle = comutils.angle_normalize(self.angle)
         self.farthest = farthest
 
-        if len(accepted_points) < 10:
+        if len(self.accepted_points) < MINIMUM_REQUIRED_POINTS:
             return False
         else:
             self.has_cal = True
             return True
 
     def summary(self):
-        return len(accepted_points), self.farthest, self.angle, self.line_est_center, self.points[0]
+        return len(self.accepted_points), self.farthest, self.angle, self.line_est_center, self.points[0]
 
 def line_est(points):
     cnt = len(points)
@@ -124,3 +140,26 @@ def line_est(points):
     dy = (sum_xy / cnt) - (avg_x * avg_y)
     dx = (sum_xx / cnt) - (avg_x * avg_x)
     return [avg_x, avg_y], math.degrees(math.atan2(dy, dx))
+
+if __name__ == "__main__":
+    tests = []
+    tests.append([[0,   1], [0,   2], [0,   3], [0,   4], [0,   5]])
+    tests.append([[0,  -1], [0,  -2], [0,  -3], [0,  -4], [0,  -5]])
+    tests.append([[1,   0], [2,   0], [3,   0], [4,   0], [5,   0]])
+    tests.append([[-1,  0], [-2,  0], [-3,  0], [-4,  0], [-5,  0]])
+    tests.append([[1,   1], [2,   2], [3,   3], [4,   4], [5,   5]])
+    tests.append([[1,  -1], [2,  -2], [3,  -3], [4,  -4], [5,  -5]])
+    tests.append([[-1, -1], [-2, -2], [-3, -3], [-4, -4], [-5, -5]])
+    tests.append([[-1,  1], [-2,  2], [-3,  3], [-4,  4], [-5,  5]])
+    tests.append([[0,   1], [0,  20], [0,  30], [0,  40], [0,  50], [0, 60], [0, 70], [0, 80]])
+    tests.append([[0,   10], [0,  20], [0,  30], [0,  40], [0,  50], [0, 60], [0, 70], [0, 80]])
+    tests.append([[0,   1], [0,  20], [0,  30], [0,  40], [0,  50], [0, 60], [0, 70], [0, 71]])
+
+    i = 0
+    while i < len(tests):
+        cali = GuiderCalibration(0, 0, 750)
+        cali.append_all(tests[i])
+        cali.analyze()
+        cnt, farthest, angle, line_center, start_pt = cali.summary()
+        print("test [%u]: %f , %f , ( %f , %f ) , ( %f , %f ), %f , %f", (i, cnt, farthest, angle, line_center[0], line_center[1], start_pt[0], start_pt[1], cali.pix_per_ms, cali.ms_per_pix))
+    
