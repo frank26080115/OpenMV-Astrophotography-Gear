@@ -1,6 +1,7 @@
 import micropython
 micropython.opt_level(2)
 
+import math
 import comutils
 
 RECOMMENDED_POINTS       = micropython.const(10)
@@ -23,14 +24,16 @@ class GuiderCalibration(object):
 
     def append_all(self, pts):
         self.points.extend(pts)
-        
+
     def reset_pts(self):
         self.points = [self.points[0]]
 
     def get_span(self):
         p0 = self.points[0]
 
-    def get_span_between(self, p0, point_list = self.points):
+    def get_span_between(self, p0, point_list = None):
+        if point_list is None:
+            point_list = self.points
         max_mag = 0
         i = 0
         while i < len(point_list):
@@ -41,7 +44,9 @@ class GuiderCalibration(object):
             i += 1
         return max_mag
 
-    def get_span_all(self, point_list = self.points):
+    def get_span_all(self, point_list = None):
+        if point_list is None:
+            point_list = self.points
         i = 0
         max_mag = 0
         while i < len(point_list):
@@ -105,6 +110,7 @@ class GuiderCalibration(object):
             if mag_start > farthest:
                 farthest = mag_start
                 farthest_point = p2
+            i += 1
         self.line_est_center, self.angle = line_est(self.accepted_points)
         # we have a line-of-best-fit but there are two possible directions
         # use the start point and the farthest point to see if the direction needs to be flipped
@@ -112,7 +118,7 @@ class GuiderCalibration(object):
         dang = comutils.angle_diff(ang, self.angle)
         if abs(dang) > 90: # direction needs flipping
             self.angle += 180.0
-        self.angle = comutils.angle_normalize(self.angle)
+        self.angle = comutils.ang_normalize(self.angle)
         self.farthest = farthest
 
         if len(self.accepted_points) < MINIMUM_REQUIRED_POINTS:
@@ -131,14 +137,17 @@ def line_est(points):
     sum_xx = 0
     sum_xy  = 0
     for p in points:
-        sum_x  += p.cx
-        sum_y  += p.cy
-        sum_xx += p.cx ** 2
-        sum_xy += p.cx * p.cy
+        sum_x  += p[0]
+        sum_y  += p[1]
+        sum_xx += p[0] * p[0]
+        sum_xy += p[0] * p[1]
     avg_x = sum_x / cnt
     avg_y = sum_y / cnt
     dy = (sum_xy / cnt) - (avg_x * avg_y)
     dx = (sum_xx / cnt) - (avg_x * avg_x)
+    #print("%u %f %f %f %f %f %f %f %f" % (cnt, sum_x, sum_y, sum_xx, sum_xy, avg_x, avg_y, dy, dx))
+    if dy == 0 and dx == 0:
+        return [avg_x, avg_y], 90
     return [avg_x, avg_y], math.degrees(math.atan2(dy, dx))
 
 if __name__ == "__main__":
@@ -152,14 +161,16 @@ if __name__ == "__main__":
     tests.append([[-1, -1], [-2, -2], [-3, -3], [-4, -4], [-5, -5]])
     tests.append([[-1,  1], [-2,  2], [-3,  3], [-4,  4], [-5,  5]])
     tests.append([[0,   1], [0,  20], [0,  30], [0,  40], [0,  50], [0, 60], [0, 70], [0, 80]])
-    tests.append([[0,   10], [0,  20], [0,  30], [0,  40], [0,  50], [0, 60], [0, 70], [0, 80]])
+    tests.append([[0,  10], [0,  20], [0,  30], [0,  40], [0,  50], [0, 60], [0, 70], [0, 80]])
     tests.append([[0,   1], [0,  20], [0,  30], [0,  40], [0,  50], [0, 60], [0, 70], [0, 71]])
 
+    print("Guider Calibration Test")
     i = 0
     while i < len(tests):
         cali = GuiderCalibration(0, 0, 750)
         cali.append_all(tests[i])
         cali.analyze()
         cnt, farthest, angle, line_center, start_pt = cali.summary()
-        print("test [%u]: %f , %f , ( %f , %f ) , ( %f , %f ), %f , %f", (i, cnt, farthest, angle, line_center[0], line_center[1], start_pt[0], start_pt[1], cali.pix_per_ms, cali.ms_per_pix))
-    
+        print("test [%u]: %u , %f , %f , ( %f , %f ) , ( %f , %f ), %f , %f" % (i, cnt, farthest, angle, line_center[0], line_center[1], start_pt[0], start_pt[1], cali.pix_per_ms, cali.ms_per_pix))
+        i += 1
+
