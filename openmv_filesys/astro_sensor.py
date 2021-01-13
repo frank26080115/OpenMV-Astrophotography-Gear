@@ -20,7 +20,6 @@ class AstroCam(object):
 
         self.simulate = False
         if simulate is not None:
-            sensor.shutdown(True)
             gc.collect()
             #print("about to load simulation file, checking memory")
             #micropython.mem_info(False)
@@ -57,7 +56,11 @@ class AstroCam(object):
                     if shutter_us > 1000000:
                         pyb.delay(100)
                         sensor.__write_reg(0x3037, 0x18)   # slow down PLL
-                        if shutter_us > 1500000:
+                        if shutter_us > 2750000:
+                            pyb.delay(100)
+                            sensor.__write_reg(0x3036, 40) # slow down PLL
+                        # warning: doesn't work well, might crash
+                        elif shutter_us > 1500000:
                             pyb.delay(100)
                             sensor.__write_reg(0x3036, 80) # slow down PLL
                             # warning: doesn't work well, might crash
@@ -149,6 +152,13 @@ class AstroCam(object):
         self.snap_started = False
         return self.img
 
+    def get_timespan(self):
+        if self.shutter > 500000:
+            x = self.shutter * 4 / 3000
+        else:
+            x = self.shutter / 1000
+        return int(round(x))
+
     def test_gather(self, shots = 2, gain_start = 0, gain_step = 16, gain_limit = 128, shutter_start = 500000, shutter_step = 250000, shutter_limit = 1500000):
         shot = 0
         rnd  = pyb.rng() % 1000
@@ -171,14 +181,46 @@ class AstroCam(object):
                         return
 
     def test_view(self):
-        self.init(gain_db = -1, shutter_us = -1, framesize = sensor.WQXGA2, force_reset = True, flip = True)
+        self.init(gain_db = 30, shutter_us = 1000000, framesize = sensor.WQXGA2, force_reset = True, flip = False)
         clock = time.clock()
+        told = pyb.millis()
         while True:
             clock.tick()
-            self.snapshot()
-            print("%u - %0.2f" % (self.fileseq, clock.fps()))
+            img = self.snapshot()
+            tnew = img.timestamp()
+            tspan = tnew - told
+            print("%u - %0.2f - %u" % (self.fileseq, clock.fps(), tspan))
+            told = tnew
+
+    def test_time(self):
+        setting = 100
+        while setting <= 5000:
+            self.init(gain_db = 30, shutter_us = setting * 1000, framesize = sensor.WQXGA2, force_reset = True, flip = False)
+            tsum = 0
+            i = 0
+            j = 0
+            told = pyb.millis()
+            while i < 10:
+                img = self.snapshot()
+                tnow = img.timestamp()
+                tspan = tnow - told
+                told = tnow
+                i += 1
+                if i > 3:
+                    tsum += tspan
+                    j += 1
+            avg = int(round(tsum / j))
+            x = (setting * 4) / 3
+            print("%u : %u ? %0.1f" % (setting, avg, x))
+            if setting < 500:
+                setting += 100
+            elif setting < 2000:
+                setting += 250
+            else:
+                setting += 500
 
 if __name__ == "__main__":
     cam = AstroCam()
-    cam.test_view()
+    cam.test_time()
+    #cam.test_view()
     #cam.test_gather()

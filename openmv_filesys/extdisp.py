@@ -27,6 +27,7 @@ OLED_SET_DISP_CLK_DIV    = micropython.const(0xD5)
 OLED_SET_PRECHARGE       = micropython.const(0xD9)
 OLED_SET_VCOM_DESEL      = micropython.const(0xDB)
 OLED_SET_CHARGE_PUMP     = micropython.const(0x8D)
+OLED_SCROLL_DEACTIVATE   = micropython.const(0x2E)
 
 class SSD1306_I2C(object):
 
@@ -35,7 +36,6 @@ class SSD1306_I2C(object):
             i2c = pyb.I2C(I2C_DEFAULT_CHANNEL, pyb.I2C.MASTER, baudrate = I2C_DEFAULT_BAUDRATE)
         self.i2c          = i2c
         self.addr         = addr
-        self.temp         = bytearray(2)
         self.width        = width
         self.height       = height
         self.pages        = self.height // 8
@@ -46,27 +46,23 @@ class SSD1306_I2C(object):
 
     def init_display(self):
         for cmd in (
-            OLED_SET_DISP            | 0x00,  # off
-            # address setting
-            OLED_SET_MEM_ADDR        , 0x00,  # horizontal
-            # resolution and layout
-            OLED_SET_DISP_START_LINE | 0x00,
-            OLED_SET_SEG_REMAP       | 0x01,  # column addr 127 mapped to SEG0
-            OLED_SET_MUX_RATIO       , self.height - 1,
-            OLED_SET_COM_OUT_DIR     | 0x08,  # scan from COM[N] to COM0
-            OLED_SET_DISP_OFFSET     , 0x00,
-            OLED_SET_COM_PIN_CFG     , 0x02 if self.height == 32 else 0x12,
-            # timing and driving scheme
-            OLED_SET_DISP_CLK_DIV    , 0x80,
-            OLED_SET_PRECHARGE       , 0x22 if self.external_vcc else 0xF1,
-            OLED_SET_VCOM_DESEL      , 0x30,  # Vcom = 0.83 * Vcc
-            # display
-            OLED_SET_CONTRAST        , 0xFF,  # maximum contrast
-            OLED_SET_ENTIRE_ON       | 0x00,  # output follows RAM contents
-            OLED_SET_NORM_INV        | 0x00,  # not inverted
-            # charge pump
-            OLED_SET_CHARGE_PUMP     , 0x10 if self.external_vcc else 0x14,
-            OLED_SET_DISP            | 0x01): # turn on display
+                OLED_SET_DISP            | 0x00,  # off
+                OLED_SET_DISP_CLK_DIV    , 0x80,
+                OLED_SET_MUX_RATIO       , self.height - 1,
+                OLED_SET_DISP_OFFSET     , 0x00,
+                OLED_SET_DISP_START_LINE | 0x00,
+                OLED_SET_CHARGE_PUMP     , 0x10 if self.external_vcc else 0x14,
+                OLED_SET_MEM_ADDR        , 0x00,  # horizontal
+                OLED_SET_SEG_REMAP       | 0x01,  # column addr 127 mapped to SEG0
+                OLED_SET_COM_OUT_DIR     | 0x08,  # scan from COM[N] to COM0
+                OLED_SET_COM_PIN_CFG     , 0x02 if self.height == 32 else 0x12,
+                OLED_SET_CONTRAST        , 0xCF,
+                OLED_SET_PRECHARGE       , 0x22 if self.external_vcc else 0xF1,
+                OLED_SET_VCOM_DESEL      , 0x40,  # Vcom = 0.83 * Vcc
+                OLED_SET_ENTIRE_ON       | 0x00,  # output follows RAM contents
+                OLED_SET_NORM_INV        | 0x00,  # not inverted
+                OLED_SCROLL_DEACTIVATE   ,
+                OLED_SET_DISP            | 0x01): # turn on display
             self.write_cmd(cmd)
 
     def poweroff(self):
@@ -77,29 +73,32 @@ class SSD1306_I2C(object):
         self.write_cmd(contrast)
 
     def write_cmd(self, cmd):
-        self.temp[0] = 0x80 # Co=1, D/!C=0
-        self.temp[1] = cmd
-        self.i2c.writeto(self.addr, self.temp)
+        temp    = bytearray(2)
+        temp[0] = 0x80 # Co=1, D/!C=0
+        temp[1] = cmd
+        self.i2c.send(temp, addr=self.addr)
 
     def write_data(self, buf):
-        self.temp[0] = self.addr << 1
-        self.temp[1] = 0x40 # Co=0, D/!C=1
-        self.i2c.start()
-        self.i2c.write(self.temp)
-        self.i2c.write(buf)
-        self.i2c.stop()
+        temp = bytearray(1 + len(buf))
+        temp[0] = 0x40 # Co=0, D/!C=1
+        i = 1
+        while i < len(temp):
+            temp[i] = buf[i - 1]
+            i += 1
+        self.i2c.send(temp, addr=self.addr)
 
 class Ublox6M(object):
 
-    def __init__(self, i2c = None, addr = GPS_DEFAULT_I2C_ADDR):
+    def __init__(self, i2c = None, addr = GPS_DEFAULT_I2C_ADDR, debug = False):
         if i2c is None:
             i2c = pyb.I2C(I2C_DEFAULT_CHANNEL, pyb.I2C.MASTER, baudrate = I2C_DEFAULT_BAUDRATE)
         self.i2c      = i2c
         self.addr     = addr
+        self.debug    = debug
         self.has_fix  = False
         self.has_date = False
         self.has_nmea = False
-        self.str      = ""
+        self.message  = ""
 
     def test_connect(self):
         return self.i2c.is_ready(self.addr)
@@ -116,27 +115,44 @@ class Ublox6M(object):
 
     def task(self):
         did = False
-        data_avail = self.has_data()
-        if data_avail < 16:
-            return did
+        data_avail = 256
+        #data_avail = self.has_data()
+        #if data_avail < 16:
+        #    return did
+        #if data_avail > 256:
+        #    data_avail = 256
+        # note: data_avail is observed to be useless
+        # data will contain 0xFF which will cause conversion functions to throw exceptions
         data = self.i2c.mem_read(data_avail, self.addr, micropython.const(0xFF))
-        self.str += data.decode("utf-8")
+        fidx = 0
+        i = 0
+        # find first location of invalid ASCII
+        while i < len(data):
+            if data[i] >= 0x80:
+                fidx = i
+                break
+            i += 1
+        # parse only the correct binary chunk that can be correctly converted
+        if fidx > 0:
+            self.message += data[0:fidx].decode("utf-8")
         while True:
             # process all the data until there's no start indicator or end indicator
-            if "$" not in self.str:
+            if "$" not in self.message:
                 return did
             # everything before $ is useless
-            self.str = self.str[self.str.index('$'):]
+            self.message = self.message[self.message.index('$'):]
             # look for the end indicator
-            if "*" not in self.str:
+            if "*" not in self.message:
                 return did
             # extract one NMEA message
-            i = self.str.index('*')
-            chunk = self.str[0:i]
-            self.str = self.str[i:]
+            i = self.message.index('*')
+            chunk = self.message[0:i]
+            self.message = self.message[i:]
             self.parse_nmea(chunk)
 
     def parse_nmea(self, chunk):
+        if self.debug:
+            print("NEMA parse: %s" % chunk)
         parts = chunk.split(',')
         self.has_nmea = True
         # parse the message according to the header
@@ -162,19 +178,27 @@ class Ublox6M(object):
                 self.parse_date_rmc(parts[9])
             did = True
         elif parts[0] == "$GPZDA":
+            # this message does not come by default
             if self.has_fix:
                 self.parse_time(parts[1])
                 self.parse_date_zda(parts[2], parts[3], parts[4])
             did = True
+        elif parts[0] == "$GPGSA" or parts[0] == "$GPVTG":
+            did = True # these messages come by default but are useless to us
+
         if self.has_fix == False:
             self.has_date = False
 
-    def parse_time(self, str):
-        self.time_hour   = int(str[0:2]) % 24
-        self.time_minute = int(str[2:4])
-        self.time_second = int(round(float(str[4:])))
+    def parse_time(self, strin):
+        if len(strin) < 6:
+            return
+        self.time_hour   = int(strin[0:2]) % 24
+        self.time_minute = int(strin[2:4])
+        self.time_second = int(round(float(strin[4:])))
 
     def parse_date_zda(self, s1, s2, s3):
+        if len(s1) <= 0 or len(s2) <= 0 or len(s3) <= 0:
+            return
         self.date_day   = int(s1)
         self.date_month = int(s2)
         self.date_year  = int(s3)
@@ -183,16 +207,20 @@ class Ublox6M(object):
         if self.has_fix:
             self.has_date = True
 
-    def parse_date_rmc(self, str):
-        self.date_day   = int(str[0:2])
-        self.date_month = int(str[2:4])
-        self.date_year  = int(str[4:6])
+    def parse_date_rmc(self, strin):
+        if len(strin) < 6:
+            return
+        self.date_day   = int(strin[0:2])
+        self.date_month = int(strin[2:4])
+        self.date_year  = int(strin[4:6])
         if self.date_year < 2000:
             self.date_year += 2000
         if self.has_fix:
             self.has_date = True
 
-    def parse_coord(self, str, hemi):
+    def parse_coord(self, strin, hemi):
+        offset = 0
+        mul    = 0
         if hemi == "N":
             offset = 2
             mul = 1
@@ -205,17 +233,19 @@ class Ublox6M(object):
         elif hemi == "W":
             offset = 3
             mul = -1
-        degs = float(str[0:offset])
-        mins = float(str[offset: ])
+        if len(strin) <= offset or offset == 0 or mul == 0:
+            return
+        degs = float(strin[0:offset])
+        mins = float(strin[offset: ])
         return (degs + (mins / 60.0)) * mul
 
-    def parse_latitude(self, str, hemi):
-        x = self.parse_coord(str, hemi)
+    def parse_latitude(self, strin, hemi):
+        x = self.parse_coord(strin, hemi)
         self.latitude = x
         return x
 
-    def parse_longitude(self, str, hemi):
-        x = self.parse_coord(str, hemi)
+    def parse_longitude(self, strin, hemi):
+        x = self.parse_coord(strin, hemi)
         self.longitude = x
         return x
 
@@ -224,7 +254,7 @@ class Ublox6M(object):
 
 class ExtDisp(object):
 
-    def __init__(self, i2c = None, oled = None, gps = None):
+    def __init__(self, i2c = None, oled = None, gps = None, debug = False):
         if i2c is None:
             i2c = pyb.I2C(I2C_DEFAULT_CHANNEL, pyb.I2C.MASTER, baudrate = I2C_DEFAULT_BAUDRATE)
         self.i2c = i2c
@@ -237,7 +267,7 @@ class ExtDisp(object):
         self.framebuffer = None
 
         if gps is None:
-            gps = Ublox6M(i2c = i2c)
+            gps = Ublox6M(i2c = i2c, debug = debug)
         self.gps    = gps
         self.gps_ok = False
 
@@ -310,7 +340,7 @@ class ExtDisp(object):
 
         if self.frame is None:
             self.framebuffer = bytearray((self.oled.height // 8) * self.oled.width)
-            self.frame = framebuf.FrameBuffer(self.framebuffer, self.oled.width, self.oled.height)
+            self.frame = framebuf.FrameBuffer(self.framebuffer, self.oled.width, self.oled.height, framebuf.MONO_VLSB)
         return True
 
     def prep(self, pole_coords, center_coords, rotation):
@@ -318,8 +348,8 @@ class ExtDisp(object):
             return
 
         self.frame.fill(0)
-        mid_x = self.oled.width  // 2
-        mid_y = self.oled.height // 2
+        mid_x = int(self.oled.width  // 2)
+        mid_y = int(self.oled.height // 2)
         self.frame.hline(0, mid_y, self.oled.width,  1)
         self.frame.vline(mid_x, 0, self.oled.height, 1)
         if pole_coords is not None:
@@ -337,17 +367,18 @@ class ExtDisp(object):
                 # the size of the spread depends on the distance away from the pole
                 spread = (mag2 * 120.0) / (comutils.SENSOR_HEIGHT - mid_y)
                 spread /= 2.0
+                spread_radius = mid_y - 7
                 i = 0
                 while i < spread:
                     j = math.radians(ang + i)
-                    x = mid_y * math.cos(j)
-                    y = mid_y * math.sin(j)
-                    self.frame.line(mid_x, mid_y, x, y, 1)
+                    x = spread_radius * math.cos(j)
+                    y = spread_radius * math.sin(j)
+                    self.frame.line(mid_x, mid_y, mid_x + int(round(x)), mid_y + int(round(y)), 1)
                     j = math.radians(ang - i)
-                    x = mid_y * math.cos(j)
-                    y = mid_y * math.sin(j)
-                    self.frame.line(mid_x, mid_y, x, y, 1)
-                    i += 0.5 # keep this small to avoid gaps in circle
+                    x = spread_radius * math.cos(j)
+                    y = spread_radius * math.sin(j)
+                    self.frame.line(mid_x, mid_y, mid_x + int(round(x)), mid_y + int(round(y)), 1)
+                    i += 0.2 # keep this small to avoid gaps in circle
             else:
                 # if in screen, draw the target
 
@@ -374,7 +405,7 @@ class ExtDisp(object):
                 self.frame.line(mid_x + dx + 1, mid_y + dy + 1, mid_x + dx + 1        , mid_y + dy + 1 + tgtsz, 1)
             if rotation is not None:
                 # draw the representation of the ground
-                spread = 5
+                spread = 10
                 mag = mid_y - 1
                 j = math.radians(rotation + 90 + spread)
                 x1 = mag * math.cos(j)
@@ -382,7 +413,7 @@ class ExtDisp(object):
                 j = math.radians(rotation + 90 - spread)
                 x2 = mag * math.cos(j)
                 y2 = mag * math.sin(j)
-                self.frame.line(x1, y1, x2, y2, 1)
+                self.frame.line(mid_x + int(round(x1)), mid_y + int(round(y1)), mid_x + int(round(x2)), mid_y + int(round(y2)), 1)
         else:
             # no pole solution, show IP address
             # cover the lens if you want to force the IP to show
@@ -449,7 +480,10 @@ def test_oled(disp):
         pole_coords = None
         rotation = None
     else:
-        pole_coords = [random.randint(1, comutils.SENSOR_WIDTH - 2), random.randint(1, comutils.SENSOR_HEIGHT - 2)]
+        if random.randint(0, 1) == 0:
+            pole_coords = [random.randint(1, comutils.SENSOR_WIDTH - 2), random.randint(1, comutils.SENSOR_HEIGHT - 2)]
+        else:
+            pole_coords = [random.randint((comutils.SENSOR_WIDTH // 2) - 32, (comutils.SENSOR_WIDTH // 2) + 32), random.randint((comutils.SENSOR_HEIGHT // 2) - 32, (comutils.SENSOR_HEIGHT // 2) + 32)]
         if random.randint(0, 2) == 0:
             rotation = None
         else:
@@ -458,16 +492,20 @@ def test_oled(disp):
         disp.set_ip("123.456.789.012")
     if random.randint(0, 3) == 0:
         disp.set_error("ABCD EFGH")
+    else:
+        disp.set_error(None)
     disp.prep(pole_coords, center_coords, rotation)
     disp.show()
     print("OLED[%u]" % (pyb.millis()), end="")
     if disp.oled_ok == False:
         print(" error")
+    else:
+        print("")
 
 if __name__ == "__main__":
     import random
     # run the test bench
-    disp = ExtDisp()
+    disp = ExtDisp(debug = True)
     center_coords = [comutils.SENSOR_WIDTH // 2, comutils.SENSOR_HEIGHT // 2]
     print("Testing ExtDisp")
     test_gps_parser(disp)
