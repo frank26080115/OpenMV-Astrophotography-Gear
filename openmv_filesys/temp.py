@@ -1,7 +1,5 @@
-SHUTTER_ONE_SECOND       = micropython.const(1000000)
 SHUTTER_DURATION_SHORT   = micropython.const(1000)
 SHUTTER_DURATION_LONG    = micropython.const(1400)
-SHUTTER_DURATION_TIMEOUT = micropython.const(5000)
 
 PANICTHRESH_EXPOERR      = micropython.const(10)
 PANICTHRESH_MOVESCORE    = micropython.const(100)
@@ -17,10 +15,10 @@ PANICTHRESH_MOVESCORE    = micropython.const(100)
             self.img_stats = self.histogram.get_statistics()
             stars, code = star_finder.find_stars(self.img, hist = self.histogram, stats = self.img_stats, thresh = self.settings["thresh"], force_solve = self.settings["force_solve"], advanced = True)
             stars = blobstar.sort_rating(stars)
-            if code == star_finder.EXPO_JUST_RIGHT:
+            if code != star_finder.EXPO_JUST_RIGHT or len(stars) <= 0:
                 self.expo_err += 1
                 if self.expo_err > self.settings["panicthresh_expoerr"]:
-                    panic = True
+                    self.panic()
                 self.update_web_img()
             else:
                 # exposure is just right
@@ -32,14 +30,15 @@ PANICTHRESH_MOVESCORE    = micropython.const(100)
                 # if previous data is unavailable, then just populate it for no motion
                 if self.prev_stars is None:
                     self.prev_stars = stars
-                if self.selected_star is None:
+                if self.selected_star is None and len(stars) > 0:
                     self.selected_star = stars[0]
                     self.target_origin = [self.selected_star.cx, self.selected_star.cy]
                     self.target_final  = self.target_origin
 
-                best_star, best_score, nearby, move = star_motion.get_star_movement(self.prev_stars, self.selected_star, self.stars)
-                if best_score > self.settings["panicthresh_movescore"]:
-                    panic = True
+                if self.selected_star is not None:
+                    best_star, best_score, nearby, move = star_motion.get_star_movement(self.prev_stars, self.selected_star, self.stars)
+                    if best_score > self.settings["panicthresh_movescore"]:
+                        self.panic()
                 self.update_web_img()
         else:
             # self.img is None
@@ -47,7 +46,7 @@ PANICTHRESH_MOVESCORE    = micropython.const(100)
 
     def snap_start(self):
         try:
-            self.cam.init(gain_db = self.settings["gain"], shutter_us = self.settings["shutter"], force_reset = self.cam_err)
+            self.cam.init(gain_db = self.settings["gain"], shutter_us = self.settings["shutter"] * 1000, force_reset = self.cam_err)
             while self.cam.check_init() == False:
                 self.task_network()
                 self.pulser.task()
@@ -81,7 +80,7 @@ PANICTHRESH_MOVESCORE    = micropython.const(100)
                     self.stop_time = self.pulser.get_stop_time()
                 if self.cam.snapshot_check():
                     return True
-                elif pyb.elapsed_millis(self.snap_millis) > SHUTTER_DURATION_TIMEOUT:
+                elif pyb.elapsed_millis(self.snap_millis) > self.settings["shutter"] * 3:
                     self.cam_err += 1
                     print("warning: camera timeout")
                     exclogger.log_exception("warning: camera timeout", time_str=comutils.fmt_time(self.time_mgr.get_time()))
@@ -96,7 +95,7 @@ PANICTHRESH_MOVESCORE    = micropython.const(100)
         if self.snap_wait():
             img = self.cam.snapshot_finish()
             img_time = img.timestamp()
-            if img_time > self.stop_time and (img_time - SHUTTER_DURATION_LONG) > self.stop_time:
+            if img_time > self.stop_time and (img_time - (self.settings["shutter"] * 1.5)) > self.stop_time:
                 # this image was taken while staying still
                 self.img = img
                 if self.move == 0 and self.stream_sock is not None and self.img_is_compressed == False:
