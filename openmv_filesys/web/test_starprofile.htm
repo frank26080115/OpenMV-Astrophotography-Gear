@@ -1,0 +1,54 @@
+<html>
+<head>
+<title>Test Star Profile</title>
+<link rel="stylesheet" href="jquery-ui-1.12.1-darkness.css" />
+<style type="text/css">
+body
+{
+    background-color: #000;
+    color: #EEE;
+    font-size: 10pt;
+}
+</style>
+</head>
+<body>
+<script src="draw_starprofile.js"></script>
+<div id="div_starprofile"><fieldset><legend>Star Profile</legend><div id="starprofile_div"></div></fieldset></div>
+</div>
+<script>
+
+var sim_ts = 0;
+
+function rand_int(minv, maxv)
+{
+    return Math.floor(Math.random() * Math.floor(maxv - minv)) + minv;
+}
+
+function sim_step()
+{
+    var len = rand_int(5, 15);
+    var arr = [];
+    var start = rand_int(200, 255);
+    arr.push(start);
+    var i, j = start;
+    for (i = 0; i < len; i++)
+    {
+        j -= rand_int(10, 30);
+        if (j < 0) {
+            j = 0;
+        }
+        arr.push(j);
+    }
+    starprofile = arr;
+    draw_starprofile();
+    setTimeout(function()
+    {
+        sim_step();
+    }, 3000);
+}
+
+sim_step();
+
+</script>
+</body>
+</html>
