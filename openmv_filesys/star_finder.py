@@ -203,6 +203,16 @@ def guide_star_analyze(img, cx, cy, r):
     pointiness = comutils.map_val(pointiness, 0, r, 0, 100)
     return sums, pointiness
 
+def simple_list(list):
+    cnt = len(list)
+    res = [[1.5, 1.5]] * cnt
+    i = 0
+    while i < cnt:
+        res[i][0] = list[i].cx
+        res[i][1] = list[i].cy
+        i += 1
+    return res
+
 def decode_hotpixels(str):
     res = []
     split = str.split(";")
