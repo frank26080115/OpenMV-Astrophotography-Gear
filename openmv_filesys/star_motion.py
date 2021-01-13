@@ -36,12 +36,14 @@ def eval_move(move, old_list, new_list, declination, tolerance):
             mag = comutils.vector_between([nx, ny], [k.cx, k.cy], mag_only = True)
             if mag < min_dist:
                 min_dist = mag
-        if min_dist < tolerance + (tolerance * abs(math.tan(math.radians(declination)))):
+        if declination is not None:
+            tolerance += tolerance * abs(math.tan(math.radians(declination)))
+        if min_dist < tolerance:
             move.nearby += 1
             move.err_sum += min_dist
     return move
 
-def get_star_movement(old_list, star, new_list, declination = 0, tolerance = 100, fast_mode = False):
+def get_star_movement(old_list, star, new_list, declination = None, tolerance = 100, fast_mode = False):
     # if only one star in new view, then assume it's the one
     if len(new_list) <= 1:
         return new_list[0], 0, 1
@@ -62,11 +64,11 @@ def get_star_movement(old_list, star, new_list, declination = 0, tolerance = 100
         if fast_mode:
             eval_move(move, old_list, new_list, declination, tolerance)
             if move.calc_score() < tolerance and move.nearby > len(new_list) * 0.75:
-                return move.star, move.score, move.nearby
+                return move.star, move.score, move.nearby, move
 
     # if only one star in old view, then assume the movement is minimal
     if len(old_list) <= 1:
-        return closest_star, 0, 1
+        return closest_star, 0, 1, None
 
     if fast_mode == False:
         for move in possible_moves:
@@ -97,8 +99,8 @@ def get_star_movement(old_list, star, new_list, declination = 0, tolerance = 100
             best_move = i
 
     if best_move is None:
-        return None, 0, 0
-    return best_move.star, best_move.score, best_move.nearby
+        return None, 0, 0, None
+    return best_move.star, best_move.score, best_move.nearby, best_move
 
 def test(fname = None):
     from PIL import Image, ImageDraw, ImageFont
@@ -129,7 +131,7 @@ def test(fname = None):
         y = i.cy + shift_y + random.randint(-10, 10)
         new_list.append(TestStar(x, y))
 
-    best_star, best_score, nearby = get_star_movement(star_list, star_list[0], new_list, fast_mode = True)
+    best_star, best_score, nearby, move = get_star_movement(star_list, star_list[0], new_list, fast_mode = True)
     print("result %.1f %u/%u" % (best_score, nearby, len(star_list)))
 
     im = Image.new("RGB", (SENSOR_WIDTH, SENSOR_HEIGHT), (0, 0, 0))
