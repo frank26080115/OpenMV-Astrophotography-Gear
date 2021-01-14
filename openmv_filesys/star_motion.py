@@ -43,7 +43,7 @@ def eval_move(move, old_list, new_list, declination, tolerance):
             move.err_sum += min_dist
     return move
 
-def get_star_movement(old_list, star, new_list, declination = None, tolerance = 100, fast_mode = False):
+def get_star_movement(old_list, star, new_list, declination = None, tolerance = 50, fast_mode = False):
     # if only one star in new view, then assume it's the one
     if len(new_list) <= 1:
         return new_list[0], 0, 1
@@ -101,6 +101,56 @@ def get_star_movement(old_list, star, new_list, declination = None, tolerance = 
     if best_move is None:
         return None, 0, 0, None
     return best_move.star, best_move.score, best_move.nearby, best_move
+
+def get_all_star_movement(old_list, new_list, selected_star = None, cnt_limit = 5, declination = None, tolerance = 50, fast_mode = False):
+    old_list = blobstar.sort_rating(old_list)
+    if selected_star is None:
+        selected_star = old_list[0]
+    star, score, nearby, move = get_star_movement(old_list, selected_star, new_list, declination = declination, tolerance = tolerance, fast_mode = fast_mode)
+    dx = star.cx - selected_star.cx
+    dy = star.cy - selected_star.cy
+    dx_sum = 0
+    dy_sum = 0
+    avg_cnt = 0
+    for i in old_list:
+        nx = i.cx + dx
+        ny = i.cy + dy
+        nearest = None
+        nearest_mag = 9999
+        best_dx = 0
+        best_dy = 0
+        for j in new_list:
+            ndx = j.cx - i.cx
+            ndy = j.cy - i.cy
+            mag = math.sqrt((ndx * ndx) + (ndy * ndy))
+            if mag < nearest_mag:
+                nearest_mag = mag
+                nearest = j
+                best_dx = ndx
+                best_dy = ndy
+        if nearest is not None and nearest_mag < tolerance:
+            dx_sum  += best_dx
+            dy_sum  += best_dy
+            avg_cnt += 1
+            if avg_cnt >= cnt_limit:
+                break
+    return [dx, dy], score
+
+def move_multistar(dx, dy, new_list, old_selected):
+    new_list = []
+    for i in old_selected:
+        nx = i.cx + dx
+        ny = i.cy + dy
+        nearest = None
+        nearest_mag = 9999
+        for j in new_list:
+            mag = comutils.vector_between([nx, ny], [j.cx, j.cy], mag_only = True)
+            if mag < nearest_mag:
+                nearest_mag = mag
+                nearest = j
+        if nearest is not None:
+            new_list.append(nearest)
+    return new_list
 
 def test(fname = None):
     from PIL import Image, ImageDraw, ImageFont
