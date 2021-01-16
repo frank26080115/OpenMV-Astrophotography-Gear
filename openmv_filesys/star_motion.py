@@ -104,7 +104,7 @@ def get_star_movement(old_list, star, new_list, declination = None, tolerance = 
 
 def get_all_star_movement(old_list, new_list, selected_star = None, cnt_min = 1, cnt_limit = 10, rating_thresh = 0, declination = None, tolerance = 50, fast_mode = False):
     if len(old_list) <= 0:
-        return None, None, -1, 0
+        return None, None, None, -1, 0
     # the most reliable stars should be processed first,
     # and the very first one used as the target star for initial analysis
     old_list = blobstar.sort_rating(old_list)
@@ -139,9 +139,14 @@ def get_all_star_movement(old_list, new_list, selected_star = None, cnt_min = 1,
             # if confidently found one closest to the new predicted coordinate
             # use it in the average movement if it meets the criteria
             if avg_cnt < cnt_min or (i.rating >= rating_thresh and nearest.rating >= rating_thresh):
-                dx_sum  += best_dx
-                dy_sum  += best_dy
+                # the average movement is computed with a weight
+                # the closer it is to selected_star, the more weight it has
+                dist_ori = comutils.vector_between([selected_star.cx, selected_star.cy], [i.cx, i.cy], mag_only=True)
+                dist_weight = comutils.SENSOR_DIAG - dist_ori
+                dx_sum  += best_dx * dist_weight
+                dy_sum  += best_dy * dist_weight
                 avg_cnt += 1
+                avg_weight += dist_weight
             if avg_cnt >= cnt_limit:
                 break # limit reached, end the analysis
     if avg_cnt <= 0:
@@ -151,10 +156,10 @@ def get_all_star_movement(old_list, new_list, selected_star = None, cnt_min = 1,
         dx_avg = dy
     else:
         # average all of the movements
-        dx_avg = dx_sum / avg_cnt
-        dy_avg = dy_sum / avg_cnt
+        dx_avg = dx_sum / avg_weight
+        dy_avg = dy_sum / avg_weight
     mag, ang = comutils.vector_between([0, 0], [dx_avg, dy_avg])
-    return [dx_avg, dy_avg], [mag, ang], score, avg_cnt
+    return star, [selected_star.cx + dx_avg, selected_star.cy + dy_avg], [dx_avg, dy_avg, mag, ang], score, avg_cnt
 
 def move_multistar(dx, dy, new_list, old_selected):
     new_list = []
