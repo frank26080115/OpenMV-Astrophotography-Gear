@@ -6,6 +6,7 @@ import utime
 
 SENSOR_WIDTH  = micropython.const(2592)
 SENSOR_HEIGHT = micropython.const(1944)
+SENSOR_DIAG   = micropython.const(3240)
 
 PIXELS_PER_DEGREE = micropython.const(875.677409 / 2.9063) # calculated using "OV Cep"
 SIDEREAL_DAY_SECONDS = micropython.const(86164.09054)
