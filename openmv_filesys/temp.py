@@ -30,19 +30,29 @@ PANICTHRESH_MOVESCORE    = micropython.const(100)
                 # if previous data is unavailable, then just populate it for no motion
                 if self.prev_stars is None:
                     self.prev_stars = stars
-                if self.selected_star is None and len(stars) > 0:
-                    self.selected_star = stars[0]
-                    self.target_origin = [self.selected_star.cx, self.selected_star.cy]
-                    self.target_final  = self.target_origin
 
-                if self.selected_star is not None:
-                    best_star, best_score, nearby, move = star_motion.get_star_movement(self.prev_stars, self.selected_star, self.stars)
-                    if best_score > self.settings["panicthresh_movescore"]:
-                        self.panic()
+                move_coord, move_vect, score, avg_cnt = star_motion.get_all_star_movement(self.prev_stars, self.stars)
+                if score > self.settings["panicthresh_movescore"]:
+                    self.panic()
+
                 self.update_web_img()
         else:
             # self.img is None
             pass
+
+    def reset_guiding(self):
+        self.backlash_ra.neutralize()
+        self.backlash_dec.neutralize()
+        self.selected_star   = None
+        self.prev_stars      = None
+        self.target_origin   = None
+        self.target_final    = None
+
+    def panic(self):
+        if self.guiding_state != GUIDESTATE_IDLE:
+            self.guiding_state = GUIDESTATE_PANIC
+            self.pulser.panic(True)
+        self.reset_guiding()
 
     def snap_start(self):
         try:
@@ -53,6 +63,8 @@ PANICTHRESH_MOVESCORE    = micropython.const(100)
             self.cam.snapshot_start()
             self.snap_millis = pyb.millis()
             self.cam_err = 0
+            if self.cam_initing > 0:
+                self.cam_initing -= 1
             self.img_is_compressed = False
             return True
         except Exception as exc:
@@ -80,7 +92,7 @@ PANICTHRESH_MOVESCORE    = micropython.const(100)
                     self.stop_time = self.pulser.get_stop_time()
                 if self.cam.snapshot_check():
                     return True
-                elif pyb.elapsed_millis(self.snap_millis) > self.settings["shutter"] * 3:
+                elif pyb.elapsed_millis(self.snap_millis) > (self.cam.get_timespan() + 500):
                     self.cam_err += 1
                     print("warning: camera timeout")
                     exclogger.log_exception("warning: camera timeout", time_str=comutils.fmt_time(self.time_mgr.get_time()))
@@ -95,7 +107,7 @@ PANICTHRESH_MOVESCORE    = micropython.const(100)
         if self.snap_wait():
             img = self.cam.snapshot_finish()
             img_time = img.timestamp()
-            if img_time > self.stop_time and (img_time - (self.settings["shutter"] * 1.5)) > self.stop_time:
+            if img_time > self.stop_time and (img_time - (self.cam.get_timespan() + 100)) > self.stop_time:
                 # this image was taken while staying still
                 self.img = img
                 if self.move == 0 and self.stream_sock is not None and self.img_is_compressed == False:

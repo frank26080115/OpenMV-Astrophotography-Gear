@@ -102,7 +102,11 @@ def get_star_movement(old_list, star, new_list, declination = None, tolerance = 
         return None, 0, 0, None
     return best_move.star, best_move.score, best_move.nearby, best_move
 
-def get_all_star_movement(old_list, new_list, selected_star = None, cnt_limit = 5, declination = None, tolerance = 50, fast_mode = False):
+def get_all_star_movement(old_list, new_list, selected_star = None, cnt_min = 1, cnt_limit = 10, rating_thresh = 0, declination = None, tolerance = 50, fast_mode = False):
+    if len(old_list) <= 0:
+        return None, None, -1, 0
+    # the most reliable stars should be processed first,
+    # and the very first one used as the target star for initial analysis
     old_list = blobstar.sort_rating(old_list)
     if selected_star is None:
         selected_star = old_list[0]
@@ -113,8 +117,10 @@ def get_all_star_movement(old_list, new_list, selected_star = None, cnt_limit = 
     dy_sum = 0
     avg_cnt = 0
     for i in old_list:
+        # for every star in the old list, find the predicted new coordinate using the info about the best possible move
         nx = i.cx + dx
         ny = i.cy + dy
+        # find the star in the new list that is closest to the new predicted coordinate
         nearest = None
         nearest_mag = 9999
         best_dx = 0
@@ -124,17 +130,31 @@ def get_all_star_movement(old_list, new_list, selected_star = None, cnt_limit = 
             ndy = j.cy - i.cy
             mag = math.sqrt((ndx * ndx) + (ndy * ndy))
             if mag < nearest_mag:
+                # if we find the one closest to the new predicted coordinate, remember the actual movement between the old and new coordinate
                 nearest_mag = mag
                 nearest = j
                 best_dx = ndx
                 best_dy = ndy
         if nearest is not None and nearest_mag < tolerance:
-            dx_sum  += best_dx
-            dy_sum  += best_dy
-            avg_cnt += 1
+            # if confidently found one closest to the new predicted coordinate
+            # use it in the average movement if it meets the criteria
+            if avg_cnt < cnt_min or (i.rating >= rating_thresh and nearest.rating >= rating_thresh):
+                dx_sum  += best_dx
+                dy_sum  += best_dy
+                avg_cnt += 1
             if avg_cnt >= cnt_limit:
-                break
-    return [dx, dy], score
+                break # limit reached, end the analysis
+    if avg_cnt <= 0:
+        # hmm... all stars have bad rating?
+        # fall back on using the original calculated move
+        dx_avg = dx
+        dx_avg = dy
+    else:
+        # average all of the movements
+        dx_avg = dx_sum / avg_cnt
+        dy_avg = dy_sum / avg_cnt
+    mag, ang = comutils.vector_between([0, 0], [dx_avg, dy_avg])
+    return [dx_avg, dy_avg], [mag, ang], score, avg_cnt
 
 def move_multistar(dx, dy, new_list, old_selected):
     new_list = []
