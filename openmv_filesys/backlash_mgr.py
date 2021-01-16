@@ -48,6 +48,7 @@ class BacklashManager(object):
         #        return x * self.reduction
         #elif self.hysteresis != 0:
         else:
+            x = int(round(x))
             if self.state == 0:
                 self._value_add(x, max_limit)
                 if self.hysteresis != 0:
