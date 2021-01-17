@@ -45,6 +45,7 @@ class GuideStar(object):
         self.saturation = saturated * 100.0 / area
         self.pointiness = pointiness
         self.rating = self._eval()
+        self.profile = []
 
     def _eval(self):
         # we want the star to be not too close to the edge

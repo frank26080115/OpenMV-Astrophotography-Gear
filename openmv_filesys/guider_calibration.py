@@ -17,13 +17,16 @@ class GuiderCalibration(object):
         self.points = [[x, y]]
 
     def append(self, x, y):
-        self.points.append([x, y])
+        self.append_pt([x, y])
+        #self.points.append([x, y])
 
     def append_pt(self, pt):
         self.points.append(pt)
 
     def append_all(self, pts):
-        self.points.extend(pts)
+        for i in pts:
+            self.append_pt(i)
+        #self.points.extend(pts)
 
     def reset_pts(self):
         self.points = [self.points[0]]
@@ -129,6 +132,19 @@ class GuiderCalibration(object):
 
     def summary(self):
         return len(self.accepted_points), self.farthest, self.angle, self.line_est_center, self.points[0]
+
+    def get_json_obj(self):
+        obj = {}
+        obj.update({"success"      : self.has_cal})
+        obj.update({"points"       : self.accepted_points})
+        obj.update({"points_cnt"   : len(self.accepted_points)})
+        obj.update({"start_x"      : self.points[0][0]})
+        obj.update({"start_y"      : self.points[0][1]})
+        obj.update({"pix_per_ms"   : self.pix_per_ms})
+        obj.update({"ms_per_pix"   : self.ms_per_pix})
+        obj.update({"farthest"     : self.farthest})
+        obj.update({"angle"        : self.angle})
+        return obj
 
 def line_est(points):
     cnt = len(points)

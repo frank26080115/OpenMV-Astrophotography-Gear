@@ -158,9 +158,13 @@ def blob_to_star(b, img, thresh, expo = 1, adv = False):
         return blobstar.BlobStar(cx, cy, r, brightness)
     else:
         sums, pointiness = guide_star_analyze(img, cx, cy, r)
-        return blobstar.GuideStar(cx, cy, r, brightness, maxbrite, satcnt, areacnt, pointiness)
+        guidestar = blobstar.GuideStar(cx, cy, r, brightness, maxbrite, satcnt, areacnt, pointiness)
+        guidestar.profile = sums
 
 def guide_star_analyze(img, cx, cy, r):
+    cx = int(round(cx))
+    cy = int(round(cy))
+    r  = int(round(r))
     left   = cx - r
     right  = cx + r
     top    = cy - r
