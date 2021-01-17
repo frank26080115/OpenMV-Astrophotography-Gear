@@ -12,9 +12,12 @@ body
 }
 .ct-series-a .ct-line, .ct-series-a .ct-point { stroke:#FF4444; }
 .ct-series-b .ct-line, .ct-series-b .ct-point { stroke:#4488FF; }
-.ct-series-c .ct-line { stroke:#888888; }
+.ct-series-c .ct-area { fill-opacity: 0.5; }
 .ct-series-d .ct-line { stroke:#888888; }
-.ct-series-e .ct-line { stroke:#FFFFFF; }
+.ct-series-d .ct-area { fill:  #888888; fill-opacity: 0.2; }
+.ct-series-e .ct-line { stroke:#888888; }
+.ct-series-e .ct-area { fill:  #888888; fill-opacity: 0.2; }
+.ct-series-f .ct-line { stroke:#FFFFFF; }
 span.ct-label.ct-vertical.ct-start { position: relative; top: 4px; }
 </style>
 </head>
@@ -39,7 +42,7 @@ function rand_int()
 
 function sim_step()
 {
-    errgraph_push(sim_ts, rand_int(), rand_int(), rand_int(), rand_int(), rand_int());
+    errgraph_push(sim_ts, rand_int(), rand_int(), rand_int(), rand_int());
     sim_ts += 1000;
     setTimeout(function()
     {

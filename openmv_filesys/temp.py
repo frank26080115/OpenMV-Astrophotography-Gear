@@ -43,7 +43,70 @@ PANICTHRESH_MOVESCORE    = micropython.const(100)
             state.update({"calib_dec", self.calibration[CALIIDX_DEC].get_json_obj()})
         else:
             state.update({"calib_dec", False})
+        state.update({"logs": self.get_logs_obj()})
         return state
+
+    def get_logs_obj(self):
+        obj = {}
+        i = 0
+        while i < LOG_BUFF_LEN:
+            msglog   = self.msglog_buff[i]
+            pulselog = self.pulselog_buff[i]
+            obj.update({("msg_time_%u" % i) : msglog[0]})
+            obj.update({("msg_str_%u"  % i) : msglog[1]})
+            obj.update({("pulse_time_%u" % i) : pulselog[0]})
+            obj.update({("pulse_ra_%u"   % i) : pulselog[1]})
+            obj.update({("pulse_dec_%u"  % i) : pulselog[2]})
+            obj.update({("pulse_sum_%u"  % i) : pulselog[3]})
+            i += 1
+        return obj
+
+    def send_state(self):
+        obj = self.get_state_obj()
+        self.send_websocket(obj)
+
+    def send_logs(self):
+        obj = self.get_logs_obj()
+        obj.update({"packet_type": "logs"})
+        self.send_websocket(obj)
+
+    def send_websocket(self, obj):
+        if self.websock is None:
+            return
+        json_str = ujson.dumps(obj)
+        self.websock.settimeout(10)
+        try:
+            self.portal.websocket_send(self.websock, json_str)
+            self.stream_sock_err = 0
+            self.websock_millis = pyb.millis()
+        except Exception as exc:
+            self.stream_sock_err += 1
+            if self.stream_sock_err > 5:
+                if self.debug:
+                    print("websock too many errors")
+                exclogger.log_exception(exc, to_file=False)
+                self.kill_websocket()
+            pass
+
+    def check_websocket(self):
+        if self.websock is None:
+            return
+        try:
+            rep = captive_portal.websocket_readmsg(self.websock)
+            self.websock.settimeout(0.1)
+            if rep is None:
+                return False
+            if len(rep) <= 0:
+                return False
+        except:
+            return False
+        self.stream_sock_err = 0
+        self.websock_millis = pyb.millis()
+        try:
+            self.parse_websocket(rep)
+        except Exception as exc:
+            exclogger.log_exception(exc, to_file=False)
+        return True
 
     def decide(self):
         decided_pulse = 0
@@ -63,9 +126,7 @@ PANICTHRESH_MOVESCORE    = micropython.const(100)
                 if self.debug:
                     print("exposure error %u %u" % (code, len(stars)))
                 if self.expo_err > self.settings["panicthresh_expoerr"]:
-                    if self.debug:
-                        print("exposure error exceeded threshold")
-                    self.panic()
+                    self.panic(msg = "too many exposure errors")
                 self.dither_calm = 0
                 return decided_pulse
             else:
@@ -84,14 +145,15 @@ PANICTHRESH_MOVESCORE    = micropython.const(100)
                 self.selected_star = real_star
                 self.virtual_star  = virtual_star
                 if score > self.settings["panicthresh_movescore"]:
-                    if self.debug:
-                        print("movement analysis score too low %f" % score)
-                    self.panic()
+                    self.panic(msg = "movement analysis score too low %f" % score)
 
                 if self.guide_state == GUIDESTATE_GUIDING:
                     if self.selected_star is None:
-                        if self.debug:
-                            print("warning: no selected star while guiding")
+                        self.log_msg("WARN: guidance requested without selected star")
+                        self.guide_state = GUIDESTATE_IDLE:
+                        return
+                    if self.calibration[CALIIDX_RA] is None:
+                        self.log_msg("WARN: guidance requested without RA calibration")
                         self.guide_state = GUIDESTATE_IDLE:
                         return
                     if self.target_coord is None:
@@ -145,16 +207,17 @@ PANICTHRESH_MOVESCORE    = micropython.const(100)
                     self.backlash_ra.neutralize()
                     self.backlash_dec.neutralize()
                     if self.selected_star is None:
-                        if self.debug:
-                            print("warning: calibration without selected star")
+                        self.log_msg("WARN: calibration requested without selected star")
                         self.guide_state = GUIDESTATE_IDLE:
                         return
                     if self.virtual_star is None:
                         self.virtual_star = [self.selected_star.cx, self.selected_star.cy]
                     if self.guide_state == GUIDESTATE_CALIBRATING_RA:
                         i = CALIIDX_RA
+                        dir = "RA"
                     else:
                         i = CALIIDX_DEC
+                        dir = "DEC"
                     if self.calibration[i] is None:
                         pulse_width = self.settings["calibration_pulse"]
                         if pulse_width <= 0:
@@ -167,11 +230,11 @@ PANICTHRESH_MOVESCORE    = micropython.const(100)
                         self.guide_state = GUIDESTATE_IDLE
                         success = self.calibration[i].analyze()
                         if success:
-                            if self.debug:
-                                print("calibration done, angle = %0.1f , dist = %0.1f" % (self.calibration[i].angle, self.calibration[i].farthest))
+                            msg = "calibration of %s done, angle = %0.1f , dist = %0.1f" % (dir, self.calibration[i].angle, self.calibration[i].farthest)
+                            self.log_msg("SUCCESS: " + msg)
                         else:
-                            if self.debug:
-                                print("calibration failed")
+                            msg = "calibration of %s failed" % (dir)
+                            self.log_msg("FAILED: " + msg)
                             self.calibration[i] = None
                     else:
                         decided_pulse = self.calibration[i].pulse_width
@@ -179,6 +242,7 @@ PANICTHRESH_MOVESCORE    = micropython.const(100)
                             self.pulser.move(decided_pulse, 0, self.settings["move_grace"])
                         else:
                             self.pulser.move(0, decided_pulse, self.settings["move_grace"])
+                        self.stop_time = self.pulser.get_stop_time()
                     return decided_pulse
                 elif self.guide_state == GUIDESTATE_IDLE:
                     self.backlash_ra.neutralize()
@@ -219,6 +283,7 @@ PANICTHRESH_MOVESCORE    = micropython.const(100)
         pulse_ra_abs  = abs(pulse_ra_ori)
         pulse_dec_abs = abs(pulse_dec_ori)
         self.pulse_sum += pulse_ra_abs + pulse_dec_abs
+        self.log_pulse(nx, ny)
         min_pulse_wid = self.settings["min_pulse_wid"]
         max_pulse_wid = self.settings["max_pulse_wid"]
         if min_pulse_wid < 5:
@@ -264,8 +329,33 @@ PANICTHRESH_MOVESCORE    = micropython.const(100)
         pulse_dec_fin = self.backlash_dec.filter(pulse_dec_ori)
         if pulse_ra_fin != 0 or pulse_dec_fin != 0:
             self.pulser.move(pulse_ra_fin, pulse_dec_fin, self.settings["move_grace"])
+            self.stop_time = self.pulser.get_stop_time()
             return ret
         return 0
+
+    def log_pulse(self, nx, ny):
+        timestamp = self.img.timestamp()
+        self.pulselog_buff[self.pulselog_buff_idx][0] = timestamp
+        self.pulselog_buff[self.pulselog_buff_idx][1] = nx
+        self.pulselog_buff[self.pulselog_buff_idx][2] = ny
+        self.pulselog_buff[self.pulselog_buff_idx][3] = self.pulse_sum
+        if self.pulser.is_shutter_open() == False or self.queue_shutter_closed:
+            self.pulselog_buff[self.pulselog_buff_idx][4] = 0
+            self.queue_shutter_closed = False
+            # queue_shutter_closed is used to guarantee at least a small gap in the graph
+        else:
+            self.pulselog_buff[self.pulselog_buff_idx][4] = 1
+        self.pulselog_buff_idx += 1
+        self.pulselog_buff_idx %= LOG_BUFF_LEN
+
+    def log_msg(self, msg, to_print=True):
+        timestamp = pyb.millis()
+        self.msglog_buff[self.msglog_buff_idx][0] = timestamp
+        self.msglog_buff[self.msglog_buff_idx][1] = msg
+        self.msglog_buff_idx += 1
+        self.msglog_buff_idx %= LOG_BUFF_LEN
+        if to_print:
+            print("msg[%u]: %s" % (timestamp, msg))
 
     def reset_guiding(self):
         self.backlash_ra.neutralize()
@@ -275,11 +365,37 @@ PANICTHRESH_MOVESCORE    = micropython.const(100)
         self.target_origin   = None
         self.target_final    = None
 
-    def panic(self):
+    def panic(self, msg = None):
+        if msg is not None:
+            self.log_msg("PANIC: " + msg)
         if self.guiding_state != GUIDESTATE_IDLE:
             self.guiding_state = GUIDESTATE_PANIC
             self.pulser.panic(True)
         self.reset_guiding()
+
+    def user_select_star(self, x, y, tol = 100):
+        if self.stars is None:
+            self.log_msg("ERR: no star list for selection")
+            return False
+        if len(self.stars) <= 0:
+            self.log_msg("ERR: no stars in the list for selection")
+            return False
+        nearest = None
+        nearest_dist = 9999
+        for i in self.stars:
+            mag = comutils.vector_between([x, y], [i.cx, i.cy], mag_only=True)
+            if mag < nearest_dist:
+                nearest_dist = mag
+                nearest = i
+        if nearest_dist <= tol:
+            self.selected_star = nearest
+            self.log_msg("SUCCESS: selected star at [%u , %u]" % (self.selected_star.cx, self.selected_star.cy))
+            self.target_coord = [self.selected_star.cx, self.selected_star.cy]
+            self.origin_coord = self.target_coord
+            return True
+        else:
+            self.log_msg("FAILED: cannot select star at [%u , %u]" % (x, y))
+            return False
 
     def snap_start(self):
         try:
@@ -315,8 +431,6 @@ PANICTHRESH_MOVESCORE    = micropython.const(100)
                     garbage = self.cam.snapshot_finish()
                     self.snap_start()
             else:
-                if self.stop_time <= 0:
-                    self.stop_time = self.pulser.get_stop_time()
                 if self.cam.snapshot_check():
                     return True
                 elif pyb.elapsed_millis(self.snap_millis) > (self.cam.get_timespan() + 500):
@@ -346,6 +460,10 @@ PANICTHRESH_MOVESCORE    = micropython.const(100)
                 if self.snap_start():
                     if self.snap_wait():
                         self.img = self.cam.snapshot_finish()
+                    else:
+                        self.log_msg("ERR: guidecam failed to read image during wait")
+        else:
+            self.log_msg("ERR: guidecam failed to read image")
 
     def task_pulser(self):
         self.pulser.task()
@@ -354,6 +472,8 @@ PANICTHRESH_MOVESCORE    = micropython.const(100)
             gap_time = 1000
         if self.pulser.is_shutter_open() == False:
             self.pulse_sum = 0
+            self.queue_shutter_closed = True
+            # queue_shutter_closed is used to guarantee at least a small gap in the graph
             if self.intervalometer_timestamp <= 0:
                 self.intervalometer_timestamp = pyb.millis()
                 if self.intervalometer_state == INTERVALSTATE_ACTIVE_DITHER:

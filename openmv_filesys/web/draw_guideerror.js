@@ -36,12 +36,37 @@ function errgraph_draw()
     var zero_data     = [];
     var err_ra_data   = [];
     var err_dec_data  = [];
-    var pul_ra_data   = [];
-    var pul_dec_data  = [];
+    var pul_sum_data  = [];
     var shutter_data1 = [];
     var shutter_data2 = [];
+    var max_err = 0;
+    var max_graph_limit = 0;
     var i, j;
     var first_ts;
+
+    var max_possible_time = 2000;
+    if (typeof settings !== 'undefined') {
+        max_possible_time *= settings["intervalometer_bulb_time"];
+    }
+
+    for (i = 0, j = errgraph_data.length - 1; i < show_cnt; i++, j--)
+    {
+        var pkt = [0, 0, 0, 0, 0, 0]; // if data buffer isn't long enough, fill with blank
+        if (j >= 0)
+        {
+            // data exists (data buffer long enough), use real data
+            pkt = errgraph_data[j];
+        }
+        if (Math.abs(pkt[1]) > max_err) {
+            max_err = Math.abs(pkt[1]);
+        }
+        if (Math.abs(pkt[2]) > max_err) {
+            max_err = Math.abs(pkt[2]);
+        }
+        if (max_err > max_graph_limit) {
+            max_graph_limit = max_err;
+        }
+    }
 
     for (i = 0, j = errgraph_data.length - 1; i < show_cnt; i++, j--)
     {
@@ -68,10 +93,9 @@ function errgraph_draw()
 
         err_ra_data  .push(pkt[1]);
         err_dec_data .push(pkt[2]);
-        pul_ra_data  .push(pkt[3]);
-        pul_dec_data .push(pkt[4]);
-        shutter_data1.push(pkt[5] == 0 ? 0 : 1500);
-        shutter_data2.push(pkt[5] == 0 ? 0 : -1500);
+        pul_sum_data .push((pkt[3] * max_graph_limit) / max_possible_time);
+        shutter_data1.push(pkt[4] == 0 ? 0 : max_graph_limit);
+        shutter_data2.push(pkt[5] == 0 ? 0 : -max_graph_limit);
         zero_data    .push(0);
     }
 
@@ -83,15 +107,10 @@ function errgraph_draw()
             }, {
                 name: 'series-err-dec',
                 data: err_dec_data
-            },
-            //{
-            //    name: 'series-pul-ra',
-            //    data: pul_ra_data
-            //}, {
-            //    name: 'series-pul-dec',
-            //    data: pul_dec_data
-            //},
-            {
+            }, {
+                name: 'series-pul-sum',
+                data: pul_sum_data
+            }, {
                 name: 'series-shutter1',
                 data: shutter_data1
             }, {
@@ -116,26 +135,22 @@ function errgraph_draw()
               showPoint: true,
               showArea:  false
             },
-            'series-pul-ra': {
+            'series-pul-sum': {
               lineSmooth: Chartist.Interpolation.step(),
               showPoint: false,
-              showArea:  true
-            },
-            'series-pul-dec': {
-              lineSmooth: Chartist.Interpolation.step(),
-              showPoint: false,
-              showArea:  true
+              showArea:  true,
+              showLine:  false
             },
             'series-shutter1': {
               lineSmooth: Chartist.Interpolation.step(),
               showPoint: false,
-              showArea:  false,
+              showArea:  true,
               showLine:  true
             },
             'series-shutter2': {
               lineSmooth: Chartist.Interpolation.step(),
               showPoint: false,
-              showArea:  false,
+              showArea:  true,
               showLine:  true
             },
             'series-zero': {
@@ -184,12 +199,12 @@ function errgraph_prune()
     errgraph_data = errgraph_data.slice(i);
 }
 
-function errgraph_push(timestamp, err_ra, err_dec, pulse_ra, pulse_dec, shutter)
+function errgraph_push(timestamp, err_ra, err_dec, pulse_sum, shutter)
 {
     if (timestamp == errgraph_lasttime) {
         return;
     }
-    var pkt = [timestamp, err_ra, err_dec, pulse_ra, pulse_dec, shutter];
+    var pkt = [timestamp, err_ra, err_dec, pulse_sum, shutter];
     errgraph_data.push(pkt);
     errgraph_prune();
     errgraph_lasttime = timestamp;
@@ -221,7 +236,7 @@ function errgraph_save()
     try
     {
         var filename = "guideerror-" + Date.now().toString() + ".csv";
-        var textdata = "timestamp, err_ra, err_dec, pulse_ra, pulse_dec, shutter, \r\n";
+        var textdata = "timestamp, err_ra, err_dec, pulse_sum, shutter, \r\n";
         errgraph_data.forEach(function(ele, idx) {
             ele.forEach(function(num, col) {
                 textdata += num.toString() + ", ";
