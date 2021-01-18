@@ -235,6 +235,27 @@ def decode_hotpixels(str):
             exclogger.log_exception(exc, to_file = False)
     return res
 
+def encode_hotpixels(star_list, r = 5):
+    str = ""
+    for i in star_list:
+        if i.r <= r:
+            str += "%u,%u;" % (int(round(i.cx)), int(round(i.cy)))
+    return str
+
+def filter_hotpixels(star_list, hotpixels, lim = 3):
+    res = []
+    for i in star_list:
+        nearest = 9999
+        for p in hotpixels:
+            mag = comutils.vector_between([i.cx, i.cy], p, mag_only=True)
+            if mag < nearest:
+                nearest = mag
+                if nearest <= lim:
+                    break
+        if nearest > lim:
+            res.append(i)
+    return res
+
 """
 def demo_image(filepath, find_polaris = False):
     print("opening %s" % filepath, end = "")
