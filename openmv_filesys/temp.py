@@ -1,8 +1,9 @@
-SHUTTER_DURATION_SHORT   = micropython.const(1000)
-SHUTTER_DURATION_LONG    = micropython.const(1400)
-
-PANICTHRESH_EXPOERR      = micropython.const(10)
-PANICTHRESH_MOVESCORE    = micropython.const(100)
+    def send_settings(self):
+        obj = {}
+        obj.update({"packet_type", "settings"})
+        for k in self.settings.keys():
+            obj.update({k, self.settings[k]})
+        self.send_websocket(obj)
 
     def get_state_obj(self):
         state = {}
@@ -12,12 +13,14 @@ PANICTHRESH_MOVESCORE    = micropython.const(100)
             state.update({"rand_id": self.websock_randid})
         state.update({"guider_state": self.guide_state})
         state.update({"intervalometer_state": self.intervalometer_state})
-        if self.img is not None and self.cam_err == False:
+        if self.img is not None and self.cam_err <= 0:
             state.update({"expo_code": self.expo_code})
         elif self.img is None:
             state.update({"expo_code": star_finder.EXPO_NO_IMG})
         elif self.cam_err > 0:
             state.update({"expo_code": star_finder.EXPO_CAMERA_ERR})
+        else:
+            state.update({"expo_code": self.expo_code})
         if self.img_stats is not None:
             state.update({"img_mean":  self.img_stats.mean()})
             state.update({"img_stdev": self.img_stats.stdev()})
@@ -25,16 +28,25 @@ PANICTHRESH_MOVESCORE    = micropython.const(100)
             state.update({"img_min":   self.img_stats.min()})
         if self.stars is not None:
             star_list = self.stars
-            if len(star_list) > 50:
-                star_list = star_list[0:50]
+            star_cnt_limit = 50
+            if len(star_list) > star_cnt_limit:
+                star_list = star_list[0:star_cnt_limit]
             state.update({"stars": blobstar.to_jsonobj(star_list)})
+        else:
+            state.update({"stars": []})
         if self.selected_star is not None:
             state.update({"selected_star", [self.selected_star.cx, self.selected_star.cy]})
             state.update({"selected_star_profile", self.selected_star.profile})
+        else:
+            state.update({"selected_star", False})
         if self.target_coord is not None:
             state.update({"target_coord", self.target_coord})
+        else:
+            state.update({"target_coord", False})
         if self.origin_coord is not None:
             state.update({"origin_coord", self.origin_coord})
+        else:
+            state.update({"origin_coord", False})
         if self.calibration[CALIIDX_RA] is not None:
             state.update({"calib_ra", self.calibration[CALIIDX_RA].get_json_obj()})
         else:
@@ -118,6 +130,8 @@ PANICTHRESH_MOVESCORE    = micropython.const(100)
         elif pkt_type == "intervalometer_cmd":
             v = comutils.try_parse_setting(obj["cmd"])
             self.intervalometer_cmd(v)
+        elif pkt_type == "misc_cmd":
+            self.misc_cmd(obj["cmd"])
         elif pkt_type == "settings":
             child = obj["settings"]
             need_save = False
@@ -285,7 +299,6 @@ PANICTHRESH_MOVESCORE    = micropython.const(100)
                             self.calibration[i].timestamp = self.time_mgr.get_sec()
                             msg = "calibration of %s done, angle = %0.1f , dist = %0.1f" % (dir, self.calibration[i].angle, self.calibration[i].farthest)
                             self.log_msg("SUCCESS: " + msg)
-                            self.save_calibration()
                         else:
                             msg = "calibration of %s failed" % (dir)
                             self.log_msg("FAILED: " + msg)
@@ -622,6 +635,58 @@ PANICTHRESH_MOVESCORE    = micropython.const(100)
             self.pulser.shutter_halt()
             self.intervalometer_state = INTERVALSTATE_IDLE
             self.log_msg("CMD: intervalometer halting")
+
+    def misc_cmd(self, cmd):
+        if cmd == "echo":
+            self.log_msg("CMD: echo")
+        elif cmd == "calib_reset":
+            self.calibration[0] = None
+            self.calibration[1] = None
+            self.pulser.panic(False)
+            self.guide_state = cmd
+            self.log_msg("CMD: all calibration reset")
+        elif cmd == "calib_load":
+            try:
+                with open("calib_ra.json", mode="rb") as f:
+                    obj = ujson.load(f)
+                    if self.calibration[CALIIDX_RA] is None:
+                        self.calibration[CALIIDX_RA] = guider_calibration.GuiderCalibration(0, 0, 0)
+                    self.calibration[CALIIDX_RA].load_json_obj(obj)
+                    self.log_msg("SUCCESS: loaded RA calibration from file")
+            except Exception as exc:
+                self.log_msg("FAILED: cannot load RA calibration from file")
+                exclogger.log_exception(exc)
+            try:
+                with open("calib_dec.json", mode="rb") as f:
+                    obj = ujson.load(f)
+                    if self.calibration[CALIIDX_DEC] is None:
+                        self.calibration[CALIIDX_DEC] = guider_calibration.GuiderCalibration(0, 0, 0)
+                    self.calibration[CALIIDX_RA].load_json_obj(obj)
+                    self.log_msg("SUCCESS: loaded DEC calibration from file")
+            except Exception as exc:
+                self.log_msg("FAILED: cannot load DEC calibration from file")
+                exclogger.log_exception(exc)
+        elif cmd == "calib_save":
+            if self.calibration[CALIIDX_RA] is None:
+                self.log_msg("FAILED: RA calibration not available for saving")
+            else:
+                try:
+                    with open("calib_ra.json", mode="wb") as f:
+                        ujson.dump(self.calibration[CALIIDX_RA].get_json_obj(), f)
+                    self.log_msg("SUCCESS: saved RA calibration to file")
+                except Exception as exc:
+                    self.log_msg("FAILED: cannot save RA calibration to file")
+                    exclogger.log_exception(exc)
+            if self.calibration[CALIIDX_DEC] is None:
+                self.log_msg("FAILED: DEC calibration not available for saving")
+            else:
+                try:
+                    with open("calib_dec.json", mode="wb") as f:
+                        ujson.dump(self.calibration[CALIIDX_DEC].get_json_obj(), f)
+                    self.log_msg("SUCCESS: saved DEC calibration to file")
+                except Exception as exc:
+                    self.log_msg("FAILED: cannot save DEC calibration to file")
+                    exclogger.log_exception(exc)
 
     def task_network(self):
         if self.portal is not None:

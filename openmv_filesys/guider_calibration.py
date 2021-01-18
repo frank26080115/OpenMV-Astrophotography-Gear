@@ -157,32 +157,27 @@ class GuiderCalibration(object):
         return obj
 
     def load_json_obj(self, obj):
-        try:
-            if "str" in str(type(obj)):
-                obj = ujson.loads(obj)
-            self.has_cal = True
-            self.accepted_points = []
-            self.points = [[comutils.try_parse_setting(obj["start_x"]),  comutils.try_parse_setting(obj["start_y"])]]
-            pix_per_ms = comutils.try_parse_setting(obj["pix_per_ms"])
-            ms_per_pix = comutils.try_parse_setting(obj["ms_per_pix"])
-            if pix_per_ms != 0 and ms_per_pix != 0:
-                self.pix_per_ms = pix_per_ms
-                self.ms_per_pix = ms_per_pix
-            elif pix_per_ms != 0:
-                self.pix_per_ms = pix_per_ms
-                self.ms_per_pix = 1.0 / pix_per_ms
-            elif ms_per_pix != 0:
-                self.ms_per_pix = ms_per_pix
-                self.pix_per_ms = 1.0 / ms_per_pix
-            else:
-                self.has_cal = False
-            self.angle = comutils.ang_normalize(comutils.try_parse_setting(obj["angle"]))
-            self.farthest = comutils.try_parse_setting(obj["farthest"])
-            self.timestamp = comutils.try_parse_setting(obj["time"])
-            return True
-        except Exception as exc:
-            exclogger.log_exception(exc)
-        return False
+        if "str" in str(type(obj)):
+            obj = ujson.loads(obj)
+        self.has_cal = True
+        self.accepted_points = []
+        self.points = [[comutils.try_parse_setting(obj["start_x"]),  comutils.try_parse_setting(obj["start_y"])]]
+        pix_per_ms = comutils.try_parse_setting(obj["pix_per_ms"])
+        ms_per_pix = comutils.try_parse_setting(obj["ms_per_pix"])
+        if pix_per_ms != 0 and ms_per_pix != 0:
+            self.pix_per_ms = pix_per_ms
+            self.ms_per_pix = ms_per_pix
+        elif pix_per_ms != 0:
+            self.pix_per_ms = pix_per_ms
+            self.ms_per_pix = 1.0 / pix_per_ms
+        elif ms_per_pix != 0:
+            self.ms_per_pix = ms_per_pix
+            self.pix_per_ms = 1.0 / ms_per_pix
+        else:
+            self.has_cal = False
+        self.angle = comutils.ang_normalize(comutils.try_parse_setting(obj["angle"]))
+        self.farthest = comutils.try_parse_setting(obj["farthest"])
+        self.timestamp = comutils.try_parse_setting(obj["time"])
 
 def line_est(points):
     cnt = len(points)
