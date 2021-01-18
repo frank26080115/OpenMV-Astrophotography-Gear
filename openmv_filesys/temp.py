@@ -183,6 +183,8 @@
             stars, code = star_finder.find_stars(self.img, hist = self.histogram, stats = self.img_stats, thresh = self.settings["thresh"], force_solve = self.settings["force_solve"], advanced = True)
             if self.simulation is not None:
                 stars, code = self.simulation.get_stars(self.guide_state)
+            if self.hotpixels is not None and self.use_hotpixels:
+                stars = star_finder.filter_hotpixels(stars, self.hotpixels)
             stars = blobstar.sort_rating(stars)
             self.expo_code = code
             if code != star_finder.EXPO_JUST_RIGHT or len(stars) <= 0:
@@ -252,7 +254,7 @@
                     else:
                         self.dither_calm = 0
                         if self.debug:
-                            print("dithering too much error " % (self.target_coord[0], self.target_coord[1]))
+                            print("dithering too much error")
                     done_dither = False
                     if self.dither_calm >= self.settings["dither_calm_cnt"]:
                         done_dither = True
@@ -639,6 +641,10 @@
     def misc_cmd(self, cmd):
         if cmd == "echo":
             self.log_msg("CMD: echo")
+        elif cmd == "getstate":
+            self.send_state()
+        elif cmd == "getsettings":
+            self.send_settings()
         elif cmd == "calib_reset":
             self.calibration[0] = None
             self.calibration[1] = None
@@ -668,7 +674,7 @@
                 exclogger.log_exception(exc)
         elif cmd == "calib_save":
             if self.calibration[CALIIDX_RA] is None:
-                self.log_msg("FAILED: RA calibration not available for saving")
+                self.log_msg("ERR: RA calibration not available for saving")
             else:
                 try:
                     with open("calib_ra.json", mode="wb") as f:
@@ -678,7 +684,7 @@
                     self.log_msg("FAILED: cannot save RA calibration to file")
                     exclogger.log_exception(exc)
             if self.calibration[CALIIDX_DEC] is None:
-                self.log_msg("FAILED: DEC calibration not available for saving")
+                self.log_msg("ERR: DEC calibration not available for saving")
             else:
                 try:
                     with open("calib_dec.json", mode="wb") as f:
@@ -687,6 +693,51 @@
                 except Exception as exc:
                     self.log_msg("FAILED: cannot save DEC calibration to file")
                     exclogger.log_exception(exc)
+        elif cmd == "hotpixels_save":
+            if self.hotpixels is not None:
+                if len(self.hotpixels) > 0 and self.use_hotpixels:
+                    self.log_msg("ERR: cannot overwrite current hot-pixels, please clear or disable the hot-pixel list first")
+                    return
+            if self.stars is None:
+                self.log_msg("ERR: cannot save current hot-pixels, the star list does not exist")
+                return
+            encoded = star_finder.encode_hotpixels(self.stars)
+            self.hotpixels = star_finder.decode_hotpixels(encoded)
+            try:
+                with open("hotpixels.txt", mode="w") as f:
+                    f.write(encoded)
+                self.log_msg("SUCCESS: saved hot-pixels to file")
+            except Exception as exc:
+                self.log_msg("FAILED: cannot save hot-pixels to file")
+                exclogger.log_exception(exc)
+        elif cmd == "hotpixels_load":
+            try:
+                with open("hotpixels.txt", mode="rt") as f:
+                    encoded = f.read()
+                    self.hotpixels = star_finder.decode_hotpixels(encoded)
+                    self.use_hotpixels = True
+                    self.log_msg("SUCCESS: loaded hot-pixels from file")
+            except Exception as exc:
+                self.log_msg("FAILED: cannot load hot-pixels from file")
+                exclogger.log_exception(exc)
+        elif cmd == "hotpixels_use":
+            if self.hotpixels is None:
+                self.log_msg("ERR: cannot use hot-pixels, the hot-pixel list does not exist")
+                return
+            self.use_hotpixels = True
+            self.log_msg("SUCCESS: hot-pixels are being used")
+        elif cmd == "hotpixels_disable":
+            if self.use_hotpixels == False:
+                self.log_msg("ERR: hot-pixel usage already disabled")
+                return
+            self.use_hotpixels = False
+            self.log_msg("SUCCESS: hot-pixels are disabled")
+        elif cmd == "hotpixels_clear":
+            if self.hotpixels is None:
+                self.log_msg("ERR: cannot clear hot-pixels, the hot-pixel list already does not exist")
+                return
+            self.hotpixels = None
+            self.log_msg("SUCCESS: hot-pixels list deleted")
 
     def task_network(self):
         if self.portal is not None:
@@ -708,8 +759,5 @@
         self.portal.install_handler("/index.htm",      self.handle_index)
         self.portal.install_handler("/index.html",     self.handle_index)
         self.portal.install_handler("/stream",         self.handle_imgstream)
-        self.portal.install_handler("/updatesetting",  self.handle_updatesetting)
-        self.portal.install_handler("/getsettings",    self.handle_getsettings)
-        self.portal.install_handler("/getstate",       self.handle_getstate)
         self.portal.install_handler("/websocket",      self.handle_websocket)
         self.portal.install_handler("/memory",         self.handle_memory)
