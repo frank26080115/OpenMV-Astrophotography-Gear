@@ -60,3 +60,20 @@ def move_point_vector(xy, vect):
 
 def map_val(x, in_min, in_max, out_min, out_max):
     return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
+
+def try_parse_setting(self, v):
+    if "str" not in str(type(v)):
+        return v
+    try: # micropython doesn't have "is_numeric"
+        v = v.lstrip().rstrip()
+        if v.lower() == "false":
+            v = False
+        elif v.lower() == "true":
+            v = True
+        elif "." in v:
+            v = float(v)
+        else:
+            v = int(v)
+    except Exception as exc:
+        exclogger.log_exception(exc, to_print = False, to_file = False)
+    return v
