@@ -85,13 +85,16 @@ class GuideStar(object):
 
     def to_jsonobj(self):
         obj = {}
-        obj.update({"cx": self.cx})
-        obj.update({"cy": self.cy})
-        obj.update({"r": self.r})
-        obj.update({"brightness": self.brightness})
-        obj.update({"saturation": self.saturation})
+        obj.update({"cx": round_num(self.cx)})
+        obj.update({"cy": round_num(self.cy)})
+        #obj.update({"r" : round_num(self.r)})
+        #obj.update({"brightness": round_num(self.brightness)})
+        #obj.update({"saturation": round_num(self.saturation)})
         obj.update({"rating": self.rating})
         return obj
+
+def round_num(x):
+    return round(x * 10.0)/10.0
 
 def to_jsonobj(star_list):
     x = []
