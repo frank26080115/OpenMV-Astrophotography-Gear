@@ -52,8 +52,9 @@ PANICTHRESH_MOVESCORE    = micropython.const(100)
         while i < LOG_BUFF_LEN:
             msglog   = self.msglog_buff[i]
             pulselog = self.pulselog_buff[i]
-            obj.update({("msg_time_%u" % i) : msglog[0]})
-            obj.update({("msg_str_%u"  % i) : msglog[1]})
+            obj.update({("msg_tick_%u" % i)   : msglog[0]})
+            obj.update({("msg_time_%u" % i)   : msglog[1]})
+            obj.update({("msg_str_%u"  % i)   : msglog[2]})
             obj.update({("pulse_time_%u" % i) : pulselog[0]})
             obj.update({("pulse_ra_%u"   % i) : pulselog[1]})
             obj.update({("pulse_dec_%u"  % i) : pulselog[2]})
@@ -107,6 +108,55 @@ PANICTHRESH_MOVESCORE    = micropython.const(100)
         except Exception as exc:
             exclogger.log_exception(exc, to_file=False)
         return True
+
+    def parse_websocket(self, x):
+        obj = ujson.loads(x)
+        pkt_type = obj["packet_type"]
+        if pkt_type == "guide_cmd":
+            v = comutils.try_parse_setting(obj["cmd"])
+            self.guide_cmd(v)
+        elif pkt_type == "intervalometer_cmd":
+            v = comutils.try_parse_setting(obj["cmd"])
+            self.intervalometer_cmd(v)
+        elif pkt_type == "settings":
+            child = obj["settings"]
+            need_save = False
+            for k in child.keys():
+                v = child[k]
+                vv = comutils.try_parse_setting(v)
+                if k in self.settings:
+                    need_save = True
+                    self.settings[k] = vv
+                    if self.debug:
+                        print("setting \"%s\" => value \"%s\"" % (k, str(vv)))
+                if k == "time":
+                    self.time_mgr.set_utc_time_epoch(vv)
+                    if self.has_time == False:
+                        exclogger.log_exception("Time Obtained (%u)" % pyb.millis(), time_str=comutils.fmt_time(self.time_mgr.get_time()))
+                    self.has_time = True
+                elif k == "use_debug":
+                    self.debug = vv
+                elif k == "rand_id":
+                    self.websock_randid = vv
+            self.apply_settings()
+            if need_save:
+                self.save_settings()
+
+    def apply_settings(self):
+        self.backlash_ra.hysteresis  = v = self.settings["backlash_hyster"]
+        self.backlash_dec.hysteresis = v
+        self.backlash_ra.max_limit   = v = self.settings["backlash_limit"]
+        self.backlash_dec.max_limit  = v
+        self.backlash_ra.reduction   = v = self.settings["backlash_reduc"]
+        self.backlash_dec.reduction  = v
+        self.backlash_ra.hard_lock   = v = self.settings["backlash_lock"]
+        self.backlash_dec.hard_lock  = v
+
+    def save_settings(self, filename = "settings.json"):
+        if self.debug:
+            print("save_settings")
+        with open(filename, mode="wb") as f:
+            ujson.dump(self.settings, f)
 
     def decide(self):
         decided_pulse = 0
@@ -202,6 +252,8 @@ PANICTHRESH_MOVESCORE    = micropython.const(100)
                         self.guide_state = GUIDESTATE_GUIDING
                         self.pulser.shutter(self.settings["intervalometer_bulb_time"])
                         self.intervalometer_timestamp = 0
+                        if self.digital_intervalometer:
+                            print("!SHUTTER!")
                     return decided_pulse
                 elif self.guide_state == GUIDESTATE_CALIBRATING_RA or self.guide_state == GUIDESTATE_CALIBRATING_DEC:
                     self.backlash_ra.neutralize()
@@ -230,8 +282,10 @@ PANICTHRESH_MOVESCORE    = micropython.const(100)
                         self.guide_state = GUIDESTATE_IDLE
                         success = self.calibration[i].analyze()
                         if success:
+                            self.calibration[i].timestamp = self.time_mgr.get_sec()
                             msg = "calibration of %s done, angle = %0.1f , dist = %0.1f" % (dir, self.calibration[i].angle, self.calibration[i].farthest)
                             self.log_msg("SUCCESS: " + msg)
+                            self.save_calibration()
                         else:
                             msg = "calibration of %s failed" % (dir)
                             self.log_msg("FAILED: " + msg)
@@ -349,13 +403,19 @@ PANICTHRESH_MOVESCORE    = micropython.const(100)
         self.pulselog_buff_idx %= LOG_BUFF_LEN
 
     def log_msg(self, msg, to_print=True):
-        timestamp = pyb.millis()
+        self.time_mgr.tick()
+        timestamp = self.time_mgr.latest_millis
         self.msglog_buff[self.msglog_buff_idx][0] = timestamp
-        self.msglog_buff[self.msglog_buff_idx][1] = msg
+        self.msglog_buff[self.msglog_buff_idx][1] = self.time_mgr.get_sec()
+        self.msglog_buff[self.msglog_buff_idx][2] = msg
         self.msglog_buff_idx += 1
         self.msglog_buff_idx %= LOG_BUFF_LEN
         if to_print:
-            print("msg[%u]: %s" % (timestamp, msg))
+            if self.has_time:
+                tstr = comutils.fmt_time(self.time_mgr.get_time())
+            else:
+                tstr = str(timestamp)
+            print("msg[%s]: %s" % (tstr, msg))
 
     def reset_guiding(self):
         self.backlash_ra.neutralize()
@@ -374,6 +434,13 @@ PANICTHRESH_MOVESCORE    = micropython.const(100)
         self.reset_guiding()
 
     def user_select_star(self, x, y, tol = 100):
+        if x < 0 or y < 0:
+            self.guide_state = GUIDESTATE_IDLE
+            self.pulser.panic(False)
+            self.selected_star = None
+            self.target_coord = None
+            self.origin_coord = None
+            self.log_msg("MSG: deselected star")
         if self.stars is None:
             self.log_msg("ERR: no star list for selection")
             return False
@@ -412,6 +479,7 @@ PANICTHRESH_MOVESCORE    = micropython.const(100)
             return True
         except Exception as exc:
             self.cam_err += 1
+            self.log_msg("ERR: guidecam init failed")
             exclogger.log_exception(exc, time_str=comutils.fmt_time(self.time_mgr.get_time()))
             self.task_network()
             self.pulser.task()
@@ -435,11 +503,12 @@ PANICTHRESH_MOVESCORE    = micropython.const(100)
                     return True
                 elif pyb.elapsed_millis(self.snap_millis) > (self.cam.get_timespan() + 500):
                     self.cam_err += 1
-                    print("warning: camera timeout")
+                    self.log_msg("WARN: camera timeout")
                     exclogger.log_exception("warning: camera timeout", time_str=comutils.fmt_time(self.time_mgr.get_time()))
                     return False
 
     def task(self):
+        self.time_mgr.tick()
         success = self.snap_start()
         gc.collect()
         if success == False:
@@ -488,6 +557,8 @@ PANICTHRESH_MOVESCORE    = micropython.const(100)
                     self.intervalometer_state = INTERVALSTATE_ACTIVE
                     self.pulser.shutter(self.settings["intervalometer_bulb_time"])
                     self.intervalometer_timestamp = 0
+                    if self.digital_intervalometer:
+                        print("!SHUTTER!")
                     if self.debug:
                         print("shutter opened")
             elif self.intervalometer_state == INTERVALSTATE_ACTIVE_ENDING:
@@ -499,30 +570,58 @@ PANICTHRESH_MOVESCORE    = micropython.const(100)
                 if self.debug:
                     print("intervalometer dithering mode interrupted")
 
+    def guide_cmd(self, cmd):
+        if cmd == GUIDESTATE_GUIDING:
+            if self.guide_state != GUIDESTATE_IDLE and self.guide_state != GUIDESTATE_PANIC:
+                self.log_msg("ERR: invalid moment to start autoguiding")
+                return
+            self.pulser.panic(False)
+            if self.selected_star is None:
+                self.log_msg("ERR: no selected star to start autoguiding")
+                return
+            self.guide_state = GUIDESTATE_GUIDING
+            self.log_msg("CMD: auto-guidance starting")
+        elif cmd == GUIDESTATE_CALIBRATING_RA or cmd == GUIDESTATE_CALIBRATING_DEC:
+            if self.guide_state != GUIDESTATE_IDLE and self.guide_state != GUIDESTATE_PANIC:
+                self.log_msg("ERR: invalid moment to start calibration")
+                return
+            self.pulser.panic(False)
+            if self.selected_star is None:
+                self.log_msg("ERR: no selected star to start calibration")
+                return
+            if cmd == GUIDESTATE_CALIBRATING_RA:
+                cstr = "RA"
+                self.calibration[CALIIDX_RA] = None
+            elif cmd == GUIDESTATE_CALIBRATING_DEC:
+                cstr = "DEC"
+                self.calibration[CALIIDX_DEC] = None
+            self.guide_state = cmd
+            self.log_msg("CMD: starting calibration of " + cstr)
+        elif cmd == GUIDESTATE_IDLE:
+            self.pulser.panic(False)
+            self.guide_state = cmd
+            self.log_msg("CMD: autoguider is now idle")
+
     def intervalometer_cmd(self, cmd):
         if cmd == INTERVALSTATE_ACTIVE or cmd == INTERVALSTATE_ACTIVE_DITHER:
             self.intervalometer_state = cmd
             self.shutter(self.settings["intervalometer_bulb_time"])
             self.intervalometer_timestamp = 0
             self.pulse_sum = 0
-            if self.debug:
-                print("intervalometer activated")
+            self.log_msg("CMD: intervalometer activated")
         elif cmd == INTERVALSTATE_BULB_TEST:
             self.pulser.shutter(self.settings["intervalometer_bulb_time"])
             self.intervalometer_timestamp = 0
             self.pulse_sum = 0
-            if self.debug:
-                print("shutter bulb test")
+            self.log_msg("CMD: bulb test")
             self.intervalometer_state = INTERVALSTATE_ACTIVE_ENDING
         elif cmd == INTERVALSTATE_ACTIVE_ENDING:
             self.intervalometer_state = cmd
-            if self.debug:
-                print("intervalometer ending on next shutter close")
+            self.log_msg("CMD: intervalometer ending on next shutter close")
         elif cmd == INTERVALSTATE_ACTIVE_HALT:
             self.pulser.shutter_halt()
             self.intervalometer_state = INTERVALSTATE_IDLE
-            if self.debug:
-                print("intervalometer ending on next shutter close")
+            self.log_msg("CMD: intervalometer halting")
 
     def task_network(self):
         if self.portal is not None:
