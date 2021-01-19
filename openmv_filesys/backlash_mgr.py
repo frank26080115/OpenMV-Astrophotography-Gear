@@ -1,3 +1,6 @@
+import micropython
+micropython.opt_level(2)
+
 class BacklashManager(object):
 
     def __init__(self):
