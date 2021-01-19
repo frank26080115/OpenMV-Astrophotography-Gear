@@ -244,7 +244,6 @@ def encode_hotpixels(star_list, r = 5):
 
 def filter_hotpixels(star_list, hotpixels, lim = 3):
     res = []
-    cnt = 0
     for i in star_list:
         nearest = 9999
         for p in hotpixels:
