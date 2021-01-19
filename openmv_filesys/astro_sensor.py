@@ -88,8 +88,9 @@ class AstroCam(object):
 
     def snapshot(self, filename = None):
         if self.simulate:
-            pyb.delay(self.shutter // 1000)
+            pyb.delay(self.get_timespan())
             self.snap_started = False
+            self.img.set_timestamp(pyb.millis())
             return self.img
         try:
             if self.snap_started == True:
@@ -126,7 +127,7 @@ class AstroCam(object):
             return False
         if self.simulate:
             dt = pyb.elapsed_millis(self.sim_t)
-            if dt > (self.shutter // 1000):
+            if dt > self.get_timespan():
                 return True
             else:
                 return False
@@ -141,6 +142,7 @@ class AstroCam(object):
             while self.snapshot_check() == False:
                 gc.collect()
             self.snap_started = False
+            self.img.set_timestamp(pyb.millis())
             return self.img
         try:
             self.img = sensor.snapshot_finish()
