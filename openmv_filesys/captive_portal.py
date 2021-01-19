@@ -123,10 +123,14 @@ class CaptivePortal(object):
                 self.wlan = network.WINC(mode = self.winc_mode)
                 self.hw_retries = 0
             except OSError as exc:
-                exclogger.log_exception(exc)
-                exclogger.log_exception("most likely hardware fault")
-                self.wlan = None
-                self.hw_retries += 1
+                excstr = exclogger.log_exception(exc)
+                if "irmware version mismatch" in excstr:
+                    wlan = network.WINC(mode=network.WINC.MODE_FIRMWARE)
+                    wlan.fw_update("/winc_19_6_1.bin")
+                else:
+                    exclogger.log_exception("most likely hardware fault")
+                    self.wlan = None
+                    self.hw_retries += 1
 
         if self.wlan is None:
             self.wifi_timestamp = pyb.millis()
@@ -689,6 +693,7 @@ def gen_page(conn, main_file, add_files = [], add_dir = None, debug = False):
     # send the rest of the file
     with open(main_file, "rb") as f:
         f.seek(seekpos)
+        sent += stream_html_to_body(conn, f)
         sent += stream_file(conn, f)
         if debug:
             print("+", end="")
@@ -702,6 +707,36 @@ def gen_page(conn, main_file, add_files = [], add_dir = None, debug = False):
         print(" done!")
 
     conn.close()
+
+def stream_html_to_body(dest, f):
+    strbuf = ""
+    ignoring = False
+    sent = 0
+    while True:
+        x = f.read(1).decode("ascii")
+        if x is None:
+            break
+        if len(x) <= 0:
+            break
+        strbuf += x
+        if "<body" in strbuf:
+            sent += len(strbuf)
+            dest.write(strbuf)
+            break
+        elif "<!-- ignore -->" in strbuf: 
+            sent += len(strbuf)
+            dest.write(strbuf)
+            strbuf = ""
+            ignoring = True
+        elif "<!-- end ignore -->" in strbuf:
+            strbuf = ""
+            ignoring = False
+            break
+        elif "\n" in strbuf and ignoring == False:
+            sent += len(strbuf)
+            dest.write(strbuf)
+            strbuf = ""
+    return sent
 
 def stream_file(dest, f, bufsz = -1, buflim = 2048):
     gc.collect()
