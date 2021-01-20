@@ -111,13 +111,14 @@ class AutoGuider(object):
         self.settings.update({"backlash_limit"           : 1000})
         self.settings.update({"backlash_reduc"           : 0})
         self.settings.update({"backlash_lock"            : False})
-        self.settings.update({"multistar"                : True})
+        self.settings.update({"multistar"                : False})
         self.settings.update({"multistar_cnt_min"        : 1})
         self.settings.update({"multistar_cnt_max"        : 10})
         self.settings.update({"multistar_ratings_thresh" : 10})
         self.settings.update({"starmove_tolerance"       : 50})
         self.settings.update({"use_led"                  : True})
         self.settings.update({"fast_mode"                : True})
+        self.settings.update({"slow_profile"             : False})
         self.load_settings()
         self.load_hotpixels(use_log = False, set_usage = False)
 
@@ -332,7 +333,8 @@ class AutoGuider(object):
         if self.img is not None:
             self.histogram = self.img.get_histogram()
             self.img_stats = self.histogram.get_statistics()
-            latest_stars, code = star_finder.find_stars(self.img, hist = self.histogram, stats = self.img_stats, thresh = self.settings["thresh"], force_solve = True, advanced = True)
+            adv = 1 if self.settings["slow_profile"] else 2
+            latest_stars, code = star_finder.find_stars(self.img, hist = self.histogram, stats = self.img_stats, thresh = self.settings["thresh"], force_solve = True, advanced = adv)
             self.dbg_t1 = pyb.millis()
             if self.simulator is not None:
                 latest_stars = self.simulator.get_stars(self, latest_stars)

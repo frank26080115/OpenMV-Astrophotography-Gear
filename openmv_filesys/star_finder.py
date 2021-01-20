@@ -21,7 +21,7 @@ EXPO_TOO_MANY     = micropython.const(5)
 EXPO_MEMORY_ERR   = micropython.const(6)
 EXPO_CAMERA_ERR   = micropython.const(7)
 
-def find_stars(img, hist = None, stats = None, thresh = 0, max_dia = 100, region = None, force_solve = False, exponent = 1, advanced = False):
+def find_stars(img, hist = None, stats = None, thresh = 0, max_dia = 100, region = None, force_solve = False, exponent = 1, advanced = 0):
 
     # histogram and statistics might be computationally costly, use cached results if available
     if hist is None:
@@ -82,7 +82,7 @@ def find_stars(img, hist = None, stats = None, thresh = 0, max_dia = 100, region
             return stars, EXPO_TOO_MANY
     return stars, EXPO_JUST_RIGHT
 
-def blob_to_star(b, img, thresh, expo = 1, adv = False):
+def blob_to_star(b, img, thresh, expo = 1, adv = 0):
     # this function iterates over the blob's region of interest
     # performs summations and calculates a weighted centoid
     # and gathers brightness data
@@ -158,41 +158,68 @@ def blob_to_star(b, img, thresh, expo = 1, adv = False):
     else:
         if (brightness % 2) != 0:
             brightness += 1
-    if adv == False:
+    if adv == 0:
         return blobstar.BlobStar(cx, cy, r, brightness)
     else:
-        sums, pointiness = guide_star_analyze(img, cx, cy, r)
+        sums, pointiness = guide_star_analyze(img, cx, cy, r, mode = 2 if adv == 1 else 0)
         guidestar = blobstar.GuideStar(cx, cy, r, brightness, maxbrite, satcnt, areacnt, pointiness)
         guidestar.profile = sums
         return guidestar
 
-def guide_star_analyze(img, cx, cy, r):
+def guide_star_analyze(img, cx, cy, r, mode = 0):
     cx = int(round(cx))
     cy = int(round(cy))
     r  = int(round(r))
-    left   = cx - r
-    right  = cx + r
-    top    = cy - r
-    bottom = cy + r
     sums = [0 for i in range(r)]
     cnts = [0 for i in range(r)]
-    x = left
-    while x <= right:
-        y = top
-        while y <= bottom:
-            dx = x - cx
-            dy = y - cy
-            mag = round(math.sqrt((dx * dx) + (dy * dy)))
-            if (dx != 0 or dy != 0) and mag == 0:
-                mag = 1
-            if mag > r:
+    if mode == 2:
+        left   = cx - r
+        right  = cx + r
+        top    = cy - r
+        bottom = cy + r
+        x = left
+        while x <= right:
+            y = top
+            while y <= bottom:
+                dx = x - cx
+                dy = y - cy
+                mag = round(math.sqrt((dx * dx) + (dy * dy)))
+                if (dx != 0 or dy != 0) and mag == 0:
+                    mag = 1
+                if mag > r:
+                    y += 1
+                    continue
+                if mag < r:
+                    sums[mag] += img.get_pixel(x, y)
+                    cnts[mag] += 1
                 y += 1
-                continue
-            if mag < r:
-                sums[mag] += img.get_pixel(x, y)
-                cnts[mag] += 1
-            y += 1
-        x += 1
+            x += 1
+    elif mode == 1:
+        i = 1
+        sums[0] = img.get_pixel(cx, cy)
+        cnts[0] = 1
+        while i < r:
+            sums[i] += img.get_pixel(cx + i, cy)
+            sums[i] += img.get_pixel(cx - i, cy)
+            sums[i] += img.get_pixel(cx + i, cy + i)
+            sums[i] += img.get_pixel(cx - i, cy + i)
+            sums[i] += img.get_pixel(cx + i, cy - i)
+            sums[i] += img.get_pixel(cx - i, cy - i)
+            sums[i] += img.get_pixel(cx, cy + i)
+            sums[i] += img.get_pixel(cx, cy - i)
+            cnts[i] += 8
+            i += 1
+    else:
+        i = 1
+        sums[0] = img.get_pixel(cx, cy)
+        cnts[0] = 1
+        while i < r:
+            sums[i] += img.get_pixel(cx + i, cy)
+            sums[i] += img.get_pixel(cx - i, cy)
+            sums[i] += img.get_pixel(cx, cy + i)
+            sums[i] += img.get_pixel(cx, cy - i)
+            cnts[i] += 4
+            i += 1
     i = 0
     j = r
     pointiness = 0
