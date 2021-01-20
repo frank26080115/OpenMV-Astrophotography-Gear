@@ -49,13 +49,8 @@ class GuideStar(object):
 
     def _eval(self):
         # we want the star to be not too close to the edge
-        #if self.cx < SENSOR_WIDTH / 3:
-        #    return 0
-        #if self.cx > (SENSOR_WIDTH * 2) / 3:
-        #    return 0
-        #if self.cy < SENSOR_HEIGHT / 3:
-        #    return 0
-        #if self.cy > (SENSOR_HEIGHT * 2) / 3:
+        outofview = (self.cx < (SENSOR_WIDTH / 3)) or (self.cx > ((SENSOR_WIDTH * 2) / 3)) or (self.cy < (SENSOR_HEIGHT / 3)) or (self.cy > ((SENSOR_HEIGHT * 2) / 3))
+        #if outofview:
         #    return 0
 
         # we want the star to be bright enough
@@ -77,11 +72,13 @@ class GuideStar(object):
         center_y = SENSOR_HEIGHT / 2
         mag = comutils.vector_between([center_x, center_y], [self.cx, self.cy], mag_only = True)
         score_centerdist = 100 - comutils.map_val(mag, 0, SENSOR_HEIGHT / 6, 0, 100)
+        if outofview:
+            score_centerdist /= 2
 
         score_pointiness = self.pointiness
 
         # place weights on each item
-        return (score_pointiness * 0.5) + (score_maxbrite * 0.25) + (score_saturation * 0.15) + (score_centerdist * 0.1)
+        return (score_pointiness * 0.35) + (score_maxbrite * 0.25) + (score_saturation * 0.15) + (score_centerdist * 0.25)
 
     def to_jsonobj(self):
         obj = {}

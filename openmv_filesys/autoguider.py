@@ -15,7 +15,8 @@ green_led = pyb.LED(2)
 blue_led  = pyb.LED(3)
 ir_leds   = pyb.LED(4)
 
-LOG_BUFF_LEN = micropython.const(3)
+LOG_BUFF_LEN        = micropython.const(3)
+STAR_CNT_JSON_LIMIT = micropython.const(30)
 
 GUIDESTATE_IDLE              = micropython.const(0)
 GUIDESTATE_GUIDING           = micropython.const(1)
@@ -59,6 +60,7 @@ class AutoGuider(object):
         self.selected_star = None
         self.target_coord = None
         self.origin_coord = None
+        self.passive_guiding = False
 
         if simulate_file is not None or simulate:
             import guider_sim
@@ -81,7 +83,10 @@ class AutoGuider(object):
         self.prev_panic = ""
         self.snap_millis = 0
         self.stop_time = 0
-        self.analysis_dur = [0, 0, 0, 0]
+        self.analysis_dur = [0, 0, 0, 0, 0]
+        self.dbg_t1 = 0
+        self.dbg_t2 = 0
+        self.dbg_t3 = 0
         self.hotpixels_eff = 0
 
         self.settings = {}
@@ -118,6 +123,7 @@ class AutoGuider(object):
         self.settings.update({"use_led"                  : True})
         self.settings.update({"fast_mode"                : True})
         self.settings.update({"slow_profile"             : False})
+        self.settings.update({"always_guiding"           : True})
         self.load_settings()
         self.load_hotpixels(use_log = False, set_usage = False)
 
@@ -140,6 +146,7 @@ class AutoGuider(object):
         self.websock_millis = 0
         self.websock_randid = 0
         self.stream_sock_err = 0
+        self.need_send_stars = False
 
         self.pulselog_buff = [[0, 0, 0, 0]] * LOG_BUFF_LEN
         self.msglog_buff   = [[0, 0, None]] * LOG_BUFF_LEN
@@ -148,17 +155,17 @@ class AutoGuider(object):
 
     def send_settings(self):
         obj = {}
-        obj.update({"packet_type", "settings"})
+        obj.update({"pkt_type", "settings"})
         for k in self.settings.keys():
             obj.update({k, self.settings[k]})
         self.send_websocket(obj)
 
     def get_state_obj(self):
         state = {}
-        state.update({"packet_type"         : "state"})
+        state.update({"pkt_type"            : "state"})
         state.update({"time"                : self.time_mgr.get_sec()})
         state.update({"rand_id"             : self.websock_randid})
-        state.update({"guider_state"        : self.guide_state})
+        state.update({"guide_state"         : self.guide_state})
         state.update({"intervalometer_state": self.intervalometer_state})
         if self.img is not None and self.cam_err <= 0:
             state.update({"expo_code": self.expo_code})
@@ -173,23 +180,29 @@ class AutoGuider(object):
             state.update({"img_stdev": self.img_stats.stdev()})
             state.update({"img_max"  : self.img_stats.max()})
             state.update({"img_min"  : self.img_stats.min()})
+
+        # star list can be sent here but there's a huge risk of memory allocation error if the list is long
+        # problem is solved by sending it separately, in small chunks
         if self.stars is not None:
-            star_list = self.stars
-            star_cnt_limit = 50
-            if len(star_list) > star_cnt_limit:
-                star_list = star_list[0:star_cnt_limit]
-            state.update({"stars": blobstar.to_jsonobj(star_list)})
+            if len(self.stars) <= STAR_CNT_JSON_LIMIT:
+                state.update({"stars": blobstar.to_jsonobj(self.stars)})
+                self.need_send_stars = False
+            else:
+                state.update({"stars": False})
+                self.need_send_stars = True
         else:
-            state.update({"stars": []})
+            state.update({"stars": None})
+            self.need_send_stars = False
+
         if self.selected_star is not None:
-            state.update({"selected_star"        : [self.selected_star.cx, self.selected_star.cy]})
-            state.update({"selected_star_profile": self.selected_star.profile})
+            state.update({"sel_star"        : [self.selected_star.cx, self.selected_star.cy]})
+            state.update({"sel_star_profile": self.selected_star.profile})
         else:
-            state.update({"selected_star": None})
-        state.update({"target_coord": self.target_coord})
-        state.update({"origin_coord": self.origin_coord})
-        state.update({"calib_ra"    : self.calibration[CALIIDX_RA].get_json_obj() if self.calibration[CALIIDX_RA] is not None else None})
-        state.update({"calib_dec"   : self.calibration[CALIIDX_DEC].get_json_obj() if self.calibration[CALIIDX_DEC] is not None else None})
+            state.update({"sel_star": None})
+        state.update({"tgt_coord": self.target_coord})
+        state.update({"ori_coord": self.origin_coord})
+        state.update({"calib_ra" : self.calibration[CALIIDX_RA].get_json_obj() if self.calibration[CALIIDX_RA] is not None else None})
+        state.update({"calib_dec": self.calibration[CALIIDX_DEC].get_json_obj() if self.calibration[CALIIDX_DEC] is not None else None})
         if self.hotpixels is not None:
             state.update({"hotpixels"     : True})
             state.update({"hotpixels_used": self.settings["use_hotpixels"]})
@@ -197,8 +210,8 @@ class AutoGuider(object):
             state.update({"hotpixels_last": self.hotpixels_eff})
         else:
             state.update({"hotpixels": False})
-        state.update({"logs"  : self.get_logs_obj()})
-        state.update({"hw_err": self.hw_err})
+        state.update({"logs"        : self.get_logs_obj()})
+        state.update({"hw_err"      : self.hw_err})
         state.update({"analysis_dur": self.analysis_dur})
         return state
 
@@ -208,9 +221,9 @@ class AutoGuider(object):
         while i < LOG_BUFF_LEN:
             msglog   = self.msglog_buff[i]
             pulselog = self.pulselog_buff[i]
-            obj.update({("msg_tick_%u" % i)   : msglog[0]})
-            obj.update({("msg_time_%u" % i)   : msglog[1]})
-            obj.update({("msg_str_%u"  % i)   : msglog[2]})
+            obj.update({("msg_tick_%u"   % i) : msglog[0]})
+            obj.update({("msg_time_%u"   % i) : msglog[1]})
+            obj.update({("msg_str_%u"    % i) : msglog[2]})
             obj.update({("pulse_time_%u" % i) : pulselog[0]})
             obj.update({("pulse_ra_%u"   % i) : pulselog[1]})
             obj.update({("pulse_dec_%u"  % i) : pulselog[2]})
@@ -219,12 +232,56 @@ class AutoGuider(object):
         return obj
 
     def send_state(self):
+        if self.websock is None:
+            return
         obj = self.get_state_obj()
         self.send_websocket(obj)
 
+    def send_stars(self):
+        if self.websock is None:
+            return
+        estimated_len = len(self.stars) if self.stars is not None else 0
+        estimated_len *= 22 # worst-case length per star
+        headstr = "{\"pkt_type\":\"stars\",\"stars\":\""
+        endstr  = "\"}"
+        estimated_len += len(headstr) + len(endstr)
+        remaining = estimated_len
+
+        # this function sends websocket packet in chunks with an estimated length
+        # this avoids potential memory allocation errors inside ujson if the star list is too big
+
+        try:
+            self.portal.websocket_send_start(self.websock, remaining, 0x81)
+            self.websock.sock.send(headstr)
+            remaining -= len(headstr)
+
+            for i in self.stars:
+                x = "%0.1f,%0.1f,%u,%u;" % (i.cx, i.cy, int(round(i.r)), int(round(i.rating)))
+                # worst-case length is
+                # 1234.6,8901.3,567,901;
+                # 22
+                self.websock.sock.send(x)
+                remaining -= len(x)
+            self.websock.sock.send(endstr)
+            remaining -= len(endstr)
+            # pad the remaining with blank space
+            x = " " * remaining
+            self.websock.sock.send(x)
+            self.portal.tickle()
+        except Exception as exc:
+            self.stream_sock_err += 1
+            if self.stream_sock_err > 5:
+                if self.debug:
+                    print("websock too many errors")
+                exclogger.log_exception(exc, to_file=False)
+                self.kill_websocket()
+            pass
+
     def send_logs(self):
+        if self.websock is None:
+            return
         obj = self.get_logs_obj()
-        obj.update({"packet_type": "logs"})
+        obj.update({"pkt_type": "logs"})
         self.send_websocket(obj)
 
     def send_websocket(self, obj):
@@ -232,7 +289,6 @@ class AutoGuider(object):
             return
         json_str = ujson.dumps(obj)
         try:
-            self.websock.settimeout(10)
             self.portal.websocket_send(self.websock, json_str)
             self.stream_sock_err = 0
             self.websock_millis = pyb.millis()
@@ -267,7 +323,7 @@ class AutoGuider(object):
 
     def parse_websocket(self, x):
         obj = ujson.loads(x)
-        pkt_type = obj["packet_type"]
+        pkt_type = obj["pkt_type"]
         if pkt_type == "guide_cmd":
             v = comutils.try_parse_setting(obj["cmd"])
             self.guide_cmd(v)
@@ -338,14 +394,13 @@ class AutoGuider(object):
             if self.simulator is not None:
                 latest_stars = self.simulator.get_stars(self, latest_stars)
                 self.dbg_t2 = pyb.millis()
-            else:
-                self.dbg_t2 = self.dbg_t1
-            print("%u stars" % len(latest_stars))
             if self.hotpixels is not None and self.settings["use_hotpixels"]:
                 before_len = len(latest_stars)
                 latest_stars = star_finder.filter_hotpixels(latest_stars, self.hotpixels)
                 self.hotpixels_eff = before_len - len(latest_stars)
             latest_stars = blobstar.sort_rating(latest_stars)
+            if self.simulator is None:
+                self.dbg_t2 = pyb.millis()
             self.expo_code = code
             if code != star_finder.EXPO_JUST_RIGHT or len(latest_stars) <= 0:
                 self.expo_err += 1
@@ -368,7 +423,7 @@ class AutoGuider(object):
 
                 if self.settings["multistar_cnt_max"] > 1: # multistar mode
                     real_star, virtual_star, move_data, score, avg_cnt = star_motion.get_all_star_movement(self.prev_stars, self.stars, selected_star = self.selected_star, cnt_min = self.settings["multistar_cnt_min"], cnt_limit = self.settings["multistar_cnt_max"], rating_thresh = self.settings["multistar_ratings_thresh"], tolerance = self.settings["starmove_tolerance"], fast_mode = self.settings["fast_mode"])
-                else:
+                else:                                      # else use single star mode
                     if self.selected_star is None and self.stars is not None:
                         if len(self.stars) > 0:
                             self.selected_star = self.stars[0]
@@ -381,6 +436,7 @@ class AutoGuider(object):
                     self.log_msg("MSG: auto selected star at %0.1f %0.1f" % (real_star.cx, real_star.cy))
                 self.selected_star = real_star
                 self.virtual_star  = virtual_star
+                # virtual star only matters if multi-star mode is used, it accounts for atmospheric distortion
 
                 if self.debug:
                     print("dbg move score %0.4f cnt %u " % (score, avg_cnt), end="")
@@ -392,7 +448,20 @@ class AutoGuider(object):
                 if score > self.settings["panicthresh_movescore"] or score < 0:
                     self.panic(msg = "movement analysis score too low %f" % score)
 
-                if self.guide_state == GUIDESTATE_GUIDING:
+                # passive guiding will cause the mount to autoguide even if not in a autoguiding state
+                # this is useful for simulation and headless operation
+                passive_guiding = False
+                if self.guide_state == GUIDESTATE_IDLE:
+                    if self.selected_star is not None and self.target_coord is not None and self.calibration[CALIIDX_RA] is not None:
+                        if self.calibration[CALIIDX_RA].has_cal:
+                            passive_guiding = self.settings["always_guiding"]
+                if self.passive_guiding and passive_guiding == False:
+                    self.log_msg("MSG: passive guiding ended")
+                elif self.passive_guiding == False and passive_guiding:
+                    self.log_msg("MSG: passive guiding started")
+                self.passive_guiding = passive_guiding
+
+                if self.guide_state == GUIDESTATE_GUIDING or self.passive_guiding:
                     if self.selected_star is None:
                         self.log_msg("WARN: guidance requested without selected star")
                         self.guide_state = GUIDESTATE_IDLE
@@ -409,7 +478,7 @@ class AutoGuider(object):
                         self.origin_coord = self.target_coord
                         if self.debug:
                             print("origin coord auto-selected: (%0.1f , %0.2f)" % (self.origin_coord[0], self.origin_coord[1]))
-                    if self.settings["use_dithering"] and self.intervalometer_state == INTERVALSTATE_ACTIVE and guidepulser.is_shutter_open() == False:
+                    if self.guide_state == GUIDESTATE_GUIDING and self.settings["use_dithering"] and self.intervalometer_state == INTERVALSTATE_ACTIVE and guidepulser.is_shutter_open() == False:
                         amt = int(round(self.settings["dither_amount"] * 10.0))
                         nx = ((pyb.rng() % (amt * 2)) - amt) / 10.0
                         ny = ((pyb.rng() % (amt * 2)) - amt) / 10.0
@@ -517,11 +586,11 @@ class AutoGuider(object):
         dy = self.target_coord[1] - self.virtual_star[1]
         mag = math.sqrt((dx * dx) + (dy * dy))
         ang = math.degrees(math.atan2(dy, dx))
-        ang_ra  = comutils.ang_normalize(ang - self.calibration[CALIIDX_RA ])
+        ang_ra  = comutils.ang_normalize(ang - self.calibration[CALIIDX_RA ].angle)
         nx = mag * math.cos(math.radians(ang_ra))
         pulse_ra_ori  = nx * self.calibration[CALIIDX_RA ].ms_per_pix
         if self.calibration[CALIIDX_DEC] is not None:
-            ang_dec = comutils.ang_normalize(ang - self.calibration[CALIIDX_DEC])
+            ang_dec = comutils.ang_normalize(ang - self.calibration[CALIIDX_DEC].angle)
             ny = mag * math.cos(math.radians(ang_dec))
         else:
             # declination not calibrated
@@ -721,6 +790,7 @@ class AutoGuider(object):
         if success == False:
             return
         self.move = self.decide()
+        self.analysis_dur[4] = gc.mem_free()
         if self.img is not None:
             img_ts = self.img.timestamp()
             self.analysis_dur[0] = pyb.elapsed_millis(img_ts)
@@ -728,8 +798,10 @@ class AutoGuider(object):
             self.analysis_dur[2] = self.dbg_t2 - self.dbg_t1
             self.analysis_dur[3] = self.dbg_t3 - self.dbg_t2
             if self.debug:
-                print("analysis time %s" % self.analysis_dur)
+                print("analysis debug %s" % self.analysis_dur)
         self.send_state()
+        if self.need_send_stars:
+            self.send_stars()
         if self.snap_wait():
             img = self.cam.snapshot_finish()
             img_time = img.timestamp()
@@ -854,6 +926,13 @@ class AutoGuider(object):
     def misc_cmd(self, cmd):
         if cmd == "echo":
             self.log_msg("CMD: echo")
+        elif cmd == "reboot":
+            self.log_msg("CMD: reboot")
+            t = pyb.millis()
+            while pyb.elapsed_millis(t) < 2000:
+                self.send_state()
+                self.task_network()
+            pyb.hard_reset()
         elif cmd == "getstate":
             self.send_state()
         elif cmd == "getsettings":

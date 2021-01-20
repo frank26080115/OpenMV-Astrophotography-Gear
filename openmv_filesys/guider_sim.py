@@ -60,9 +60,11 @@ class GuiderSimulator(object):
                 if self.guider.guide_state == autoguider.GUIDESTATE_CALIBRATING_RA:
                     self.rand_angle_ra = get_rand_move(360, 10)
                     self.rand_scale_ra = (pyb.rng() % 20) + 5
+                    print("sim calib RA ang %0.1f scale %0.1f" % (self.rand_angle_ra, self.rand_scale_ra))
                 elif self.guider.guide_state == autoguider.GUIDESTATE_CALIBRATING_DEC:
                     self.rand_angle_dec = get_rand_move(360, 10)
                     self.rand_scale_dec = (pyb.rng() % 20) + 5
+                    print("sim calib DEC ang %0.1f scale %0.1f" % (self.rand_angle_dec, self.rand_scale_dec))
                 dx = self.guider.target_coord[0] - self.guider.selected_star.cx
                 dy = self.guider.target_coord[1] - self.guider.selected_star.cy
                 i = 0

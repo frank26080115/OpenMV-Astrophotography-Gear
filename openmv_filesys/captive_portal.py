@@ -112,6 +112,7 @@ class CaptivePortal(object):
             try:
                 with open("wifi_settings_template.json", mode="wb+") as f:
                     ujson.dump(obj, f)
+                    print("wifi settings template file saved")
             except Exception as exc:
                 exclogger.log_exception(exc)
 
@@ -123,14 +124,10 @@ class CaptivePortal(object):
                 self.wlan = network.WINC(mode = self.winc_mode)
                 self.hw_retries = 0
             except OSError as exc:
-                excstr = exclogger.log_exception(exc)
-                if "irmware version mismatch" in excstr:
-                    wlan = network.WINC(mode=network.WINC.MODE_FIRMWARE)
-                    wlan.fw_update("/winc_19_6_1.bin")
-                else:
-                    exclogger.log_exception("most likely hardware fault")
-                    self.wlan = None
-                    self.hw_retries += 1
+                exclogger.log_exception(exc)
+                exclogger.log_exception("most likely hardware fault")
+                self.wlan = None
+                self.hw_retries += 1
 
         if self.wlan is None:
             self.wifi_timestamp = pyb.millis()
@@ -296,6 +293,12 @@ class CaptivePortal(object):
 
     def websocket_send(self, sock, data):
         dlen = int(len(data))
+        opcode = 0x81 if type(data) == str else 0x80
+        self.websocket_send_start(sock, dlen, opcode)
+        sock.send(data)
+        self.tickle()
+
+    def websocket_send_start(self, sock, dlen, opcode, timeout = 0.5):
         if dlen <= 125:
             header = bytearray(2)
             paylen = dlen
@@ -320,15 +323,11 @@ class CaptivePortal(object):
             header[7] = (dlen & 0x00FF0000) >> 16
             header[8] = (dlen & 0x0000FF00) >> 8
             header[9] = (dlen & 0x000000FF) >> 0
-        # opcode
-        if type(data) == str:
-            header[0] = 0x81
-        else:
-            header[0] = 0x82
-        sock.settimeout(0.5)
+        header[0] = opcode
+        if timeout is not None:
+            if timeout >= 0:
+                sock.settimeout(timeout)
         sock.send(header)
-        sock.send(data)
-        self.tickle()
 
     def tickle(self):
         self.last_http_time = pyb.millis()
@@ -723,7 +722,7 @@ def stream_html_to_body(dest, f):
             sent += len(strbuf)
             dest.write(strbuf)
             break
-        elif "<!-- ignore -->" in strbuf: 
+        elif "<!-- ignore -->" in strbuf:
             sent += len(strbuf)
             dest.write(strbuf)
             strbuf = ""
@@ -731,7 +730,6 @@ def stream_html_to_body(dest, f):
         elif "<!-- end ignore -->" in strbuf:
             strbuf = ""
             ignoring = False
-            break
         elif "\n" in strbuf and ignoring == False:
             sent += len(strbuf)
             dest.write(strbuf)
