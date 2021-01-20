@@ -9,6 +9,8 @@ SENSOR_HEIGHT = micropython.const(1944)
 SENSOR_DIAG   = micropython.const(3240)
 
 PIXELS_PER_DEGREE = micropython.const(875.677409 / 2.9063) # calculated using "OV Cep"
+# only used for polarscope's focal length!
+
 SIDEREAL_DAY_SECONDS = micropython.const(86164.09054)
 
 def angle_diff(x, y):
