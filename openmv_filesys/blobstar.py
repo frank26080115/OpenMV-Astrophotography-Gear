@@ -49,14 +49,14 @@ class GuideStar(object):
 
     def _eval(self):
         # we want the star to be not too close to the edge
-        if self.cx < SENSOR_WIDTH / 3:
-            return 0
-        if self.cx > (SENSOR_WIDTH * 2) / 3:
-            return 0
-        if self.cy < SENSOR_HEIGHT / 3:
-            return 0
-        if self.cy > (SENSOR_HEIGHT * 2) / 3:
-            return 0
+        #if self.cx < SENSOR_WIDTH / 3:
+        #    return 0
+        #if self.cx > (SENSOR_WIDTH * 2) / 3:
+        #    return 0
+        #if self.cy < SENSOR_HEIGHT / 3:
+        #    return 0
+        #if self.cy > (SENSOR_HEIGHT * 2) / 3:
+        #    return 0
 
         # we want the star to be bright enough
         # but saturating is bad
@@ -81,7 +81,7 @@ class GuideStar(object):
         score_pointiness = self.pointiness
 
         # place weights on each item
-        return (score_pointiness * 0.9) + (score_maxbrite * 0.7) + (score_saturation * 0.7) + (score_centerdist * 0.5)
+        return (score_pointiness * 0.5) + (score_maxbrite * 0.25) + (score_saturation * 0.15) + (score_centerdist * 0.1)
 
     def to_jsonobj(self):
         obj = {}
@@ -122,5 +122,5 @@ def sort_dist(star_list):
     return res_list
 
 def sort_rating(star_list):
-    res_list = sorted(star_list, key = sort_rating_func)
+    res_list = sorted(star_list, key = sort_rating_func, reverse = True)
     return res_list

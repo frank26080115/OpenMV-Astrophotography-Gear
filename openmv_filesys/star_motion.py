@@ -2,21 +2,23 @@ import micropython
 micropython.opt_level(2)
 
 import math
+import blobstar
 import comutils
 from comutils import SENSOR_WIDTH, SENSOR_HEIGHT
 
 class PossibleMove(object):
-    def __init__(self, dx, dy, dist, ang, star):
+    def __init__(self, dx, dy, star):
         self.dx = dx
         self.dy = dy
-        self.dist = dist
-        self.ang = ang
         self.star = star
         self.nearby = 0
         self.err_sum = 0
-        self.score = 0
+        self.score = 999999
 
     def calc_score(self):
+        if self.nearby <= 0:
+            self.score = 999999
+            return self.score
         self.score = self.err_sum / (math.pow(self.nearby, 1.1))
         return self.score
 
@@ -41,10 +43,14 @@ def eval_move(move, old_list, new_list, declination, tolerance):
         if min_dist < tolerance:
             move.nearby += 1
             move.err_sum += min_dist
+    move.calc_score()
     return move
 
 def get_star_movement(old_list, star, new_list, declination = None, tolerance = 50, fast_mode = False):
-    # if only one star in new view, then assume it's the one
+    if old_list is None or star is None:
+        return None, 999999, 0
+
+# if only one star in new view, then assume it's the one
     if len(new_list) <= 1:
         return new_list[0], 0, 1
 
@@ -55,20 +61,20 @@ def get_star_movement(old_list, star, new_list, declination = None, tolerance = 
         # each star in the new list is a possible movement vector
         dx = i.cx - star.cx
         dy = i.cy - star.cy
-        mag, ang = comutils.vector_between([star.cx, star.cy], [i.cx, i.cy])
-        move = PossibleMove(dx, dy, mag, ang, i)
+        mag = math.sqrt((dx * dx) + (dy * dy))
+        move = PossibleMove(dx, dy, i)
         possible_moves.append(move)
         if mag < closest_dist:
             closest_dist = mag
             closest_star = i
         if fast_mode:
             eval_move(move, old_list, new_list, declination, tolerance)
-            if move.calc_score() < tolerance and move.nearby > len(new_list) * 0.75:
-                return move.star, move.score, move.nearby, move
+            if move.score < tolerance and move.nearby > len(new_list) * 0.75:
+                return move.star, move.score, move.nearby
 
     # if only one star in old view, then assume the movement is minimal
     if len(old_list) <= 1:
-        return closest_star, 0, 1, None
+        return closest_star, 0, 1
 
     if fast_mode == False:
         for move in possible_moves:
@@ -76,31 +82,48 @@ def get_star_movement(old_list, star, new_list, declination = None, tolerance = 
 
     # we have examined each possibility, take the top percentile, ignore the bottom
     acceptable_moves = []
-    avg_nearby = 0
+    max_nearby = 0
+    min_nearby = 0
+    min_score  = -1
+    best_move = None
     for i in possible_moves:
-        avg_nearby += i.nearby
-    avg_nearby /= len(possible_moves)
-    acceptable_nearby = avg_nearby * 1.5
+        nb = i.nearby
+        s  = i.score
+        if nb > max_nearby:
+            max_nearby = nb
+        elif nb < min_nearby or min_nearby <= 0:
+            min_nearby = nb
+        if s < min_score or min_score < 0:
+            min_score = s
+            best_move = i
+    acceptable_nearby = min_nearby + ((max_nearby - min_nearby) * 0.75)
     for i in possible_moves:
         if i.nearby >= acceptable_nearby and i.nearby >= len(new_list) / 2:
             acceptable_moves.append(i)
 
+    if len(acceptable_moves) <= 0:
+        return None, 999999, 0
+    """
     # at least have one possibility to work with
     if len(acceptable_moves) <= 0 and len(possible_moves) >= 1:
-        acceptable_moves.append(possible_moves[0])
+        if best_move is not None:
+            acceptable_moves.append(best_move)
+        else:
+            acceptable_moves.append(possible_moves[0])
+    """
 
     # find the most likely move, the one with most matches and least error
     lowest_score = -1
     best_move = None
     for i in acceptable_moves:
-        score = i.calc_score()
-        if lowest_score < 0 or score < lowest_score:
-            lowest_score = score
+        s = i.score
+        if lowest_score < 0 or s < lowest_score:
+            lowest_score = s
             best_move = i
 
     if best_move is None:
-        return None, 0, 0, None
-    return best_move.star, best_move.score, best_move.nearby, best_move
+        return None, 999999, 0
+    return best_move.star, best_move.score, best_move.nearby
 
 def get_all_star_movement(old_list, new_list, selected_star = None, cnt_min = 1, cnt_limit = 10, rating_thresh = 0, declination = None, tolerance = 50, fast_mode = False):
     if len(old_list) <= 0:
@@ -110,12 +133,15 @@ def get_all_star_movement(old_list, new_list, selected_star = None, cnt_min = 1,
     old_list = blobstar.sort_rating(old_list)
     if selected_star is None:
         selected_star = old_list[0]
-    star, score, nearby, move = get_star_movement(old_list, selected_star, new_list, declination = declination, tolerance = tolerance, fast_mode = fast_mode)
+    star, score, nearby = get_star_movement(old_list, selected_star, new_list, declination = declination, tolerance = tolerance, fast_mode = fast_mode)
+    if star is None:
+        return None, None, None, -1, 0
     dx = star.cx - selected_star.cx
     dy = star.cy - selected_star.cy
     dx_sum = 0
     dy_sum = 0
     avg_cnt = 0
+    avg_weight = 0
     for i in old_list:
         # for every star in the old list, find the predicted new coordinate using the info about the best possible move
         nx = i.cx + dx

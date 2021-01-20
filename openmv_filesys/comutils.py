@@ -39,7 +39,7 @@ def fmt_time(t):
 def vector_between(p1, p2, mag_only = False):
     dx = p2[0] - p1[0]
     dy = p2[1] - p1[1]
-    mag = math.sqrt((dx ** 2) + (dy ** 2))
+    mag = math.sqrt((dx * dx) + (dy * dy))
     if mag_only:
         return mag
     ang = math.degrees(math.atan2(dy, dx))

@@ -4,8 +4,10 @@ micropython.opt_level(2)
 import pyb, uos
 import image, sensor
 import array
+import math
 import gc
 import blobstar
+import comutils
 import exclogger
 
 EXPO_NO_IMG       = micropython.const(-2)
@@ -63,7 +65,9 @@ def find_stars(img, hist = None, stats = None, thresh = 0, max_dia = 100, region
     #too_long = 0
     #too_big  = 0
     for b in blobs:
-        stars.append(blob_to_star(b, img, thresh, expo = exponent, adv = advanced))
+        bb = blob_to_star(b, img, thresh, expo = exponent, adv = advanced)
+        if bb is not None:
+            stars.append(bb)
     if force_solve == False:
         #if too_big > len(stars):
         #    return stars, EXPO_TOO_BIG
@@ -160,6 +164,7 @@ def blob_to_star(b, img, thresh, expo = 1, adv = False):
         sums, pointiness = guide_star_analyze(img, cx, cy, r)
         guidestar = blobstar.GuideStar(cx, cy, r, brightness, maxbrite, satcnt, areacnt, pointiness)
         guidestar.profile = sums
+        return guidestar
 
 def guide_star_analyze(img, cx, cy, r):
     cx = int(round(cx))
@@ -177,14 +182,15 @@ def guide_star_analyze(img, cx, cy, r):
         while y <= bottom:
             dx = x - cx
             dy = y - cy
-            mag = math.round(math.sqrt((dx * dx) + (dy + dy)))
+            mag = round(math.sqrt((dx * dx) + (dy * dy)))
             if (dx != 0 or dy != 0) and mag == 0:
                 mag = 1
             if mag > r:
                 y += 1
                 continue
-            sums[mag] += img.get_pixel(x, y)
-            cnts[mag] += 1
+            if mag < r:
+                sums[mag] += img.get_pixel(x, y)
+                cnts[mag] += 1
             y += 1
         x += 1
     i = 0

@@ -52,7 +52,6 @@ class PolarScope(object):
         self.settings.update({"force_solve": False})
         self.settings.update({"max_stars":   0})
         self.load_settings()
-        self.time_mgr.readiness = False
         exclogger.log_exception("Time Guessed (%u)" % pyb.millis(), time_str=comutils.fmt_time(self.time_mgr.get_time()))
 
         self.portal = captive_portal.CaptivePortal(debug = self.debug)
