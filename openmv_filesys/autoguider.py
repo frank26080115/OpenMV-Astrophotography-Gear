@@ -111,10 +111,9 @@ class AutoGuider(object):
         self.settings.update({"backlash_limit"           : 1000})
         self.settings.update({"backlash_reduc"           : 0})
         self.settings.update({"backlash_lock"            : False})
-        self.settings.update({"multistar"                : False})
         self.settings.update({"multistar_cnt_min"        : 1})
         self.settings.update({"multistar_cnt_max"        : 10})
-        self.settings.update({"multistar_ratings_thresh" : 10})
+        self.settings.update({"multistar_ratings_thresh" : 50})
         self.settings.update({"starmove_tolerance"       : 50})
         self.settings.update({"use_led"                  : True})
         self.settings.update({"fast_mode"                : True})
@@ -367,7 +366,7 @@ class AutoGuider(object):
                 if self.prev_stars is None:
                     self.prev_stars = latest_stars
 
-                if self.settings["multistar"]:
+                if self.settings["multistar_cnt_max"] > 1: # multistar mode
                     real_star, virtual_star, move_data, score, avg_cnt = star_motion.get_all_star_movement(self.prev_stars, self.stars, selected_star = self.selected_star, cnt_min = self.settings["multistar_cnt_min"], cnt_limit = self.settings["multistar_cnt_max"], rating_thresh = self.settings["multistar_ratings_thresh"], tolerance = self.settings["starmove_tolerance"], fast_mode = self.settings["fast_mode"])
                 else:
                     if self.selected_star is None and self.stars is not None:
