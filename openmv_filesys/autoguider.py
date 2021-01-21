@@ -96,8 +96,7 @@ class AutoGuider(object):
         self.settings.update({"use_hotpixels"            : False})
         self.settings.update({"panicthresh_expoerr"      : 5})
         self.settings.update({"panicthresh_movescore"    : 50})
-        self.settings.update({"use_dithering"            : False})
-        self.settings.update({"dither_amount"            : 3})
+        self.settings.update({"dither_amount"            : 0})
         self.settings.update({"dither_calmness"          : 3})
         self.settings.update({"dither_calm_cnt"          : 3})
         self.settings.update({"dither_frames_cnt"        : 5})
@@ -478,7 +477,7 @@ class AutoGuider(object):
                         self.origin_coord = self.target_coord
                         if self.debug:
                             print("origin coord auto-selected: (%0.1f , %0.2f)" % (self.origin_coord[0], self.origin_coord[1]))
-                    if self.guide_state == GUIDESTATE_GUIDING and self.settings["use_dithering"] and self.intervalometer_state == INTERVALSTATE_ACTIVE and guidepulser.is_shutter_open() == False:
+                    if self.guide_state == GUIDESTATE_GUIDING and self.settings["dither_amount"] > 0 and self.intervalometer_state == INTERVALSTATE_ACTIVE and guidepulser.is_shutter_open() == False:
                         amt = int(round(self.settings["dither_amount"] * 10.0))
                         nx = ((pyb.rng() % (amt * 2)) - amt) / 10.0
                         ny = ((pyb.rng() % (amt * 2)) - amt) / 10.0
@@ -839,7 +838,7 @@ class AutoGuider(object):
         if guidepulser.is_shutter_open() == False:
             self.pulse_sum = 0
             self.queue_shutter_closed = True
-            dither = self.settings["use_dithering"]
+            dither = self.settings["dither_amount"] > 0
             # queue_shutter_closed is used to guarantee at least a small gap in the graph
             if self.intervalometer_timestamp <= 0:
                 self.intervalometer_timestamp = pyb.millis()
