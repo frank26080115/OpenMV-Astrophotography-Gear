@@ -44,6 +44,7 @@ class GuideStar(object):
         self.area = area
         self.saturation = saturated * 100.0 / area
         self.pointiness = pointiness
+        self.clustered = 0
         self.rating = self._eval()
         self.profile = []
 
@@ -78,7 +79,10 @@ class GuideStar(object):
         score_pointiness = self.pointiness
 
         # place weights on each item
-        return (score_pointiness * 0.35) + (score_maxbrite * 0.25) + (score_saturation * 0.15) + (score_centerdist * 0.25)
+        total = (score_pointiness * 0.35) + (score_maxbrite * 0.25) + (score_saturation * 0.15) + (score_centerdist * 0.25)
+        if self.clustered > 0:
+            total /= 4
+        return total
 
     def to_jsonobj(self):
         obj = {}

@@ -240,6 +240,24 @@ def guide_star_analyze(img, cx, cy, r, mode = 0):
     pointiness = comutils.map_val(pointiness, 0, r, 0, 100)
     return sums, pointiness
 
+def mark_clusters(star_list, tolerance = 50):
+    stars_len = len(star_list)
+    i = 0
+    while i < stars_len:
+        j = 0
+        while j < stars_len:
+            if i == j:
+                j += 1
+                continue
+            star1 = star_list[i]
+            star2 = star_list[j]
+            mag = comutils.vector_between([star1.cx, star1.cy], [star2.cx, star2.cy], mag_only=True)
+            if mag < tolerance:
+                star1.clustered = tolerance
+                star2.clustered = tolerance
+            j += 1
+        i += 1
+
 def simple_list(list):
     cnt = len(list)
     res = [[1.5, 1.5]] * cnt
