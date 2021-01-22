@@ -15,13 +15,16 @@ class TimeLocationManager(object):
         files = uos.listdir()
         maxsec = 0
         for f in files:
-            stats = uos.stat(f)
-            j = 7
-            while j <= 9:
-                t = stats[j]
-                if t > maxsec:
-                    maxsec = t
-                j += 1
+            try:
+                stats = uos.stat(f)
+                j = 7
+                while j <= 9:
+                    t = stats[j]
+                    if t > maxsec:
+                        maxsec = t
+                    j += 1
+            except:
+                pass
 
         self.start_time = utime.localtime(maxsec)
         self.start_sec = maxsec - (pyb.millis() // 1000)
