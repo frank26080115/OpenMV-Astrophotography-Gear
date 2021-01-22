@@ -21,7 +21,7 @@ EXPO_TOO_MANY     = micropython.const(5)
 EXPO_MEMORY_ERR   = micropython.const(6)
 EXPO_CAMERA_ERR   = micropython.const(7)
 
-def find_stars(img, hist = None, stats = None, thresh = 0, max_dia = 100, region = None, force_solve = False, exponent = 1, advanced = 0):
+def find_stars(img, hist = None, stats = None, thresh = 0, max_dia = 100, region = None, force_solve = False, advanced = 0):
 
     # histogram and statistics might be computationally costly, use cached results if available
     if hist is None:
@@ -65,7 +65,7 @@ def find_stars(img, hist = None, stats = None, thresh = 0, max_dia = 100, region
     #too_long = 0
     #too_big  = 0
     for b in blobs:
-        bb = blob_to_star(b, img, thresh, expo = exponent, adv = advanced)
+        bb = blob_to_star(b, img, adv = advanced)
         if bb is not None:
             stars.append(bb)
     if force_solve == False:
@@ -82,87 +82,13 @@ def find_stars(img, hist = None, stats = None, thresh = 0, max_dia = 100, region
             return stars, EXPO_TOO_MANY
     return stars, EXPO_JUST_RIGHT
 
-def blob_to_star(b, img, thresh, expo = 1, adv = 0):
-    # this function iterates over the blob's region of interest
-    # performs summations and calculates a weighted centoid
-    # and gathers brightness data
-    w = b.w()
-    h = b.h()
-    # weight center using histogram
-    xbucket = array.array('I',(0 for i in range(0, w)))
-    ybucket = array.array('I',(0 for i in range(0, h)))
-    xstart = b.x()
-    ystart = b.y()
-    x = xstart
-    xlim = x + w
-    brightness = 0
-    maxbrite = 0
-    areacnt = 0
-    satcnt = 0
-    # iterate the ROI
-    while x < xlim:
-        y = ystart
-        ylim = y + h
-        while y < ylim:
-            br = img.get_pixel(x, y)
-            p = br
-            if expo > 1.0:
-                p = int(math.round(math.pow(br, expo)))
-            if p > thresh: # is in blob ROI
-                areacnt += 1
-                # sum the brightness
-                xbucket[x - xstart] += p
-                ybucket[y - ystart] += p
-                brightness += br
-                if br > maxbrite:
-                    maxbrite = br
-                if br >= 254:
-                    satcnt += 1
-            y += 1
-        x += 1
-    # calculate weighted center for each axis
-    x = 0
-    sumn = 0
-    sumd = 0
-    while x < w:
-        buc = xbucket[x]
-        sumn += x * buc
-        sumd += buc
-        x += 1
-    if sumd > 0:
-        cx = sumn / sumd
-    else:
-        cx = 0
-    cx += xstart
-    # calculate weighted center for each axis
-    y = 0
-    sumn = 0
-    sumd = 0
-    while y < h:
-        buc = ybucket[y]
-        sumn += y * buc
-        sumd += buc
-        y += 1
-    if sumd > 0:
-        cy = sumn / sumd
-    else:
-        cy = 0
-    cy += ystart
-    # approximate radius (should be dividing by 4 but it doesn't really matter)
-    r = (w + h) / 3.0
-    # if the star has a saturated pixel, it could be a hot-pixel
-    # make the brightness even or odd to signal as such
-    if maxbrite >= 254:
-        if (brightness % 2) == 0:
-            brightness += 1
-    else:
-        if (brightness % 2) != 0:
-            brightness += 1
+def blob_to_star(b, img, adv = 0):
+    r = (b.w() + b.h()) / 3
     if adv == 0:
-        return blobstar.BlobStar(cx, cy, r, brightness)
+        return blobstar.BlobStar(b.cxf(), b.cyf(), r, b.brightness_sum())
     else:
-        sums, pointiness = guide_star_analyze(img, cx, cy, r, mode = 2 if adv == 1 else 0)
-        guidestar = blobstar.GuideStar(cx, cy, r, brightness, maxbrite, satcnt, areacnt, pointiness)
+        sums, pointiness = guide_star_analyze(img, b.cxf(), b.cyf(), r, mode = 2 if adv == 1 else 0)
+        guidestar = blobstar.GuideStar(b.cxf(), b.cyf(), r, b.brightness_sum(), b.max_brightness(), b.saturation_cnt(), b.pixels(), pointiness)
         guidestar.profile = sums
         return guidestar
 
@@ -239,24 +165,6 @@ def guide_star_analyze(img, cx, cy, r, mode = 0):
         i += 1
     pointiness = comutils.map_val(pointiness, 0, r, 0, 100)
     return sums, pointiness
-
-def mark_clusters(star_list, tolerance = 50):
-    stars_len = len(star_list)
-    i = 0
-    while i < stars_len:
-        j = 0
-        while j < stars_len:
-            if i == j:
-                j += 1
-                continue
-            star1 = star_list[i]
-            star2 = star_list[j]
-            mag = comutils.vector_between([star1.cx, star1.cy], [star2.cx, star2.cy], mag_only=True)
-            if mag < tolerance:
-                star1.clustered = tolerance
-                star2.clustered = tolerance
-            j += 1
-        i += 1
 
 def simple_list(list):
     cnt = len(list)
