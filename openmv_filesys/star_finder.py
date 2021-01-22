@@ -55,19 +55,33 @@ def find_stars(img, hist = None, stats = None, thresh = 0, max_dia = 100, region
 
     gc.collect()
     try:
-        blobs = img.find_blobs([(thresh, 255)], merge = False, x_stride = 2, y_stride = 2, roi = region, area_threshold = -area, pixel_threshold = -maxpix, width_threshold = -max_star_width, height_threshold = -max_star_width)
+        blobs = img.find_blobs([(thresh, 255)], merge = False, x_stride = 2, y_stride = 2, roi = region, area_threshold = -area, pixel_threshold = -maxpix, width_threshold = -max_star_width, height_threshold = -max_star_width, guidestarmode = True if advanced != 0 else False)
     except MemoryError as exc:
         print("MEMORY ERROR from find_blobs")
         exclogger.log_exception(exc, to_file = False)
         #micropython.mem_info(True)
         return [], EXPO_MEMORY_ERR
-    stars = []
+    blobs_cnt = len(blobs)
+    while blobs_cnt > 0:
+        try:
+            stars = [None] * blobs_cnt
+            break
+        except MemoryError:
+            blobs_cnt - 10
+            print("memerr allocating new list")
     #too_long = 0
     #too_big  = 0
-    for b in blobs:
-        bb = blob_to_star(b, img, adv = advanced)
-        if bb is not None:
-            stars.append(bb)
+    try:
+        i = 0
+        for b in blobs:
+            bb = blob_to_star(b, img, adv = advanced)
+            if i < blobs_cnt:
+                stars[i] = bb
+            i += 1
+    except MemoryError as exc:
+        print("MEMORY ERROR adding blob star to list")
+        exclogger.log_exception(exc, to_file = False)
+        return [], EXPO_MEMORY_ERR
     if force_solve == False:
         #if too_big > len(stars):
         #    return stars, EXPO_TOO_BIG
@@ -87,9 +101,9 @@ def blob_to_star(b, img, adv = 0):
     if adv == 0:
         return blobstar.BlobStar(b.cxf(), b.cyf(), r, b.brightness_sum())
     else:
-        sums, pointiness = guide_star_analyze(img, b.cxf(), b.cyf(), r, mode = 2 if adv == 1 else 0)
-        guidestar = blobstar.GuideStar(b.cxf(), b.cyf(), r, b.brightness_sum(), b.max_brightness(), b.saturation_cnt(), b.pixels(), pointiness)
-        guidestar.profile = sums
+        #sums, pointiness = guide_star_analyze(img, b.cxf(), b.cyf(), r, mode = 2 if adv == 1 else 0)
+        guidestar = blobstar.GuideStar(b.cxf(), b.cyf(), r, b.brightness_sum(), b.max_brightness(), b.saturation_cnt(), b.pixels(), b.star_pointiness())
+        #guidestar.profile = sums
         return guidestar
 
 def guide_star_analyze(img, cx, cy, r, mode = 0):

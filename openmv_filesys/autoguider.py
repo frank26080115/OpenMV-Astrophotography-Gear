@@ -96,7 +96,8 @@ class AutoGuider(object):
         self.settings.update({"use_hotpixels"            : False})
         self.settings.update({"panicthresh_expoerr"      : 5})
         self.settings.update({"panicthresh_movescore"    : 50})
-        self.settings.update({"dither_amount"            : 0})
+        self.settings.update({"use_dithering"            : False})
+        self.settings.update({"dither_amount"            : 3})
         self.settings.update({"dither_calmness"          : 3})
         self.settings.update({"dither_calm_cnt"          : 3})
         self.settings.update({"dither_frames_cnt"        : 5})
@@ -119,6 +120,7 @@ class AutoGuider(object):
         self.settings.update({"multistar_cnt_max"        : 10})
         self.settings.update({"multistar_ratings_thresh" : 50})
         self.settings.update({"starmove_tolerance"       : 50})
+        self.settings.update({"clustering_tolerance"     : 20})
         self.settings.update({"use_led"                  : True})
         self.settings.update({"fast_mode"                : True})
         self.settings.update({"slow_profile"             : False})
@@ -137,6 +139,7 @@ class AutoGuider(object):
         self.histogram = None
         self.img_stats = None
         self.stars = None
+        self.prev_stars = None
         self.hotpixels = []
         self.zoom = 1
 
@@ -397,6 +400,7 @@ class AutoGuider(object):
                 before_len = len(latest_stars)
                 latest_stars = star_finder.filter_hotpixels(latest_stars, self.hotpixels)
                 self.hotpixels_eff = before_len - len(latest_stars)
+            star_motion.mark_clusters(latest_stars, tolerance = self.settings["clustering_tolerance"])
             latest_stars = blobstar.sort_rating(latest_stars)
             if self.simulator is None:
                 self.dbg_t2 = pyb.millis()
@@ -412,6 +416,9 @@ class AutoGuider(object):
             else:
                 # exposure is just right
                 self.expo_err = 0
+                if self.prev_stars is not None:
+                    del self.prev_stars
+                    gc.collect()
                 self.prev_stars = self.stars
                 self.stars = latest_stars
 
@@ -477,7 +484,7 @@ class AutoGuider(object):
                         self.origin_coord = self.target_coord
                         if self.debug:
                             print("origin coord auto-selected: (%0.1f , %0.2f)" % (self.origin_coord[0], self.origin_coord[1]))
-                    if self.guide_state == GUIDESTATE_GUIDING and self.settings["dither_amount"] > 0 and self.intervalometer_state == INTERVALSTATE_ACTIVE and guidepulser.is_shutter_open() == False:
+                    if self.guide_state == GUIDESTATE_GUIDING and self.settings["use_dithering"] and self.intervalometer_state == INTERVALSTATE_ACTIVE and guidepulser.is_shutter_open() == False:
                         amt = int(round(self.settings["dither_amount"] * 10.0))
                         nx = ((pyb.rng() % (amt * 2)) - amt) / 10.0
                         ny = ((pyb.rng() % (amt * 2)) - amt) / 10.0
@@ -838,7 +845,7 @@ class AutoGuider(object):
         if guidepulser.is_shutter_open() == False:
             self.pulse_sum = 0
             self.queue_shutter_closed = True
-            dither = self.settings["dither_amount"] > 0
+            dither = self.settings["use_dithering"]
             # queue_shutter_closed is used to guarantee at least a small gap in the graph
             if self.intervalometer_timestamp <= 0:
                 self.intervalometer_timestamp = pyb.millis()

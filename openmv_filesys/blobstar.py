@@ -45,10 +45,10 @@ class GuideStar(object):
         self.saturation = saturated * 100.0 / area
         self.pointiness = pointiness
         self.clustered = 0
-        self.rating = self._eval()
+        self.rating = 0 # self.eval()
         self.profile = []
 
-    def _eval(self):
+    def eval(self):
         # we want the star to be not too close to the edge
         outofview = (self.cx < (SENSOR_WIDTH / 3)) or (self.cx > ((SENSOR_WIDTH * 2) / 3)) or (self.cy < (SENSOR_HEIGHT / 3)) or (self.cy > ((SENSOR_HEIGHT * 2) / 3))
         #if outofview:
@@ -82,6 +82,7 @@ class GuideStar(object):
         total = (score_pointiness * 0.35) + (score_maxbrite * 0.25) + (score_saturation * 0.15) + (score_centerdist * 0.25)
         if self.clustered > 0:
             total /= 4
+        self.rating = total
         return total
 
     def to_jsonobj(self):
@@ -123,5 +124,5 @@ def sort_dist(star_list):
     return res_list
 
 def sort_rating(star_list):
-    res_list = sorted(star_list, key = sort_rating_func, reverse = True)
-    return res_list
+    star_list.sort(key = sort_rating_func, reverse = True)
+    return star_list

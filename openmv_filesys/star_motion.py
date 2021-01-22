@@ -187,22 +187,27 @@ def get_all_star_movement(old_list, new_list, selected_star = None, cnt_min = 1,
     mag, ang = comutils.vector_between([0, 0], [dx_avg, dy_avg])
     return star, [selected_star.cx + dx_avg, selected_star.cy + dy_avg], [dx_avg, dy_avg, mag, ang], score, avg_cnt
 
-def move_multistar(dx, dy, new_list, old_selected):
-    new_list = []
-    for i in old_selected:
-        nx = i.cx + dx
-        ny = i.cy + dy
-        nearest = None
-        nearest_mag = 9999
-        for j in new_list:
-            mag = comutils.vector_between([nx, ny], [j.cx, j.cy], mag_only = True)
-            if mag < nearest_mag:
-                nearest_mag = mag
-                nearest = j
-        if nearest is not None:
-            new_list.append(nearest)
-    return new_list
+def mark_clusters(star_list, tolerance = 50):
+    stars_len = len(star_list)
+    i = 0
+    while i < stars_len:
+        j = 0
+        while j < stars_len:
+            if i == j:
+                j += 1
+                continue
+            star1 = star_list[i]
+            star2 = star_list[j]
+            mag = comutils.vector_between([star1.cx, star1.cy], [star2.cx, star2.cy], mag_only=True)
+            if mag < tolerance:
+                star1.clustered = tolerance
+                star2.clustered = tolerance
+                star1.eval()
+                star2.eval()
+            j += 1
+        i += 1
 
+"""
 def test(fname = None):
     from PIL import Image, ImageDraw, ImageFont
     import random
@@ -256,3 +261,4 @@ def test(fname = None):
 
 if __name__ == "__main__":
     test()
+"""

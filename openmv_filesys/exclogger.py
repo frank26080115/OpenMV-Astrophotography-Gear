@@ -61,7 +61,7 @@ def log_exception(exc, time_str = "", to_print = True, to_file = True, fatal = F
     return headstr + "\r\n" + s
 
 def exc_to_str(exc):
-    with uio.StringIO(1024) as f:
+    with uio.StringIO(512) as f:
         sys.print_exception(exc, f)
         f.seek(0)
         return f.read()
