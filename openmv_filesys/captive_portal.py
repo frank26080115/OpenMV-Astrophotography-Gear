@@ -95,7 +95,7 @@ class CaptivePortal(object):
             self.winc_mode = network.WINC.MODE_AP
 
         if "?" in self.ssid: # question mark is replaced with a unique identifier
-            uidstr = ubinascii.hexlify(pyb.unique_id()).decode("ascii")
+            uidstr = ubinascii.hexlify(pyb.unique_id()).decode("ascii").upper()
             self.ssid = self.ssid.replace("?", uidstr)
         if self.winc_mode == network.WINC.MODE_AP:
             # limit SSID length
