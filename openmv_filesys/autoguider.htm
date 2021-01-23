@@ -97,17 +97,14 @@ function checkHotPixel(star) {
     return false;
 }
 
-function slew(ele, isdown) {
-    console.log("slew " + ele.id + " isdown " + isdown);
-    if (isdown) {
-        document.getElementById(ele.id + "_bottom").style.fill = "#08A";
-    }
-    else {
-        document.getElementById(ele.id + "_bottom").style.fill = "#F80";
-    }
+var ui_list = {};
+
+function register_ui(uiele, name)
+{
+    ui_list[name] = uiele;
 }
 
-function makeSlider(id, minval, maxval, defval, stepval, slide_func)
+function makeSlider(id, minval, maxval, defval, stepval, zero_val, unit, slide_func)
 {
     if (defval < minval) {
         defval = minval;
@@ -117,21 +114,35 @@ function makeSlider(id, minval, maxval, defval, stepval, slide_func)
     }
 
     var handle = $( "#" + id + "_handle" );
-    $( "#" + id ).slider({
+    var slider = $( "#" + id ).slider({
       create: function() {
-        handle.text( $( this ).slider( "value" ) );
+        var v = $( this ).slider( "value" );
+        if (v == 0) { v = zero_val; }
+        else { v = v.toString() + unit; }
+        handle.text( v );
       },
       min: minval,
       max: maxval,
       step: stepval,
       value: defval,
       slide: function( event, ui ) {
-        handle.text( ui.value );
+        var v = ui.value;
+        if (v == 0) { v = zero_val; }
+        else { v = v.toString() + unit; }
+        handle.text( v );
         if (slide_func) {
             slide_func(this, event, ui);
         }
       }
     });
+
+    register_ui(slider, id);
+}
+
+function makeButton(id, click_func)
+{
+    var btn = $("#" + id ).button().click(click_func);
+    register_ui(btn, id);
 }
 
 function onLoadAll()
@@ -140,17 +151,9 @@ function onLoadAll()
     document.getElementById("showme").style.display = "block";
     $( "#accordion" ).accordion({heightStyle: "content"});
 
-    $("#btn_streamimg" ).button().click(function( event ) {
-        console.log("click btn_streamimg");
-        window.location.href = "/stream";
-    });
-
-    makeSlider("slider_gain", 0, 128, 32, 8, function(obj, event, ui) {
-        console.log("slider_gain: " + ui.value);
-    });
-    makeSlider("slider_thresh", 0, 255, 0, 1, function(obj, event, ui) {
-        console.log("slider_thresh: " + ui.value);
-    });
+    make_ui_intervalometer();
+    make_ui_guidecamconfig();
+    make_ui_mountconfig();
 
     $("#btn_hotpixels").button().click(function( event ) {
         console.log("click btn_hotpixels");
@@ -256,37 +259,118 @@ function websocket_init()
   </div>
   <h3>Intervalometer</h3>
   <div>
+    <script type="text/javascript">
+function make_ui_intervalometer()
+{
+    makeButton("btn_interval_loop", function( event ) {
+        console.log("click btn_interval_loop");
+        ui_list["btn_interval_stopnext"].button("option", "disabled", false);
+        ui_list["btn_interval_stopnow"] .button("option", "disabled", false);
+        ui_list["btn_interval_single"]  .button("option", "disabled", true);
+        ui_list["btn_interval_loop"]    .button("option", "disabled", true);
+    });
+    makeButton("btn_interval_single", function( event ) {
+        console.log("click btn_interval_single");
+        ui_list["btn_interval_stopnext"].button("option", "disabled", true);
+        ui_list["btn_interval_stopnow"] .button("option", "disabled", false);
+        ui_list["btn_interval_single"]  .button("option", "disabled", false);
+        ui_list["btn_interval_loop"]    .button("option", "disabled", false);
+    });
+    makeButton("btn_interval_stopnext", function( event ) {
+        console.log("click btn_interval_stopnext");
+        ui_list["btn_interval_stopnext"].button("option", "disabled", true);
+        ui_list["btn_interval_stopnow"] .button("option", "disabled", false);
+        ui_list["btn_interval_single"]  .button("option", "disabled", true);
+        ui_list["btn_interval_loop"]    .button("option", "disabled", true);
+    });
+    makeButton("btn_interval_stopnow", function( event ) {
+        console.log("click btn_interval_stopnow");
+        ui_list["btn_interval_stopnext"].button("option", "disabled", true);
+        ui_list["btn_interval_stopnow"] .button("option", "disabled", true);
+        ui_list["btn_interval_single"]  .button("option", "disabled", false);
+        ui_list["btn_interval_loop"]    .button("option", "disabled", false);
+    });
+    makeSlider("slider_bulbtime", 0, 1200, 30, 1, "0 sec", " sec", function(obj, event, ui) {
+        console.log("slider_bulbtime: " + ui.value);
+    });
+    makeSlider("slider_ditherlimit", 0, 500, 10, 1, "OFF", " pix", function(obj, event, ui) {
+        console.log("slider_ditherlimit: " + ui.value);
+    });
+    makeSlider("slider_dithersettlethresh", 0, 10, 3, 1, "0 pix", " pix", function(obj, event, ui) {
+        console.log("slider_dithersettlethresh: " + ui.value);
+    });
+    makeSlider("slider_dithersettleframecnt", 1, 10, 3, 1, "0 frames", " frames", function(obj, event, ui) {
+        console.log("slider_dithersettleframecnt: " + ui.value);
+    });
+    makeSlider("slider_dithertimeout", 1, 10, 5, 1, "0 frames", " frames", function(obj, event, ui) {
+        console.log("slider_dithertimeout: " + ui.value);
+    });
+
+    // TODO: digital intervalometer mode
+}
+    </script>
     <p><button id="btn_interval_loop">Loop</button><button id="btn_interval_single">Single</button><button id="btn_interval_stopnext">Stop On Next</button><button id="btn_interval_stopnow">Stop Now</button></p>
-    
-    <div><fieldset><legend>Bulb Time: <span id="slider_bulbtime_handle"></span> sec</legend>
+    <div><fieldset><legend>Status:</legend>
+        <div id="bulb_status" style="font-size:20pt;">0</div>
+    </fieldset></div>
+    <div><fieldset><legend>Bulb Time: <span id="slider_bulbtime_handle"></span></legend>
         <div id="slider_bulbtime"></div>
     </fieldset></div>
     <div><fieldset><legend>Dither Dist. Limit (0 to disable dithering): <span id="slider_ditherlimit_handle"></span></legend>
         <div id="slider_ditherlimit"></div>
     </fieldset></div>
     <div><fieldset><legend>Dither Settle Thresh: <span id="slider_dithersettlethresh_handle"></span></legend>
-        <div id="slider_dithertime"></div>
+        <div id="slider_dithersettlethresh"></div>
     </fieldset></div>
     <div><fieldset><legend>Dither Settle Frame Count: <span id="slider_dithersettleframecnt_handle"></span></legend>
         <div id="slider_dithersettleframecnt"></div>
     </fieldset></div>
-    <div><fieldset><legend>Dither Timeout Frame Count: <span id="slider_dithersettleframecnt_handle"></span></legend>
-        <div id="slider_dithersettleframecnt"></div>
+    <div><fieldset><legend>Dither Timeout Frame Count: <span id="slider_dithertimeout_handle"></span></legend>
+        <div id="slider_dithertimeout"></div>
     </fieldset></div>
+    <!-- TODO: digital intervalometer mode -->
   </div>
   <h3>Guide-Cam Config</h3>
   <div>
+    <script type="text/javascript">
+
+function make_ui_guidecamconfig()
+{
+    $("#btn_streamimg" ).button().click(function( event ) {
+        console.log("click btn_streamimg");
+        window.location.href = "/stream";
+    });
+    $("#btn_streamimg_star" ).button().click(function( event ) {
+        console.log("click btn_streamimg_star");
+        window.location.href = "/stream?zoom";
+    });
+
+    makeSlider("slider_gain", 0, 128, 32, 8, "0 dB", " dB", function(obj, event, ui) {
+        console.log("slider_gain: " + ui.value);
+    });
+    makeSlider("slider_shutter", 100, 3000, 1000, 100, "0", " ms", function(obj, event, ui) {
+        console.log("slider_shutter: " + ui.value);
+    });
+    makeSlider("slider_starthresh", 0, 255, 0, 1, "auto", "/255", function(obj, event, ui) {
+        console.log("slider_starthresh: " + ui.value);
+    });
+    makeSlider("slider_imgerrpanicthresh", 1, 100, 3, 1, "0", "", function(obj, event, ui) {
+        console.log("slider_imgerrpanicthresh: " + ui.value);
+    });
+}
+
+    </script>
     <div><button id="btn_streamimg">Stream Image Full Screen</button><button id="btn_streamimg_star">Stream Image of Selected Star</button></div>
     <div><fieldset><legend>Image Statistics</legend>
     <div id="div_histogram"></div>
     </fieldset></div>
-    <div><fieldset><legend>Camera Gain: <span id="slider_gain_handle"></span> dB</legend>
+    <div><fieldset><legend>Camera Gain: <span id="slider_gain_handle"></span></legend>
         <div id="slider_gain"></div>
     </fieldset></div>
-    <div><fieldset><legend>Shutter: <span id="slider_shutter_handle"></span> ms</legend>
+    <div><fieldset><legend>Shutter: <span id="slider_shutter_handle"></span></legend>
         <div id="slider_shutter"></div>
     </fieldset></div>
-    <div><fieldset><legend>Star Threshold: <span id="slider_starthresh_handle"></span>/255</legend>
+    <div><fieldset><legend>Star Threshold: <span id="slider_starthresh_handle"></span></legend>
         <div id="slider_starthresh"></div>
     </fieldset></div>
     <div><fieldset><legend>Image Error Panic Threshold: <span id="slider_imgerrpanicthresh_handle"></span></legend>
@@ -295,22 +379,45 @@ function websocket_init()
   </div>
   <h3>Mount Config</h3>
   <div>
-    <div><fieldset><legend>Minimum Pulse: <span id="slider_pulse_minimum_handle"></span> ms</legend>
+    <script type="text/javascript">
+function make_ui_mountconfig()
+{
+    makeSlider("slider_pulse_minimum", 10, 500, 50, 1, "0 ms", " ms", function(obj, event, ui) {
+        console.log("slider_pulse_minimum: " + ui.value);
+    });
+    makeSlider("slider_pulse_maximum", 0, 3000, 900, 100, "auto", " ms", function(obj, event, ui) {
+        console.log("slider_pulse_maximum: " + ui.value);
+    });
+    makeSlider("slider_pulse_calistep", 100, 5000, 900, 100, "0 ms", " ms", function(obj, event, ui) {
+        console.log("slider_pulse_calistep: " + ui.value);
+    });
+    makeSlider("slider_pulse_settle", 0, 500, 50, 1, "0 ms", " ms", function(obj, event, ui) {
+        console.log("slider_pulse_settle: " + ui.value);
+    });
+    makeSlider("slider_dirchangehyster", 0, 5000, 500, 1, "0 ms", " ms", function(obj, event, ui) {
+        console.log("slider_dirchangehyster: " + ui.value);
+    });
+    makeSlider("slider_backlashlimit", 0, 10000, 5000, 100, "0 ms", " ms", function(obj, event, ui) {
+        console.log("slider_backlashlimit: " + ui.value);
+    });
+}
+    </script>
+    <div><fieldset><legend>Minimum Pulse: <span id="slider_pulse_minimum_handle"></span></legend>
         <div id="slider_pulse_minimum"></div>
     </fieldset></div>
-    <div><fieldset><legend>Maximum Pulse: <span id="slider_pulse_maximum_handle"></span> ms</legend>
+    <div><fieldset><legend>Maximum Pulse: <span id="slider_pulse_maximum_handle"></span></legend>
         <div id="slider_pulse_maximum"></div>
     </fieldset></div>
     <div><fieldset><legend>Calibration Step Pulse: <span id="slider_pulse_calistep_handle"></span> ms</legend>
         <div id="slider_pulse_calistep"></div>
     </fieldset></div>
-    <div><fieldset><legend>Settle Time: <span id="slider_pulse_settle_handle"></span> ms</legend>
+    <div><fieldset><legend>Settle Time: <span id="slider_pulse_settle_handle"></span></legend>
         <div id="slider_pulse_settle"></div>
     </fieldset></div>
     <div><fieldset><legend>Direction Change Hysteresis: <span id="slider_dirchangehyster_handle"></span> ms</legend>
         <div id="slider_dirchangehyster"></div>
     </fieldset></div>
-    <div><fieldset><legend>Backlash Limiter: <span id="slider_backlashlimit_handle"></span> ms</legend>
+    <div><fieldset><legend>Backlash Limiter: <span id="slider_backlashlimit_handle"></span></legend>
         <div id="slider_backlashlimit"></div>
     </fieldset></div>
   </div>
