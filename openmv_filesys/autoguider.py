@@ -18,6 +18,7 @@ ir_leds   = pyb.LED(4)
 
 LOG_BUFF_LEN        = micropython.const(3)
 STAR_CNT_JSON_LIMIT = micropython.const(100)
+WIFI_HW_RETRIES     = micropython.const(5)
 
 GUIDESTATE_IDLE              = micropython.const(0)
 GUIDESTATE_GUIDING           = micropython.const(1)
@@ -173,6 +174,7 @@ class AutoGuider(object):
         state.update({"rand_id"             : self.websock_randid})
         state.update({"guide_state"         : self.guide_state})
         state.update({"interval_state"      : self.intervalometer_state})
+        state.update({"blub_remaining"      : guidepulser.shutter_remaining()})
         if self.img is not None and self.cam_err <= 0:
             state.update({"expo_code": self.expo_code})
         elif self.img is None:
@@ -840,12 +842,18 @@ class AutoGuider(object):
     # note: check py_guidepulser.c and qstrdefsomv.h for available function calls
     def task_pulser(self):
         guidepulser.task()
+
         now_hw_err = guidepulser.get_hw_err()
-        if self.hw_err == 0 and now_hw_err > 0:
-            self.log_msg("ERR: hardware I2C error detected")
-        elif now_hw_err == 0 and self.hw_err > 0:
+        #if self.hw_err != now_hw_err and now_hw_err > 0:
+        #    self.log_msg("ERR: hardware I2C error!")
+        if self.hw_err != now_hw_err and now_hw_err > 1:
+            self.panic(msg = "hardware I2C errors detected")
+        if now_hw_err == 0 and self.hw_err > 0:
             self.log_msg("MSG: no hardware I2C errors anymore")
+            red_led.off()
         self.hw_err = now_hw_err
+        self.check_panic_builtin_led()
+
         gap_time = self.settings["intervalometer_gap_time"] * 1000
         if gap_time <= 1000:
             gap_time = 1000
@@ -1040,13 +1048,10 @@ class AutoGuider(object):
             ret = self.portal.task()
             if ret == captive_portal.STS_KICKED:
                 red_led.off()
-            if self.portal.hw_retries > 5:
+            if self.portal.hw_retries > WIFI_HW_RETRIES:
                 print("ERROR: WiFi hardware failure")
                 green_led.off()
-                if (self.t % 300) < 150:
-                    red_led.on()
-                else:
-                    red_led.off()
+                self.check_panic_builtin_led()
 
     def register_http_handlers(self):
         if self.portal is None:
@@ -1243,6 +1248,15 @@ class AutoGuider(object):
         except Exception as exc:
             exclogger.log_exception(exc)
             pass
+
+    def check_panic_builtin_led(self):
+        if self.hw_err > 1 or self.portal.hw_retries > WIFI_HW_RETRIES:
+            if (pyb.millis() % 300) < 150:
+                red_led.on()
+            else:
+                red_led.off()
+        else:
+            red_led.off()
 
 def guidestar_to_jsonobj(star):
     obj = {}
