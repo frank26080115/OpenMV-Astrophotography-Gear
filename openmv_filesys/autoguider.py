@@ -2,8 +2,9 @@ import micropython
 micropython.opt_level(2)
 
 import comutils
-import blobstar, astro_sensor, time_location, captive_portal, star_finder, star_motion, guider_calibration, backlash_mgr
+import blobstar, astro_sensor, time_location, captive_portal, star_finder, guider_calibration, backlash_mgr
 import guidepulser
+import guidestar
 import exclogger
 import pyb, uos, uio, gc, sys
 import time, math, ujson, ubinascii
@@ -16,7 +17,7 @@ blue_led  = pyb.LED(3)
 ir_leds   = pyb.LED(4)
 
 LOG_BUFF_LEN        = micropython.const(3)
-STAR_CNT_JSON_LIMIT = micropython.const(30)
+STAR_CNT_JSON_LIMIT = micropython.const(100)
 
 GUIDESTATE_IDLE              = micropython.const(0)
 GUIDESTATE_GUIDING           = micropython.const(1)
@@ -81,6 +82,8 @@ class AutoGuider(object):
         self.expo_err = 0
         self.hw_err = 0
         self.prev_panic = ""
+        self.panic_move_cnt = 0
+        self.last_move_err = 0
         self.snap_millis = 0
         self.stop_time = 0
         self.analysis_dur = [0, 0, 0, 0, 0]
@@ -95,7 +98,8 @@ class AutoGuider(object):
         self.settings.update({"thresh"                   : 0})
         self.settings.update({"use_hotpixels"            : False})
         self.settings.update({"panicthresh_expoerr"      : 5})
-        self.settings.update({"panicthresh_movescore"    : 50})
+        self.settings.update({"panicthresh_move_err"     : 50})
+        self.settings.update({"panicthresh_move_cnt"     : 2})
         self.settings.update({"use_dithering"            : False})
         self.settings.update({"dither_amount"            : 3})
         self.settings.update({"dither_calmness"          : 3})
@@ -168,7 +172,7 @@ class AutoGuider(object):
         state.update({"time"                : self.time_mgr.get_sec()})
         state.update({"rand_id"             : self.websock_randid})
         state.update({"guide_state"         : self.guide_state})
-        state.update({"intervalometer_state": self.intervalometer_state})
+        state.update({"interval_state"      : self.intervalometer_state})
         if self.img is not None and self.cam_err <= 0:
             state.update({"expo_code": self.expo_code})
         elif self.img is None:
@@ -187,7 +191,10 @@ class AutoGuider(object):
         # problem is solved by sending it separately, in small chunks
         if self.stars is not None:
             if len(self.stars) <= STAR_CNT_JSON_LIMIT:
-                state.update({"stars": blobstar.to_jsonobj(self.stars)})
+                x = ""
+                for i in self.stars:
+                    x += guidestar_to_str(i)
+                state.update({"stars": x})
                 self.need_send_stars = False
             else:
                 state.update({"stars": False})
@@ -197,19 +204,20 @@ class AutoGuider(object):
             self.need_send_stars = False
 
         if self.selected_star is not None:
-            state.update({"sel_star"        : [self.selected_star.cx, self.selected_star.cy]})
-            state.update({"sel_star_profile": self.selected_star.profile})
+            state.update({"sel_star"        : self.selected_star.coord()})
+            state.update({"sel_star_profile": self.selected_star.star_profile()})
         else:
             state.update({"sel_star": None})
         state.update({"tgt_coord": self.target_coord})
         state.update({"ori_coord": self.origin_coord})
+        state.update({"last_move_err": self.last_move_err})
         state.update({"calib_ra" : self.calibration[CALIIDX_RA].get_json_obj() if self.calibration[CALIIDX_RA] is not None else None})
         state.update({"calib_dec": self.calibration[CALIIDX_DEC].get_json_obj() if self.calibration[CALIIDX_DEC] is not None else None})
         if self.hotpixels is not None:
-            state.update({"hotpixels"     : True})
-            state.update({"hotpixels_used": self.settings["use_hotpixels"]})
-            state.update({"hotpixels_cnt" : len(self.hotpixels)})
-            state.update({"hotpixels_last": self.hotpixels_eff})
+            state.update({"hotpix"     : True})
+            state.update({"hotpix_used": self.settings["use_hotpixels"]})
+            state.update({"hotpix_cnt" : len(self.hotpixels)})
+            state.update({"hotpix_last": self.hotpixels_eff})
         else:
             state.update({"hotpixels": False})
         state.update({"logs"        : self.get_logs_obj()})
@@ -243,7 +251,7 @@ class AutoGuider(object):
         if self.websock is None:
             return
         estimated_len = len(self.stars) if self.stars is not None else 0
-        estimated_len *= 22 # worst-case length per star
+        estimated_len *= 26 # worst-case length per star
         headstr = "{\"pkt_type\":\"stars\",\"stars\":\""
         endstr  = "\"}"
         estimated_len += len(headstr) + len(endstr)
@@ -258,10 +266,7 @@ class AutoGuider(object):
             remaining -= len(headstr)
 
             for i in self.stars:
-                x = "%0.1f,%0.1f,%u,%u;" % (i.cx, i.cy, int(round(i.r)), int(round(i.rating)))
-                # worst-case length is
-                # 1234.6,8901.3,567,901;
-                # 22
+                x = guidestar_to_str(i)
                 self.websock.sock.send(x)
                 remaining -= len(x)
             self.websock.sock.send(endstr)
@@ -390,20 +395,17 @@ class AutoGuider(object):
         if self.img is not None:
             self.histogram = self.img.get_histogram()
             self.img_stats = self.histogram.get_statistics()
-            adv = 1 if self.settings["slow_profile"] else 2
-            latest_stars, code = star_finder.find_stars(self.img, hist = self.histogram, stats = self.img_stats, thresh = self.settings["thresh"], force_solve = True, advanced = adv)
+            latest_stars, code = star_finder.find_stars(self.img, hist = self.histogram, stats = self.img_stats, thresh = self.settings["thresh"], force_solve = True, guider = True)
             self.dbg_t1 = pyb.millis()
             if self.simulator is not None:
                 latest_stars = self.simulator.get_stars(self, latest_stars)
-                self.dbg_t2 = pyb.millis()
-            if self.hotpixels is not None and self.settings["use_hotpixels"]:
-                before_len = len(latest_stars)
-                latest_stars = star_finder.filter_hotpixels(latest_stars, self.hotpixels)
-                self.hotpixels_eff = before_len - len(latest_stars)
-            star_motion.mark_clusters(latest_stars, tolerance = self.settings["clustering_tolerance"])
-            latest_stars = blobstar.sort_rating(latest_stars)
-            if self.simulator is None:
-                self.dbg_t2 = pyb.millis()
+                pass
+            before_len = len(latest_stars)
+            hotpixels = self.hotpixels if self.hotpixels is not None and self.settings["use_hotpixels"] else None
+            guidestar.process_list(latest_stars, self.settings["clustering_tolerance"], hotpixels, 2)
+            self.hotpixels_eff = before_len - len(latest_stars)
+            self.dbg_t2 = pyb.millis()
+
             self.expo_code = code
             if code != star_finder.EXPO_JUST_RIGHT or len(latest_stars) <= 0:
                 self.expo_err += 1
@@ -416,10 +418,9 @@ class AutoGuider(object):
             else:
                 # exposure is just right
                 self.expo_err = 0
-                if self.prev_stars is not None:
+                if self.prev_stars is not None and self.simulator is None:
                     del self.prev_stars
                     gc.collect()
-                self.prev_stars = self.stars
                 self.stars = latest_stars
 
                 # motion can be detected if previous data is available
@@ -427,32 +428,38 @@ class AutoGuider(object):
                 if self.prev_stars is None:
                     self.prev_stars = latest_stars
 
-                if self.settings["multistar_cnt_max"] > 1: # multistar mode
-                    real_star, virtual_star, move_data, score, avg_cnt = star_motion.get_all_star_movement(self.prev_stars, self.stars, selected_star = self.selected_star, cnt_min = self.settings["multistar_cnt_min"], cnt_limit = self.settings["multistar_cnt_max"], rating_thresh = self.settings["multistar_ratings_thresh"], tolerance = self.settings["starmove_tolerance"], fast_mode = self.settings["fast_mode"])
-                else:                                      # else use single star mode
-                    if self.selected_star is None and self.stars is not None:
-                        if len(self.stars) > 0:
-                            self.selected_star = self.stars[0]
-                            self.log_msg("MSG: auto selected star from list, at %0.1f %0.1f" % (self.selected_star.cx, self.selected_star.cy))
-                    real_star, score, nearby = star_motion.get_star_movement(self.prev_stars, self.selected_star, self.stars, tolerance = self.settings["starmove_tolerance"], fast_mode = self.settings["fast_mode"])
-                    virtual_star = real_star
-                    avg_cnt = nearby
+                if self.selected_star is None and latest_stars is not None:
+                    if len(latest_stars) > 0:
+                        self.selected_star = latest_stars[0]
+                        self.log_msg("MSG: auto selected star at %0.1f %0.1f" % (self.selected_star.cxf(), self.selected_star.cyf()))
+
+                res = guidestar.get_multi_star_motion(self.prev_stars, latest_stars, self.selected_star, self.settings["starmove_tolerance"], False, self.settings["multistar_ratings_thresh"], self.settings["multistar_cnt_min"], self.settings["multistar_cnt_max"])
+                real_star    = res[0]
+                virtual_star = [res[1], res[2]]
+                move_err     = res[3]
+                self.last_move_err = move_err
+
                 self.dbg_t3 = pyb.millis()
                 if self.selected_star is None and real_star is not None:
-                    self.log_msg("MSG: auto selected star at %0.1f %0.1f" % (real_star.cx, real_star.cy))
+                    self.log_msg("MSG: auto selected star at %0.1f %0.1f" % (real_star.cxf(), real_star.cyf()))
                 self.selected_star = real_star
                 self.virtual_star  = virtual_star
                 # virtual star only matters if multi-star mode is used, it accounts for atmospheric distortion
 
                 if self.debug:
-                    print("dbg move score %0.4f cnt %u " % (score, avg_cnt), end="")
+                    print("dbg move err %u nb %u mcnt %u " % (move_err, res[4], res[5]), end="")
                     if real_star is not None:
-                        print("rating %0.4f" % real_star.rating)
+                        print("rating %u" % real_star.star_rating())
                     else:
                         print("no star")
 
-                if score > self.settings["panicthresh_movescore"] or score < 0:
-                    self.panic(msg = "movement analysis score too low %f" % score)
+                if move_err > self.settings["panicthresh_move_err"] or move_err < 0:
+                    self.panic_move_cnt += 1
+                    if self.panic_move_cnt > self.settings["panicthresh_move_cnt"]:
+                        self.panic(msg = "movement analysis had too much error")
+                else:
+                    self.panic_move_cnt = 0
+                    self.prev_stars     = self.stars
 
                 # passive guiding will cause the mount to autoguide even if not in a autoguiding state
                 # this is useful for simulation and headless operation
@@ -477,7 +484,7 @@ class AutoGuider(object):
                         self.guide_state = GUIDESTATE_IDLE
                         return
                     if self.target_coord is None:
-                        self.target_coord = [self.selected_star.cx, self.selected_star.cy]
+                        self.target_coord = self.selected_star.coord()
                         if self.debug:
                             print("target coord auto-selected: (%0.1f , %0.2f)" % (self.target_coord[0], self.target_coord[1]))
                     if self.origin_coord is None:
@@ -533,7 +540,7 @@ class AutoGuider(object):
                         self.guide_state = GUIDESTATE_IDLE
                         return decided_pulse
                     if self.virtual_star is None:
-                        self.virtual_star = [self.selected_star.cx, self.selected_star.cy]
+                        self.virtual_star = self.selected_star.coord()
                     if self.guide_state == GUIDESTATE_CALIBRATING_RA:
                         i = CALIIDX_RA
                         dir = "RA"
@@ -573,7 +580,7 @@ class AutoGuider(object):
                     if self.selected_star is None:
                         return decided_pulse
                     if self.target_coord is None:
-                        self.target_coord = [self.selected_star.cx, self.selected_star.cy]
+                        self.target_coord = self.selected_star.coord()
                     if self.origin_coord is None:
                         self.origin_coord = self.target_coord
                 return decided_pulse
@@ -722,14 +729,14 @@ class AutoGuider(object):
         nearest = None
         nearest_dist = 9999
         for i in self.stars:
-            mag = comutils.vector_between([x, y], [i.cx, i.cy], mag_only=True)
+            mag = comutils.vector_between([x, y], i.coord(), mag_only=True)
             if mag < nearest_dist:
                 nearest_dist = mag
                 nearest = i
         if nearest_dist <= tol:
             self.selected_star = nearest
-            self.log_msg("SUCCESS: selected star at [%u , %u]" % (self.selected_star.cx, self.selected_star.cy))
-            self.target_coord = [self.selected_star.cx, self.selected_star.cy]
+            self.log_msg("SUCCESS: selected star at [%u , %u]" % (self.selected_star.cxf(), self.selected_star.cyf()))
+            self.target_coord = self.selected_star.coord()
             self.origin_coord = self.target_coord
             return True
         else:
@@ -1218,7 +1225,7 @@ class AutoGuider(object):
                 ih = int(math.floor(self.cam.height / self.zoom))
                 iwc = int(round(iw / 2.0))
                 ihc = int(round(ih / 2.0))
-                roi = (int(math.floor(self.selected_star.cx - iwc)), int(math.floor(self.selected_star.cy - ihc)), iw, ih)
+                roi = (int(math.floor(self.selected_star.cxf() - iwc)), int(math.floor(self.selected_star.cyf() - ihc)), iw, ih)
                 if roi[0] < 0:
                     roi[0] = 0
                 elif (roi[0] + iw) > self.cam.width:
@@ -1236,6 +1243,23 @@ class AutoGuider(object):
         except Exception as exc:
             exclogger.log_exception(exc)
             pass
+
+def guidestar_to_jsonobj(star):
+    obj = {}
+    obj.update({"cx": star.cxf()})
+    obj.update({"cy": star.cyf()})
+    obj.update({"r" : star.r()})
+    obj.update({"max_brightness": star.max_brightness()})
+    #obj.update({"pointiness": star.star_pointiness()})
+    obj.update({"rating": star.star_rating()})
+    #obj.update({"profile": })
+    return obj
+
+def guidestar_to_str(i):
+    return "%0.1f,%0.1f,%u,%u,%u;" % (i.cxf(), i.cyf(), i.r(), i.max_brightness(), i.star_rating())
+    # worst-case length is
+    # 1234.6,8901.3,567,901,345;
+    # 26
 
 if __name__ == "__main__":
     autoguider = AutoGuider(debug = True)

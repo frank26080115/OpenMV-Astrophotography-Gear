@@ -5,6 +5,7 @@ import autoguider
 import exclogger
 import comutils
 import blobstar
+import guidestar
 
 import math, pyb
 
@@ -39,21 +40,23 @@ class GuiderSimulator(object):
             i = 0
             while i < star_cnt:
                 self._remake_star(i)
-                self.new_stars[i].cx = pyb.rng() % comutils.SENSOR_WIDTH
-                self.new_stars[i].cy = pyb.rng() % comutils.SENSOR_HEIGHT
+                cx = pyb.rng() % comutils.SENSOR_WIDTH
+                cy = pyb.rng() % comutils.SENSOR_HEIGHT
+                self.new_stars[i].move_coord(cx, cy)
                 i += 1
         elif self.guider.guide_state == autoguider.GUIDESTATE_GUIDING or self.guider.guide_state == autoguider.GUIDESTATE_IDLE or self.guider.guide_state == autoguider.GUIDESTATE_PANIC or self.guider.guide_state == autoguider.GUIDESTATE_DITHER:
             dx = 0
             dy = 0
             if self.guider.target_coord is not None and self.guider.selected_star is not None:
-                dx = self.guider.target_coord[0] - self.guider.selected_star.cx
-                dy = self.guider.target_coord[1] - self.guider.selected_star.cy
+                dx = self.guider.target_coord[0] - self.guider.selected_star.cxf()
+                dy = self.guider.target_coord[1] - self.guider.selected_star.cyf()
             i = 0
             while i < star_cnt:
                 old_star = self.base_stars[i]
                 self._remake_star(i)
-                self.new_stars[i].cx = old_star.cx + dx + get_rand_move(8, 10)
-                self.new_stars[i].cy = old_star.cy + dy + get_rand_move(8, 10)
+                cx = old_star.cxf() + dx + get_rand_move(4, 10)
+                cy = old_star.cyf() + dy + get_rand_move(4, 10)
+                self.new_stars[i].move_coord(cx, cy)
                 i += 1
         elif self.guider.guide_state == autoguider.GUIDESTATE_CALIBRATING_RA or self.guider.guide_state == autoguider.GUIDESTATE_CALIBRATING_DEC:
             if self.prev_state != self.guider.guide_state:
@@ -65,15 +68,16 @@ class GuiderSimulator(object):
                     self.rand_angle_dec = get_rand_move(360, 10)
                     self.rand_scale_dec = (pyb.rng() % 20) + 5
                     print("sim calib DEC ang %0.1f scale %0.1f" % (self.rand_angle_dec, self.rand_scale_dec))
-                dx = self.guider.target_coord[0] - self.guider.selected_star.cx
-                dy = self.guider.target_coord[1] - self.guider.selected_star.cy
+                dx = self.guider.target_coord[0] - self.guider.selected_star.cxf()
+                dy = self.guider.target_coord[1] - self.guider.selected_star.cyf()
                 i = 0
                 while i < star_cnt:
-                    cx = self.base_stars[i].cx
-                    cy = self.base_stars[i].cy
+                    ocx = self.base_stars[i].cxf()
+                    ocy = self.base_stars[i].cyf()
                     self._remake_star(i)
-                    self.new_stars[i].cx = cx + dx + get_rand_move(8, 10)
-                    self.new_stars[i].cy = cy + dy + get_rand_move(8, 10)
+                    cx = ocx + dx + get_rand_move(4, 10)
+                    cy = ocy + dy + get_rand_move(4, 10)
+                    self.new_stars[i].move_coord(cx, cy)
                     i += 1
             else:
                 if self.guider.guide_state == autoguider.GUIDESTATE_CALIBRATING_RA:
@@ -87,21 +91,18 @@ class GuiderSimulator(object):
                 dy = mag * math.sin(ang_rad)
                 i = 0
                 while i < star_cnt:
-                    cx = self.new_stars[i].cx
-                    cy = self.new_stars[i].cy
+                    ocx = self.new_stars[i].cxf()
+                    ocy = self.new_stars[i].cyf()
                     self._remake_star(i)
-                    self.new_stars[i].cx = cx + dx
-                    self.new_stars[i].cy = cx + dy
+                    cx = ocx + dx
+                    cy = ocx + dy
+                    self.new_stars[i].move_coord(cx, cy)
                     i += 1
         self.prev_state = self.guider.guide_state
         return self.new_stars
 
     def _remake_star(self, i):
-        old_star = self.base_stars[i]
-        new_star = blobstar.GuideStar(old_star.cx, old_star.cy, old_star.r, old_star.brightness, old_star.maxbrite, old_star.saturated, old_star.area, old_star.pointiness)
-        new_star.rating = old_star.rating
-        new_star.profile = old_star.profile
-        self.new_stars[i] = new_star
+        self.new_stars[i] = self.base_stars[i].clone()
 
 def get_rand_move(lim, mul):
     limi = int(round(lim * mul))
@@ -109,7 +110,10 @@ def get_rand_move(lim, mul):
     return ((pyb.rng() % limi) - limh) / mul
 
 if __name__ == "__main__":
-    x = autoguider.AutoGuider(debug = True, simulate_file = "rand_stars.bmp")
+    import gc
+    print("memory at boot %u" % gc.mem_free())
+    x = autoguider.AutoGuider(debug = True, simulate_file = "rand_stars_36.bmp")
+    #x = autoguider.AutoGuider(debug = True, simulate_file = "simulate.bmp")
     #x = AutoGuider(debug = True)
     while True:
         try:
