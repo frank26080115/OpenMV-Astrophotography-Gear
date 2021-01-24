@@ -97,11 +97,19 @@ function checkHotPixel(star) {
     return false;
 }
 
+var settings = {};
+
+function queueSettingsUpdate(key, val)
+{
+    settings[key] = val;
+}
+
 var ui_list = {};
 
-function register_ui(uiele, name)
+function register_ui(uiele, name, func)
 {
     ui_list[name] = uiele;
+    ui_list[name + "/func"] = func;
 }
 
 function makeSlider(id, minval, maxval, defval, stepval, zero_val, unit, slide_func)
@@ -114,6 +122,16 @@ function makeSlider(id, minval, maxval, defval, stepval, zero_val, unit, slide_f
     }
 
     var handle = $( "#" + id + "_handle" );
+    var handler = function(v) {
+        var text = v;
+        if (v == 0) { text = zero_val; }
+        else { text = v.toString() + unit; }
+        handle.text( text );
+        console.log("slider \"" + id + "\" evt = " + text);
+        if (slide_func) {
+            slide_func(v);
+        }
+    };
     var slider = $( "#" + id ).slider({
       create: function() {
         var v = $( this ).slider( "value" );
@@ -127,22 +145,73 @@ function makeSlider(id, minval, maxval, defval, stepval, zero_val, unit, slide_f
       value: defval,
       slide: function( event, ui ) {
         var v = ui.value;
-        if (v == 0) { v = zero_val; }
-        else { v = v.toString() + unit; }
-        handle.text( v );
-        if (slide_func) {
-            slide_func(this, event, ui);
-        }
+        handler(v);
       }
     });
 
-    register_ui(slider, id);
+    register_ui(slider, id, handler);
+}
+
+function makeSliderLookup(id, defval, lut, slide_func)
+{
+    var handle = $( "#" + id + "_handle" );
+    var handler = function(v) {
+        var text = lut[v].toString();
+        handle.text( text );
+        console.log("slider \"" + id + "\" evt = " + text);
+        if (slide_func) {
+            slide_func(lut[v]);
+        }
+    };
+    var slider = $( "#" + id ).slider({
+      create: function() {
+        var v = $( this ).slider( "value" );
+        v = lut[v].toString();
+        handle.text( v );
+      },
+      min: 0,
+      max: lut.length -1,
+      step: 1,
+      value: defval,
+      slide: function( event, ui ) {
+        var v = ui.value;
+        handler(v);
+      }
+    });
+
+    register_ui(slider, id, handler);
+    ui_list[id + "/lut"] = lut;
 }
 
 function makeButton(id, click_func)
 {
-    var btn = $("#" + id ).button().click(click_func);
-    register_ui(btn, id);
+    var btn = $("#" + id ).button().click(function() {
+        console.log("button \"" + id + "\" click");
+        if (click_func) {
+            click_func();
+        }
+    });
+    register_ui(btn, id, click_func);
+}
+
+function makeCheckbox(id, initstate, click_func)
+{
+    var chk = $("#" + id ).checkboxradio().prop("checked", initstate).on("change", function() {
+        var x = this.prop("checked");
+        console.log("button \"" + id + "\" on_change: " + x);
+        if (click_func) {
+            click_func(x);
+        }
+    });
+    register_ui(chk, id, click_func);
+}
+
+function sliderSync(id, v)
+{
+    if (v != $("#" + id).slider( "value" )) {
+        $("#" + id).slider( "value", v );
+        ui_list[id + "/func"](v);
+    }
 }
 
 function onLoadAll()
@@ -154,6 +223,9 @@ function onLoadAll()
     make_ui_intervalometer();
     make_ui_guidecamconfig();
     make_ui_mountconfig();
+    make_ui_calibration();
+    make_ui_analysisparameters();
+    make_ui_console();
 
     $("#btn_hotpixels").button().click(function( event ) {
         console.log("click btn_hotpixels");
@@ -260,64 +332,186 @@ function websocket_init()
   <h3>Intervalometer</h3>
   <div>
     <script type="text/javascript">
+
+var bulb_times_lut = [1, 5, 10, 15, 20, 25, 30, 45, 60, 75, 90, 105, 120, 150, 180, 210, 240, 270, (60 * 5), (60 * 6), (60 * 7), (60 * 8), (60 * 9), (60 * 10), (60 * 12), (60 * 14), (60 * 16)];
+
 function make_ui_intervalometer()
 {
     makeButton("btn_interval_loop", function( event ) {
-        console.log("click btn_interval_loop");
         ui_list["btn_interval_stopnext"].button("option", "disabled", false);
         ui_list["btn_interval_stopnow"] .button("option", "disabled", false);
         ui_list["btn_interval_single"]  .button("option", "disabled", true);
         ui_list["btn_interval_loop"]    .button("option", "disabled", true);
+        intervalometerCmd(1);
     });
     makeButton("btn_interval_single", function( event ) {
-        console.log("click btn_interval_single");
         ui_list["btn_interval_stopnext"].button("option", "disabled", true);
         ui_list["btn_interval_stopnow"] .button("option", "disabled", false);
         ui_list["btn_interval_single"]  .button("option", "disabled", false);
         ui_list["btn_interval_loop"]    .button("option", "disabled", false);
+        intervalometerCmd(3);
     });
     makeButton("btn_interval_stopnext", function( event ) {
-        console.log("click btn_interval_stopnext");
         ui_list["btn_interval_stopnext"].button("option", "disabled", true);
         ui_list["btn_interval_stopnow"] .button("option", "disabled", false);
         ui_list["btn_interval_single"]  .button("option", "disabled", true);
         ui_list["btn_interval_loop"]    .button("option", "disabled", true);
+        intervalometerCmd(5);
     });
     makeButton("btn_interval_stopnow", function( event ) {
-        console.log("click btn_interval_stopnow");
         ui_list["btn_interval_stopnext"].button("option", "disabled", true);
         ui_list["btn_interval_stopnow"] .button("option", "disabled", true);
         ui_list["btn_interval_single"]  .button("option", "disabled", false);
         ui_list["btn_interval_loop"]    .button("option", "disabled", false);
+        intervalometerCmd(4);
     });
-    makeSlider("slider_bulbtime", 0, 1200, 30, 1, "0 sec", " sec", function(obj, event, ui) {
-        console.log("slider_bulbtime: " + ui.value);
+    makeSliderLookup("slider_bulbtime", 6, bulb_times_lut, function(v) {
+            queueSettingsUpdate("intervalometer_bulb_time", v);
+        }
+    );
+    makeSlider("slider_ditherinterval", 1, 100, 1, 1, "0", "", function(v) {
+        queueSettingsUpdate("dither_interval", v);
     });
-    makeSlider("slider_ditherlimit", 0, 500, 10, 1, "OFF", " pix", function(obj, event, ui) {
-        console.log("slider_ditherlimit: " + ui.value);
+    makeSlider("slider_ditherlimit", 0, 500, 0, 1, "OFF", " pix", function(v) {
+        queueSettingsUpdate("dither_amount", v);
     });
-    makeSlider("slider_dithersettlethresh", 0, 10, 3, 1, "0 pix", " pix", function(obj, event, ui) {
-        console.log("slider_dithersettlethresh: " + ui.value);
+    makeSlider("slider_dithersettlethresh", 0, 10, 3, 1, "0 pix", " pix", function(v) {
+        queueSettingsUpdate("dither_calmness", v);
     });
-    makeSlider("slider_dithersettleframecnt", 1, 10, 3, 1, "0 frames", " frames", function(obj, event, ui) {
-        console.log("slider_dithersettleframecnt: " + ui.value);
+    makeSlider("slider_dithersettleframecnt", 1, 10, 3, 1, "0 frames", " frames", function(v) {
+        queueSettingsUpdate("dither_calm_cnt", v);
     });
-    makeSlider("slider_dithertimeout", 1, 10, 5, 1, "0 frames", " frames", function(obj, event, ui) {
-        console.log("slider_dithertimeout: " + ui.value);
+    makeSlider("slider_dithertimeout", 1, 10, 5, 1, "0 frames", " frames", function(v) {
+        queueSettingsUpdate("dither_frames_cnt", v);
     });
 
     // TODO: digital intervalometer mode
 }
+
+var intervalometer_status = 0;
+var intervalometer_remaining = 0;
+var intervalometer_timer = null;
+var intervalometer_gotoidletimer = null;
+function intervalometerUpdate(status, remain)
+{
+    intervalometer_status = status;
+    if (intervalometer_remaining <= 0) {
+        intervalometer_remaining = remain;
+        if (remain > 0 && intervalometer_timer == null) {
+            intervalometer_timer = setTimeout(intervalometerCountDown, 100);
+        }
+    }
+    else if (remain <= 0) {
+        intervalometer_remaining = 0;
+    }
+    else if (intervalometer_remaining > remain) {
+        intervalometer_remaining = remain;
+    }
+    intervalometerShow();
+}
+
+function intervalometerShow()
+{
+    var ele = document.getElementById("bulb_status");
+
+    var timetxt = (Math.round(intervalometer_remaining/100.0)/10.0).toFixed(1) + " sec Remaining";
+
+    if (intervalometer_status == 0)
+    {
+        ele.innerHTML = "IDLE";
+        ui_list["btn_interval_stopnext"].button("option", "disabled", true);
+        ui_list["btn_interval_stopnow"] .button("option", "disabled", true);
+        ui_list["btn_interval_single"]  .button("option", "disabled", false);
+        ui_list["btn_interval_loop"]    .button("option", "disabled", false);
+        if (intervalometer_gotoidletimer != null) {
+            clearTimeout(intervalometer_gotoidletimer);
+            intervalometer_gotoidletimer = null;
+        }
+    }
+    else if (intervalometer_status == 1 || intervalometer_status == 2)
+    {
+        ele.innerHTML = "Looping: " + timetxt;
+        ui_list["btn_interval_stopnext"].button("option", "disabled", false);
+        ui_list["btn_interval_stopnow"] .button("option", "disabled", false);
+        ui_list["btn_interval_single"]  .button("option", "disabled", true);
+        ui_list["btn_interval_loop"]    .button("option", "disabled", true);
+    }
+    else if (intervalometer_status == 3)
+    {
+        ele.innerHTML = "Single-Shot: " + timetxt;
+        if (intervalometer_remaining > 0)
+        {
+            ui_list["btn_interval_stopnext"].button("option", "disabled", true);
+            ui_list["btn_interval_stopnow"] .button("option", "disabled", false);
+            ui_list["btn_interval_single"]  .button("option", "disabled", true);
+            ui_list["btn_interval_loop"]    .button("option", "disabled", false);
+        }
+        else
+        {
+            ui_list["btn_interval_stopnext"].button("option", "disabled", true);
+            ui_list["btn_interval_stopnow"] .button("option", "disabled", true);
+            ui_list["btn_interval_single"]  .button("option", "disabled", true);
+            ui_list["btn_interval_loop"]    .button("option", "disabled", false);
+            if (intervalometer_gotoidletimer == null) {
+                intervalometer_gotoidletimer = setTimeout(function() {
+                    intervalometerUpdate(0, 0);
+                }, 1000);
+            }
+        }
+    }
+    else if (intervalometer_status == 4)
+    {
+        ele.innerHTML = "Stopping Now";
+        ui_list["btn_interval_stopnext"].button("option", "disabled", true);
+        ui_list["btn_interval_stopnow"] .button("option", "disabled", true);
+        ui_list["btn_interval_single"]  .button("option", "disabled", true);
+        ui_list["btn_interval_loop"]    .button("option", "disabled", true);
+        if (intervalometer_gotoidletimer == null) {
+            intervalometer_gotoidletimer = setTimeout(function() {
+                intervalometerUpdate(0, 0);
+            }, 1000);
+        }
+    }
+    else if (intervalometer_status == 5)
+    {
+        ele.innerHTML = "Stopping On Next, " + timetxt;
+        ui_list["btn_interval_stopnext"].button("option", "disabled", true);
+        ui_list["btn_interval_stopnow"] .button("option", "disabled", false);
+        ui_list["btn_interval_single"]  .button("option", "disabled", true);
+        ui_list["btn_interval_loop"]    .button("option", "disabled", false);
+    }
+}
+
+function intervalometerCountDown()
+{
+    if (intervalometer_remaining > 100) {
+        intervalometer_remaining -= 100;
+    }
+    else {
+        intervalometer_remaining = 0;
+    }
+    intervalometerShow();
+    intervalometer_timer = setTimeout(intervalometerCountDown, 100);
+}
+
+function intervalometerCmd(cmd)
+{
+    intervalometerUpdate(cmd, settings["intervalometer_bulb_time"] * 1000);
+}
     </script>
-    <p><button id="btn_interval_loop">Loop</button><button id="btn_interval_single">Single</button><button id="btn_interval_stopnext">Stop On Next</button><button id="btn_interval_stopnow">Stop Now</button></p>
-    <div><fieldset><legend>Status:</legend>
+    <p><button id="btn_interval_loop">Loop</button>&nbsp;<button id="btn_interval_single">Single</button>&nbsp;<button id="btn_interval_stopnext">Stop On Next</button>&nbsp;<button id="btn_interval_stopnow">Stop Now</button></p>
+    <div><fieldset><legend>Status</legend>
         <div id="bulb_status" style="font-size:20pt;">0</div>
     </fieldset></div>
-    <div><fieldset><legend>Bulb Time: <span id="slider_bulbtime_handle"></span></legend>
+    <div><fieldset><legend>Bulb Time: <span id="slider_bulbtime_handle"></span> sec</legend>
         <div id="slider_bulbtime"></div>
     </fieldset></div>
-    <div><fieldset><legend>Dither Dist. Limit (0 to disable dithering): <span id="slider_ditherlimit_handle"></span></legend>
+    <br />
+    <div><fieldset><legend>Dither Dist. (0 to disable dithering): <span id="slider_ditherlimit_handle"></span></legend>
         <div id="slider_ditherlimit"></div>
+    </fieldset></div>
+    <div><fieldset><legend>Dither Inverval: Every <span id="slider_ditherinterval_handle">x</span> Frames</legend>
+        <div id="slider_ditherinterval"></div>
     </fieldset></div>
     <div><fieldset><legend>Dither Settle Thresh: <span id="slider_dithersettlethresh_handle"></span></legend>
         <div id="slider_dithersettlethresh"></div>
@@ -328,7 +522,24 @@ function make_ui_intervalometer()
     <div><fieldset><legend>Dither Timeout Frame Count: <span id="slider_dithertimeout_handle"></span></legend>
         <div id="slider_dithertimeout"></div>
     </fieldset></div>
-    <!-- TODO: digital intervalometer mode -->
+    <!-- TODO: digital intervalometer mode --><br />
+    <br />
+    <div><fieldset><legend>Help</legend><p>
+        <p>This auto-guider features an intervalometer that can control the shutter of a camera. The camera must be set in <b>bulb</b> mode for this to work.</p>
+        <p><b>Loop</b> operation of the intervalometer will make the camera take pictures repeatedly, each one with the exposure time as set by the "<b>Bulb Time</b>" option.</p>
+        <p><b>Single</b> shot operation will take one photo at with the bulb-time exposure. Use this to get a preview photo.</p>
+        <p>"<b>Stop On Next</b>" will end the loop mode of the intervalometer, so that the next photo can be previewed. Use this feature if you need to adjust camera focus (or a similar task that requires pausing and reviewing) during the session.</p>
+        <p>"<b>Stop Now</b>" will immediately close the camera shutter and end the loop mode of the intervalometer. This will probably ruin the last photo being captured. Use this if you are impatient and need to change settings.</p>
+    </p></fieldset></div>
+    <br />
+    <div><fieldset><legend>Dithering Help</legend><p>
+        <p><b>Dithering</b> is a technique that reduces apparant noise in stacked photographs. If a camera is extra noisy in one spot, or has a hot-pixel, and consecutive photos from that camera are stacked together, then the noise or hot-pixel will appear in the final stacked photograph. This is because the rejection algorithms in the stacking software can reject things that sporatically appear, but not things that are always there. In layman's terms, the algorithm thinks that things that are "always there" should be there.</p>
+        <p>Dithering means that for each photo, the camera is moved around slightly. This way, even though a bad pixel is staying at the same coordinate on the image, it <b>does not stay</b> at the same spot in the sky. This will make the stacking software reject the bad pixel. This also helps reduce patterned noise because it smears the noise around, while preserving signal details.</p>
+        <p>Enabling dithering means that when the shutter is closed, the tracking telescope mount will be given a command to randomly move around a bit. This amount is set by the "<b>Dither Distance</b>" value. The original center position of your photo will be rembered and it won't drift more than the distance set. <b>If this value is 0, then dithering will be disabled</b>. If this value is too high, then the final stacked photo will have a smaller usable region. Also, it takes more time for the dithering operation to complete if the distance is too long.</p>
+        <p>After performing each dither movement, there is extra risk of tracking errors due to gear backlash, vibration, and other factors. The firmware will wait for things to settle down before allowing the intervalometer to re-open the camera shutter. This will prevent unwanted star-trailing in the next photo after a dithering movement.</p>
+        <p>The "<b>Dither Settle Thresh</b>" is the maximum amount of star motion detected so that the mount is considered "settled", if the star moves more than this amount, then the mount is not considered "settled". "<b>Dither Settle Frame Count</b>" is the number of consecutive guide-cam frames that need to be considered settled before opening the photo-cam's shutter again. "<b>Dither Timeout Frame Count</b>" is the maximum number of guide-cam frames to wait for settling, whether or not, after this timeout, the photo-cam's shutter will open.</p>
+        <p>Since dithering takes time, you can choose to only dither after a certain number of frames.</p>
+    </p></fieldset></div>
   </div>
   <h3>Guide-Cam Config</h3>
   <div>
@@ -345,22 +556,22 @@ function make_ui_guidecamconfig()
         window.location.href = "/stream?zoom";
     });
 
-    makeSlider("slider_gain", 0, 128, 32, 8, "0 dB", " dB", function(obj, event, ui) {
-        console.log("slider_gain: " + ui.value);
+    makeSlider("slider_gain", 0, 128, 32, 8, "0 dB", " dB", function(v) {
+        queueSettingsUpdate("gain", v);
     });
-    makeSlider("slider_shutter", 100, 3000, 1000, 100, "0", " ms", function(obj, event, ui) {
-        console.log("slider_shutter: " + ui.value);
+    makeSlider("slider_shutter", 100, 3000, 1000, 100, "0", " ms", function(v) {
+        queueSettingsUpdate("shutter", v);
     });
-    makeSlider("slider_starthresh", 0, 255, 0, 1, "auto", "/255", function(obj, event, ui) {
-        console.log("slider_starthresh: " + ui.value);
+    makeSlider("slider_starthresh", 0, 255, 0, 1, "auto", "/255", function(v) {
+        queueSettingsUpdate("thresh", v);
     });
-    makeSlider("slider_imgerrpanicthresh", 1, 100, 3, 1, "0", "", function(obj, event, ui) {
-        console.log("slider_imgerrpanicthresh: " + ui.value);
+    makeSlider("slider_imgerrpanicthresh", 1, 100, 3, 1, "0", "", function(v) {
+        queueSettingsUpdate("panicthresh_expoerr", v);
     });
 }
 
     </script>
-    <div><button id="btn_streamimg">Stream Image Full Screen</button><button id="btn_streamimg_star">Stream Image of Selected Star</button></div>
+    <div><button id="btn_streamimg">Stream Image Full Screen</button><button id="btn_streamimg_star">Stream Image of Selected Star</button></div><br />
     <div><fieldset><legend>Image Statistics</legend>
     <div id="div_histogram"></div>
     </fieldset></div>
@@ -376,29 +587,44 @@ function make_ui_guidecamconfig()
     <div><fieldset><legend>Image Error Panic Threshold: <span id="slider_imgerrpanicthresh_handle"></span></legend>
         <div id="slider_imgerrpanicthresh"></div>
     </fieldset></div>
+    <br />
+    <div><fieldset><legend>Help</legend><p>
+        <p>The "<b>Camera Gain</b>" is basically the ISO of the camera sensor. Increasing the gain will increase the overall brightness of the image, with stars easier to see. But a higher gain will mean more noise as well. Very high gain levels may cause hot-pixels to appear.</p>
+        <p>The <b>shutter</b> time of the guide-cam can be adjusted. The a longer value will allow in more light, causing a brighter image and making dark stars easier to detect. But don't make the shutter time too long, because corrective movements should only be made while the guide-cam is not taking a picture, otherwise the stars will trail and cannot be analyzed.</p>
+        <p>The "<b>Star Threshold</b>" is the brightness value of a pixel for it to be considered a star. If this value is left at zero, then the threshold will be automatically determined by the overall brightness of the image. A very high threshold value will cause darker stars to be ignored.</p>
+        <p>The "<b>Image Error Panic Threshold</b>" is the number of frames with a bad image (some form of camera malfunction, or a search helicopter is putting a spotlight on your telescope) before the auto-guider gives up and quits guiding. The red LED light will blink to notify you.</p>
+        <p>The image from the guide-cam can be streamed. Use this stream to adjust the focus of your guide-scope. Since the file transfer speed is slow, guiding is not possible during the stream.</p>
+    </p></fieldset></div>
   </div>
   <h3>Mount Config</h3>
   <div>
     <script type="text/javascript">
 function make_ui_mountconfig()
 {
-    makeSlider("slider_pulse_minimum", 10, 500, 50, 1, "0 ms", " ms", function(obj, event, ui) {
-        console.log("slider_pulse_minimum: " + ui.value);
+    makeSlider("slider_pulse_minimum", 10, 500, 50, 1, "0 ms", " ms", function(v) {
+        queueSettingsUpdate("min_pulse_wid", v);
     });
-    makeSlider("slider_pulse_maximum", 0, 3000, 900, 100, "auto", " ms", function(obj, event, ui) {
-        console.log("slider_pulse_maximum: " + ui.value);
+    makeSlider("slider_pulse_maximum", 0, 3000, 900, 100, "auto", " ms", function(v) {
+        queueSettingsUpdate("max_pulse_wid", v);
     });
-    makeSlider("slider_pulse_calistep", 100, 5000, 900, 100, "0 ms", " ms", function(obj, event, ui) {
-        console.log("slider_pulse_calistep: " + ui.value);
+    makeSlider("slider_pulse_calistep", 100, 5000, 900, 100, "0 ms", " ms", function(v) {
+        queueSettingsUpdate("calibration_pulse", v);
+        sliderSync("slider_pulse_calistep2", v);
     });
-    makeSlider("slider_pulse_settle", 0, 500, 50, 1, "0 ms", " ms", function(obj, event, ui) {
-        console.log("slider_pulse_settle: " + ui.value);
+    makeSlider("slider_pulse_settle", 0, 500, 50, 1, "0 ms", " ms", function(v) {
+        queueSettingsUpdate("move_grace", v);
     });
-    makeSlider("slider_dirchangehyster", 0, 5000, 500, 1, "0 ms", " ms", function(obj, event, ui) {
-        console.log("slider_dirchangehyster: " + ui.value);
+    makeSlider("slider_dirchangehyster", 0, 5000, 500, 1, "0 ms", " ms", function(v) {
+        queueSettingsUpdate("backlash_hyster", v);
     });
-    makeSlider("slider_backlashlimit", 0, 10000, 5000, 100, "0 ms", " ms", function(obj, event, ui) {
-        console.log("slider_backlashlimit: " + ui.value);
+    makeSlider("slider_backlashlimit", 0, 10000, 5000, 100, "auto", " ms", function(v) {
+        queueSettingsUpdate("backlash_limit", v);
+    });
+    makeCheckbox("chk_flip_ra", false, function(x) {
+        queueSettingsUpdate("flip_ra", x);
+    });
+    makeCheckbox("chk_flip_dec", false, function(x) {
+        queueSettingsUpdate("flip_dec", x);
     });
 }
     </script>
@@ -408,34 +634,159 @@ function make_ui_mountconfig()
     <div><fieldset><legend>Maximum Pulse: <span id="slider_pulse_maximum_handle"></span></legend>
         <div id="slider_pulse_maximum"></div>
     </fieldset></div>
-    <div><fieldset><legend>Calibration Step Pulse: <span id="slider_pulse_calistep_handle"></span> ms</legend>
+    <div><fieldset><legend>Calibration Step Pulse: <span id="slider_pulse_calistep_handle"></span></legend>
         <div id="slider_pulse_calistep"></div>
     </fieldset></div>
     <div><fieldset><legend>Settle Time: <span id="slider_pulse_settle_handle"></span></legend>
         <div id="slider_pulse_settle"></div>
     </fieldset></div>
-    <div><fieldset><legend>Direction Change Hysteresis: <span id="slider_dirchangehyster_handle"></span> ms</legend>
+    <div><fieldset><legend>Direction Change Hysteresis: <span id="slider_dirchangehyster_handle"></span></legend>
         <div id="slider_dirchangehyster"></div>
     </fieldset></div>
-    <div><fieldset><legend>Backlash Limiter: <span id="slider_backlashlimit_handle"></span></legend>
+    <div><fieldset><legend>Direction Bias Limiter: <span id="slider_backlashlimit_handle"></span></legend>
         <div id="slider_backlashlimit"></div>
     </fieldset></div>
+    <br />
+    <div><span><label for="chk_flip_ra">Flip RA?</label><input type="checkbox" name="chk_flip_ra" id="chk_flip_ra"></span>&nbsp;&nbsp;&nbsp;&nbsp;<span><label for="chk_flip_dec">Flip DEC?</label><input type="checkbox" name="chk_flip_dec" id="chk_flip_dec"></span></div>
+    <br />
+    <div><fieldset><legend>Help</legend><p>
+        <p>This auto-guider camera uses ST-4 signals to control an electronic telescope mount. When the signal is "ON", the motors inside the mount will spin faster. How long a signal is ON for, the length of the <b>pulse</b>, determines how much the mount moves. If the pulse is too short, the electronics might not detect it. If the pulse is too long, then the motion analysis need to happen much later, so the responsiveness is worse.</p>
+        <p>The pulses used for each calibration step can be much longer, and a longer pulse can mean a more accurate calibration.</p>
+        <p>"<b>Settle Time</b>" is the time that the signal is OFF for after each ON pulse. This can be very short, or even zero.</p>
+        <p>Tracking errors of an electronic mount usually are biased in one direction. These mounts also have some backlash in their gears. This means that changing the direction of consecutive corrective movements is a bad idea as it can become ineffective, or over-correct. The corrective-movement-calculation firmware will track the direction bias, and if it detects a bias, it will lock-in a direction, preventing movements in the other direction. The "<b>Direction Change Hysteresis</b>" value represents how easy it is to detect the bias, and also how easy it is to change that bias.</p>
+        <p>For example, the hysteresis value is 100 ms, a star moved and required a 100 ms movement to the right, the firmware will remember that the bias is towards the right. Then, if the star moved and required a 50 ms move to the left, the command to move will not actually be given, because the bias is towards the right, and all left-ward commands will be ignored. But if the star moved and required 200 ms move to the left, then it will actually perform the 200 ms move to the left, because with 200 ms, it has crossed the direction change hysteresis value.</p>
+        <p>This technique helps the most with "momentary movements that naturally returns to original position", such as movement caused by wind. These types of moments shouldn't require correction, as the risk of (and penalty for) over-correction is high. It is similar to the "<b>ResistSwitch</b>" algorithm present in PHD2.</p>
+        <p>"<b>Direction Bias Limiter</b>" is an internal maximum limit value for the accumulated value that determines the direction bias. Leave it at zero for it to be automatic. A large value will cause direction bias to never switch directions! The appropriate hysteresis value and limit value are different for every tracking telescope mount. More backlash requires higher values.</p>
+    </p></fieldset></div>
   </div>
   <h3>Calibration</h3>
   <div>
-    <p>TODO: calibration visualization here</p>
+    <script type="text/javascript">
+function make_ui_calibration()
+{
+    makeSlider("slider_pulse_calistep2", 100, 5000, 900, 100, "0 ms", " ms", function(v) {
+        queueSettingsUpdate("calibration_pulse", v);
+        sliderSync("slider_pulse_calistep", v);
+    });
+    makeSlider("slider_calistepcnt", 1, 50, 10, 1, "0", "", function(v) {
+        queueSettingsUpdate("calib_points_cnt", v);
+    });
+    makeSlider("slider_correctionscale_ra", 0, 200, 100, 1, "0 %", " %", function(v) {
+        if (v >= 98.5 && v <= 101.5) {
+            v = 100;
+            sliderSync("slider_correctionscale_ra", v);
+        }
+        queueSettingsUpdate("correction_scale_ra", v);
+    });
+    makeSlider("slider_correctionscale_dec", 0, 200, 100, 1, "0 %", " %", function(v) {
+        if (v >= 98.5 && v <= 101.5) {
+            v = 100;
+            sliderSync("slider_correctionscale_dec", v);
+        }
+        queueSettingsUpdate("correction_scale_dec", v);
+    });
+    makeButton("btn_calib_ra", function() {
+        guideCmd(4); // GUIDESTATE_CALIBRATING_RA
+        document.getElementById("calibinfo_ra").innerHTML = "Running Calibration...";
+    });
+    makeButton("btn_calib_dec", function() {
+        guideCmd(5); // GUIDESTATE_CALIBRATING_DEC
+        document.getElementById("calibinfo_dec").innerHTML = "Running Calibration...";
+    });
+    makeButton("btn_calib_save", function() {
+        miscCmd("calib_save");
+    });
+    makeButton("btn_calib_load", function() {
+        miscCmd("calib_load");
+        document.getElementById("calibinfo_ra") .innerHTML = "Loading...";
+        document.getElementById("calibinfo_dec").innerHTML = "Loading...";
+    });
+    makeButton("btn_calib_remove_ra", function() {
+        miscCmd("calib_reset_ra");
+        document.getElementById("calibinfo_ra").innerHTML = "None";
+    });
+    makeButton("btn_calib_remove_dec", function() {
+        miscCmd("calib_reset_dec");
+        document.getElementById("calibinfo_dec").innerHTML = "None";
+    });
+}
+    </script>
+    <p>Calibration is required before auto-guiding. It correlates how much a star mas moved in the guide-cam image, to how long of a movement command pulse needs to be. It also determines the angular orientation of the guide-camera.</p>
+    <div><fieldset><legend>Calibration Step Pulse: <span id="slider_pulse_calistep2_handle"></span></legend>
+        <div id="slider_pulse_calistep2"></div>
+    </fieldset></div>
+    <div><fieldset><legend>Calibration Step Count: <span id="slider_calistepcnt_handle"></span></legend>
+        <div id="slider_calistepcnt"></div>
+    </fieldset></div>
+    <div><fieldset><legend>Correction Scale R.A.: <span id="slider_correctionscale_ra_handle"></span></legend>
+        <div id="slider_correctionscale_ra"></div>
+    </fieldset></div>
+        <div><fieldset><legend>Correction Scale Dec.: <span id="slider_correctionscale_dec_handle"></span></legend>
+        <div id="slider_correctionscale_dec"></div>
+    </fieldset></div>
+    <br />
+    <button id="btn_calib_save">Save File</button>&nbsp;<button id="btn_calib_load">Load File</button>
+    <br />
+    <br />
+    <div><fieldset><legend>R.A. Calibration</legend>
+        <div><button id="btn_calib_ra">Run Calibration</button>&nbsp;&nbsp;<button id="btn_calib_remove_ra">Remove</button></div>
+        <br />
+        <div id="calibinfo_ra">None</div>
+    </fieldset></div>
+    <div><fieldset><legend>Dec. Calibration</legend>
+        <div><button id="btn_calib_dec">Run Calibration</button>&nbsp;&nbsp;<button id="btn_calib_remove_dec">Remove</button></div>
+        <br />
+        <div id="calibinfo_dec">None</div>
+    </fieldset></div>
+    <br />
+    <div><fieldset><legend>Help</legend><p>
+        <p>During calibration, a star will be tracked and movement command pulses will be given to the tracking telescope mount. If the pulse given is 1000 ms long, and the star moved 10 pixels in the guide-cam image, then the scaling is remembered as 100 ms-per-pixel, or as 0.01 pixels-per-ms. The direction of the movement is also remembed.</p>
+        <p>This is done many times (number of steps) to get an accurate average value. It is also done in both the <b>R</b>ight-<b>A</b>scension axis and <b>Dec</b>lination axis independantly.</p>
+        <p>If you are using a R.A.-only type of tracking mount, such as the Star Adventurer or Sky Guider, then only the R.A. calibration is required. If you are using a computerized go-to type of telescope mount, then both R.A. and declination calibration are required.</p>
+        <p>Calibration needs to be done any time your camera is pointed in a different direction! This usually means once per night!</p>
+        <p>Calibration can be saved, with a timestamp, so they can be reloaded. This is useful in the event of a brief power failure.</p>
+        <p>The "<b>Correction Scale</b>" value will scale the ms-per-pixel that is actually used to make corrective movements. Lower this value below 100% to combat cronic over-correction.</p>
+        <p>NOTE: This auto-guider firmware does not care about things such as focal length of the lens or the speed of the tracking mount motors when given a pulse. Everything is simply based on the number of pixels that a star moves on the guide-cam, and the duration of the pulses. The units cannot be correlated directly to angular units (aka degrees).</p>
+    </p>
+    </fieldset></div>
   </div>
   <h3>Analysis Parameters</h3>
   <div>
-    <p>TODO: blah blah blah</p>
+    <script type="text/javascript">
+function make_ui_analysisparameters()
+{
+    makeSlider("slider_multistar", 1, 100, 1, 1, "0", "", function(v) {
+        queueSettingsUpdate("multistar_cnt_max", v);
+    });
+    makeSlider("slider_motionerrortolerance", 1, 200, 50, 1, "0 pix", " pix", function(v) {
+        queueSettingsUpdate("starmove_tolerance", v);
+    });
+    makeSlider("slider_motionerrorpanicthresh", 0, 500, 50, 1, "0 pix", " pix", function(v) {
+        queueSettingsUpdate("panicthresh_move_err", v);
+    });
+    makeSlider("slider_motionerrorcountpanicthresh", 1, 100, 2, 1, "0", "", function(v) {
+        queueSettingsUpdate("panicthresh_move_cnt", v);
+    });
+    makeSlider("slider_multistarratingthresh", 0, 100, 50, 1, "0 %", " %", function(v) {
+        queueSettingsUpdate("multistar_ratings_thresh", v);
+    });
+    makeSlider("slider_clustertolerance", 0, 500, 100, 1, "0 pix", " pix", function(v) {
+        queueSettingsUpdate("clustering_tolerance", v);
+    });
+}
+    </script>
+    <p>These parameters are used to fine tune the star motion analysis software.</p>
     <div><fieldset><legend>Stars Used: <span id="slider_multistar_handle"></span></legend>
         <div id="slider_multistar"></div>
     </fieldset></div>
     <div><fieldset><legend>Motion Error Tolerance: <span id="slider_motionerrortolerance_handle"></span></legend>
         <div id="slider_motionerrortolerance"></div>
     </fieldset></div>
-    <div><fieldset><legend>Motion Error Panic Thresh: <span id="slider_motionerrorpanicthresh_handle"></span></legend>
+    <div><fieldset><legend>Motion Error Amount Panic Thresh: <span id="slider_motionerrorpanicthresh_handle"></span></legend>
         <div id="slider_motionerrorpanicthresh"></div>
+    </fieldset></div>
+    <div><fieldset><legend>Motion Error Count Panic Thresh: <span id="slider_motionerrorcountpanicthresh_handle"></span></legend>
+        <div id="slider_motionerrorcountpanicthresh"></div>
     </fieldset></div>
     <div><fieldset><legend>Multi-Star Rating Thresh: <span id="slider_multistarratingthresh_handle"></span></legend>
         <div id="slider_multistarratingthresh"></div>
@@ -443,8 +794,15 @@ function make_ui_mountconfig()
     <div><fieldset><legend>Cluster Tolerance: <span id="slider_clustertolerance_handle"></span></legend>
         <div id="slider_clustertolerance"></div>
     </fieldset></div>
-    <div><p><label for="chk_fastanalysis">Fast Analysis Mode?</label><input type="checkbox" name="chk_fastanalysis" id="chk_fastanalysis"></p></div>
-    <div><p><label for="chk_fullstarprofile">Fully Profile Star?</label><input type="checkbox" name="chk_fullstarprofile" id="chk_fullstarprofile"></p></div>
+    <div><fieldset><legend>Help</legend><p>
+        <p>The number of stars used for motion analysis can be 1 or more. Usage of multiple stars is advised to combat the effects of turbulent air in the atmosphere (aka <i>atmospheric seeing</i> or <i>astronomical seeing</i>). The motion of multiple stars can be averaged together, instead of analyzing just one star, in order to prevent detection of motion that didn't really occur.</p>
+        <p>When multiple stars are used for motion analysis, the best stars, ranked by its "<i>rating</i>", are used. The "<b>Multi-Star Rating Thresh</b>" is the minimum rating a star needs to have for it to be used in the analysis. A good rating means the star can be accurately confidently tracked and is not too close to the edge of the guide-cam frame.</p>
+        <p>"<b>Motion Error</b>" is measured in pixels. If all of the stars moved 5 pixels to the left, then the motion error is considered 0. If one star moved 5 pixels left but another star moved 5 pixels right, then the motion error is considered to be 10 pixels. A high amount of motion analysis error is unlikely in most scenarios but you can set thresholds for the error to cause panic mode.</p>
+        <p>"<b>Motion Error Tolerance</b>" is the amount of motion error tolerated by the analysis code, it will simply not analyze stars that moved more than this amount in the wrong direction.</p>
+        <p>"<b>Motion Error Amount Panic Thresh</b>" is the average amount of motion error in the motion analysis that will trigger one frame to be considered a panic-inducing frame.</p>
+        <p>"<b>Motion Error Count Panic Thresh</b>" is the number of consecutive panic-inducing frames that needs to happen before the hardware gives up and starts to blink the red LED light. This setting can be 1, or it can be more, so that maybe a single bat flying over your camera doesn't cause the hardware to throw in the towel. Long periods of cloudy sky, or knocking over the telescope, will cause many panic-inducing frames and you will see the blinking red LED light.</p>
+        <p>When too many stars are very close together, it might confuse the motion analysis software. "<b>Cluster Tolerance</b>" determines how far apart a star need to be away from its nearest neighbouring star for it to be used for motion analysis.</p>
+    </p></fieldset></div>
   </div>
   <h3>Hot Pixels</h3>
   <div>
@@ -454,6 +812,51 @@ function make_ui_mountconfig()
     <p>If a hot pixel is near where an important star exists, then rotate the camera.</p>
     <p><button id="btn_hotpixels">Capture Hot Pixels</button><button id="btn_forgethotpixels">Forget Hot Pixels</button></p>
     <p><fieldset><legend>Hot Pixel List</legend><div id="hotpixel_list"></div></fieldset></p>
+  </div>
+  <h3>Console</h3>
+  <div>
+    <script type="text/javascript">
+function make_ui_console()
+{
+    makeButton("btn_consoleinput_send", function() {
+        var txt = document.getElementById("txt_consoleinput").value.trim();
+        console.log("text: " + txt);
+        if (txt.length > 0)
+        {
+            ui_list["btn_consoleinput_send"].button("option", "disabled", true);
+            setTimeout(function(){ ui_list["btn_consoleinput_send"].button("option", "disabled", false); }, 2000);
+            msglog_append("> " + txt);
+            miscCmd(txt);
+        }
+    });
+    $("#txt_consoleinput").button().addClass('consoleinput-textfield');
+    makeButton("btn_consoleclear", function() {
+        document.getElementById("div_msglog").innerHTML = "messages cleared at " + new Date().toString();
+    });
+}
+
+function msglog_append(txt)
+{
+    var ele = document.getElementById("div_msglog");
+    var old = ele.innerHTML;
+    ele.innerHTML = txt + "\r\n<br />\r\n" + old;
+}
+    </script>
+    <style type="text/css">
+.consoleinput-textfield {
+    width: 100%;
+    font: inherit;
+    font-family: monospace;
+    color: #000;
+    text-align: inherit;
+    outline: none;
+    cursor: text;
+    background-color: #DDD;
+}
+    </style>
+    <fieldset><legend>Input</legend><div><input type="text" id="txt_consoleinput" name="txt_consoleinput" /><br /><br /><button id="btn_consoleinput_send">Send</button></div></fieldset>
+    <br />
+    <fieldset><legend>Messages</legend><div id="div_msglog" style="font-family: monospace; color: #8F8;"></div><br /><button id="btn_consoleclear">Clear</button></div></fieldset>
   </div>
 </div><!-- accordion -->
 </div><!-- showme -->

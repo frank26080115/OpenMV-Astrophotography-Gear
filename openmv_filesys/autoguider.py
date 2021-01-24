@@ -29,10 +29,10 @@ GUIDESTATE_CALIBRATING_DEC   = micropython.const(5)
 
 INTERVALSTATE_IDLE           = micropython.const(0)
 INTERVALSTATE_ACTIVE         = micropython.const(1)
-INTERVALSTATE_ACTIVE_GAP     = micropython.const(3)
-INTERVALSTATE_BULB_TEST      = micropython.const(4)
-INTERVALSTATE_ACTIVE_HALT    = micropython.const(5)
-INTERVALSTATE_ACTIVE_ENDING  = micropython.const(6)
+INTERVALSTATE_ACTIVE_GAP     = micropython.const(2)
+INTERVALSTATE_BULB_TEST      = micropython.const(3)
+INTERVALSTATE_HALT           = micropython.const(4)
+INTERVALSTATE_ENDING         = micropython.const(5)
 
 CALIIDX_RA  = micropython.const(0)
 CALIIDX_DEC = micropython.const(1)
@@ -98,19 +98,21 @@ class AutoGuider(object):
         self.settings.update({"shutter"                  : self.cam.shutter // 1000})
         self.settings.update({"thresh"                   : 0})
         self.settings.update({"use_hotpixels"            : False})
-        self.settings.update({"panicthresh_expoerr"      : 5})
+        self.settings.update({"panicthresh_expoerr"      : 3})
         self.settings.update({"panicthresh_move_err"     : 50})
         self.settings.update({"panicthresh_move_cnt"     : 2})
-        self.settings.update({"use_dithering"            : False})
-        self.settings.update({"dither_amount"            : 3})
+        self.settings.update({"dither_amount"            : 0})
+        self.settings.update({"dither_interval"          : 1})
         self.settings.update({"dither_calmness"          : 3})
         self.settings.update({"dither_calm_cnt"          : 3})
         self.settings.update({"dither_frames_cnt"        : 5})
-        self.settings.update({"intervalometer_bulb_time" : 10})
+        self.settings.update({"intervalometer_bulb_time" : 30})
         self.settings.update({"intervalometer_gap_time"  : 2})
         self.settings.update({"intervalometer_digital"   : False})
         self.settings.update({"calibration_pulse"        : 750})
         self.settings.update({"calib_points_cnt"         : 10})
+        self.settings.update({"correction_scale_ra"      : 100})
+        self.settings.update({"correction_scale_dec"     : 100})
         self.settings.update({"move_grace"               : 50})
         self.settings.update({"flip_ra"                  : 1})
         self.settings.update({"flip_dec"                 : 1})
@@ -125,11 +127,10 @@ class AutoGuider(object):
         self.settings.update({"multistar_cnt_max"        : 10})
         self.settings.update({"multistar_ratings_thresh" : 50})
         self.settings.update({"starmove_tolerance"       : 50})
-        self.settings.update({"clustering_tolerance"     : 20})
+        self.settings.update({"clustering_tolerance"     : 100})
         self.settings.update({"use_led"                  : True})
         self.settings.update({"fast_mode"                : True})
-        self.settings.update({"slow_profile"             : False})
-        self.settings.update({"always_guiding"           : True})
+        self.settings.update({"always_guiding"           : False})
         self.load_settings()
         self.load_hotpixels(use_log = False, set_usage = False)
 
@@ -147,6 +148,7 @@ class AutoGuider(object):
         self.prev_stars = None
         self.hotpixels = []
         self.zoom = 1
+        self.dither_interval = 0
 
         self.imgstream_sock = None
         self.websock = None
@@ -175,6 +177,7 @@ class AutoGuider(object):
         state.update({"guide_state"         : self.guide_state})
         state.update({"interval_state"      : self.intervalometer_state})
         state.update({"blub_remaining"      : guidepulser.shutter_remaining()})
+        state.update({"dither_interval"     : self.dither_interval})
         if self.img is not None and self.cam_err <= 0:
             state.update({"expo_code": self.expo_code})
         elif self.img is None:
@@ -332,7 +335,15 @@ class AutoGuider(object):
 
     def parse_websocket(self, x):
         obj = ujson.loads(x)
-        pkt_type = obj["pkt_type"]
+        if "time" in obj:
+            v = comutils.try_parse_setting(obj["time"])
+            self.time_mgr.set_utc_time_epoch(v)
+            if self.has_time == False:
+                exclogger.log_exception("Time Obtained (%u)" % pyb.millis(), time_str=comutils.fmt_time(self.time_mgr.get_time()))
+            self.has_time = True
+        pkt_type = "unknown"
+        if "pkt_type" in obj:
+            pkt_type = obj["pkt_type"]
         if pkt_type == "guide_cmd":
             v = comutils.try_parse_setting(obj["cmd"])
             self.guide_cmd(v)
@@ -344,21 +355,15 @@ class AutoGuider(object):
         elif pkt_type == "select_star":
             self.user_select_star(obj["star_x"], obj["star_y"])
         elif pkt_type == "settings":
-            child = obj["settings"]
             need_save = False
-            for k in child.keys():
-                v = child[k]
+            for k in obj.keys():
+                v = obj[k]
                 vv = comutils.try_parse_setting(v)
                 if k in self.settings:
                     need_save = True
                     self.settings[k] = vv
                     if self.debug:
                         print("setting \"%s\" => value \"%s\"" % (k, str(vv)))
-                if k == "time":
-                    self.time_mgr.set_utc_time_epoch(vv)
-                    if self.has_time == False:
-                        exclogger.log_exception("Time Obtained (%u)" % pyb.millis(), time_str=comutils.fmt_time(self.time_mgr.get_time()))
-                    self.has_time = True
                 elif k == "use_debug":
                     self.debug = vv
                 elif k == "rand_id":
@@ -457,7 +462,7 @@ class AutoGuider(object):
 
                 if move_err > self.settings["panicthresh_move_err"] or move_err < 0:
                     self.panic_move_cnt += 1
-                    if self.panic_move_cnt > self.settings["panicthresh_move_cnt"]:
+                    if self.panic_move_cnt >= self.settings["panicthresh_move_cnt"]:
                         self.panic(msg = "movement analysis had too much error")
                 else:
                     self.panic_move_cnt = 0
@@ -493,21 +498,25 @@ class AutoGuider(object):
                         self.origin_coord = self.target_coord
                         if self.debug:
                             print("origin coord auto-selected: (%0.1f , %0.2f)" % (self.origin_coord[0], self.origin_coord[1]))
-                    if self.guide_state == GUIDESTATE_GUIDING and self.settings["use_dithering"] and self.intervalometer_state == INTERVALSTATE_ACTIVE and guidepulser.is_shutter_open() == False:
-                        amt = int(round(self.settings["dither_amount"] * 10.0))
-                        nx = ((pyb.rng() % (amt * 2)) - amt) / 10.0
-                        ny = ((pyb.rng() % (amt * 2)) - amt) / 10.0
-                        self.target_coord = [self.origin_coord[0] + nx, self.origin_coord[1] + ny]
-                        if self.debug:
-                            print("dithering coord: (%0.1f , %0.2f)" % (self.target_coord[0], self.target_coord[1]))
-                        self.guide_state = GUIDESTATE_DITHER
-                        self.dither_calm = 0
-                        self.dither_frames = 0
-                        self.backlash_ra.neutralize()
-                        self.backlash_dec.neutralize()
+                    if self.guide_state == GUIDESTATE_GUIDING and self.settings["dither_amount"] > 0 and self.intervalometer_state == INTERVALSTATE_ACTIVE:
+                        self.task_pulser() # this will cause the shutter status to update, and the dither_interval counter to go up
+                        if self.dither_interval >= self.settings["dither_interval"] and guidepulser.is_shutter_open() == False:
+                            amt = int(round(self.settings["dither_amount"] * 10.0))
+                            nx = ((pyb.rng() % (amt * 2)) - amt) / 10.0
+                            ny = ((pyb.rng() % (amt * 2)) - amt) / 10.0
+                            self.target_coord = [self.origin_coord[0] + nx, self.origin_coord[1] + ny]
+                            if self.debug:
+                                print("dithering coord: (%0.1f , %0.2f)" % (self.target_coord[0], self.target_coord[1]))
+                            self.guide_state = GUIDESTATE_DITHER
+                            self.dither_interval = 0
+                            self.dither_calm = 0
+                            self.dither_frames = 0
+                            self.backlash_ra.neutralize()
+                            self.backlash_dec.neutralize()
                     decided_pulse = self.pulse_to_target()
                     return decided_pulse
                 elif self.guide_state == GUIDESTATE_DITHER:
+                    self.dither_interval = 0
                     self.dither_frames += 1
                     self.backlash_ra.neutralize()
                     self.backlash_dec.neutralize()
@@ -579,6 +588,7 @@ class AutoGuider(object):
                 elif self.guide_state == GUIDESTATE_IDLE:
                     self.backlash_ra.neutralize()
                     self.backlash_dec.neutralize()
+                    self.dither_interval = 0
                     if self.selected_star is None:
                         return decided_pulse
                     if self.target_coord is None:
@@ -612,6 +622,12 @@ class AutoGuider(object):
             pulse_dec_ori = 0
             ny = mag * math.sin(math.radians(ang_ra))
             pulse_dec_ori = ny * self.calibration[CALIIDX_RA].ms_per_pix
+
+        pulse_ra_ori  *= self.settings["correction_scale_ra"]
+        pulse_dec_ori *= self.settings["correction_scale_dec"]
+        pulse_ra_ori  /= 100
+        pulse_dec_ori /= 100
+
         pulse_ra_abs  = abs(pulse_ra_ori)
         pulse_dec_abs = abs(pulse_dec_ori)
         self.pulse_sum += pulse_ra_abs + pulse_dec_abs
@@ -621,7 +637,7 @@ class AutoGuider(object):
         if min_pulse_wid < 5:
             min_pulse_wid = 5
         if max_pulse_wid < 5:
-            max_pulse_wid = int(round(self.settings["shutter"] * 0.9))
+            max_pulse_wid = int(round(self.settings["shutter"] * 0.9 - 300))
         if pulse_ra_abs < min_pulse_wid * 0.75:
             pulse_ra_abs = 0
             pulse_ra_ori = 0
@@ -860,10 +876,11 @@ class AutoGuider(object):
         if guidepulser.is_shutter_open() == False:
             self.pulse_sum = 0
             self.queue_shutter_closed = True
-            dither = self.settings["use_dithering"]
+            dither = self.settings["dither_amount"] > 0
             # queue_shutter_closed is used to guarantee at least a small gap in the graph
             if self.intervalometer_timestamp <= 0:
                 self.intervalometer_timestamp = pyb.millis()
+                self.dither_interval += 1
                 if dither:
                     if self.debug:
                         print("shutter closed while in dither mode")
@@ -880,12 +897,18 @@ class AutoGuider(object):
                         print("!SHUTTER!")
                     elif self.debug:
                         print("shutter opened")
-            elif self.intervalometer_state == INTERVALSTATE_ACTIVE_ENDING:
+            elif self.intervalometer_state == INTERVALSTATE_ENDING:
                 self.intervalometer_state = INTERVALSTATE_IDLE
                 self.log_msg("MSG: intervalometer ended")
             elif dither and self.guide_state != GUIDESTATE_GUIDING and self.guide_state != GUIDESTATE_DITHER:
                 self.intervalometer_state = INTERVALSTATE_IDLE
                 self.log_msg("MSG: intervalometer interrupted")
+
+    def clear_panic(self):
+        guidepulser.panic(False)
+        self.prev_panic = ""
+        if self.guide_state == GUIDESTATE_PANIC:
+            self.guide_state = GUIDESTATE_IDLE
 
     def guide_cmd(self, cmd):
         if cmd == GUIDESTATE_GUIDING:
@@ -929,17 +952,18 @@ class AutoGuider(object):
             self.shutter(self.settings["intervalometer_bulb_time"])
             self.intervalometer_timestamp = 0
             self.pulse_sum = 0
+            self.dither_interval = 0
             self.log_msg("CMD: intervalometer activated")
         elif cmd == INTERVALSTATE_BULB_TEST:
             guidepulser.shutter(self.settings["intervalometer_bulb_time"])
             self.intervalometer_timestamp = 0
             self.pulse_sum = 0
             self.log_msg("CMD: bulb test")
-            self.intervalometer_state = INTERVALSTATE_ACTIVE_ENDING
-        elif cmd == INTERVALSTATE_ACTIVE_ENDING:
+            self.intervalometer_state = INTERVALSTATE_ENDING
+        elif cmd == INTERVALSTATE_ENDING:
             self.intervalometer_state = cmd
             self.log_msg("CMD: intervalometer ending on next shutter close")
-        elif cmd == INTERVALSTATE_ACTIVE_HALT:
+        elif cmd == INTERVALSTATE_HALT:
             guidepulser.halt_shutter()
             self.intervalometer_state = INTERVALSTATE_IDLE
             self.log_msg("CMD: intervalometer halting")
@@ -961,10 +985,16 @@ class AutoGuider(object):
         elif cmd == "calib_reset":
             self.calibration[0] = None
             self.calibration[1] = None
-            guidepulser.panic(False)
-            self.prev_panic = ""
-            self.guide_state = cmd
+            self.clear_panic()
             self.log_msg("CMD: all calibration reset")
+        elif cmd == "calib_reset_ra":
+            self.calibration[CALIIDX_RA] = None
+            self.clear_panic()
+            self.log_msg("CMD: RA calibration reset")
+        elif cmd == "calib_reset_dec":
+            self.calibration[CALIIDX_DEC] = None
+            self.clear_panic()
+            self.log_msg("CMD: DEC calibration reset")
         elif cmd == "calib_load":
             try:
                 with open("calib_ra.json", mode="rb") as f:
