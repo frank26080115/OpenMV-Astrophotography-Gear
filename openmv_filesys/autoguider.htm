@@ -23,14 +23,6 @@ body
     color: #EEE;
     font-size: 10pt;
 }
-.tbl_platesolve table, th, td {
-    border: 1px solid white;
-    border-collapse: collapse;
-    padding: 2px 10px 2px 10px;
-}
-.platesolve_green {
-    color: lime;
-}
 .hideable-msg {
     padding-left: 1em;
 }
@@ -105,6 +97,7 @@ function queueSettingsUpdate(key, val)
 }
 
 var ui_list = {};
+var autopopulate_func_list = {};
 
 function register_ui(uiele, name, func)
 {
@@ -112,7 +105,7 @@ function register_ui(uiele, name, func)
     ui_list[name + "/func"] = func;
 }
 
-function makeSlider(id, minval, maxval, defval, stepval, zero_val, unit, slide_func)
+function makeSlider(id, minval, maxval, defval, stepval, zero_val, unit, slide_func, sync_with)
 {
     if (defval < minval) {
         defval = minval;
@@ -128,8 +121,21 @@ function makeSlider(id, minval, maxval, defval, stepval, zero_val, unit, slide_f
         else { text = v.toString() + unit; }
         handle.text( text );
         console.log("slider \"" + id + "\" evt = " + text);
-        if (slide_func) {
-            slide_func(v);
+        if (slide_func)
+        {
+            if (typeof slide_func === 'string' || slide_func instanceof String) {
+                console.log("auto sending \"" + slide_func + "\" = " + v.toString());
+                queueSettingsUpdate(slide_func, v);
+            }
+            else {
+                slide_func(v);
+            }
+        }
+
+        if (sync_with !== undefined && typeof sync_with !== 'undefined') {
+            if (typeof sync_with === 'string' || sync_with instanceof String) {
+                sliderSync(sync_with, v);
+            }
         }
     };
     var slider = $( "#" + id ).slider({
@@ -150,6 +156,17 @@ function makeSlider(id, minval, maxval, defval, stepval, zero_val, unit, slide_f
     });
 
     register_ui(slider, id, handler);
+    if (typeof slide_func === 'string' || slide_func instanceof String) {
+        autopopulate_func_list[slide_func] = function(x) {
+            if (x < minval) {
+                x = minval;
+            }
+            if (x > maxval) {
+                x = maxval;
+            }
+            sliderSync(id, x);
+        };
+    }
 }
 
 function makeSliderLookup(id, defval, lut, slide_func)
@@ -159,8 +176,15 @@ function makeSliderLookup(id, defval, lut, slide_func)
         var text = lut[v].toString();
         handle.text( text );
         console.log("slider \"" + id + "\" evt = " + text);
-        if (slide_func) {
-            slide_func(lut[v]);
+        if (slide_func)
+        {
+            if (typeof slide_func === 'string' || slide_func instanceof String) {
+                console.log("auto sending \"" + slide_func + "\" = " + lut[v].toString());
+                queueSettingsUpdate(slide_func, lut[v]);
+            }
+            else {
+                slide_func(lut[v]);
+            }
         }
     };
     var slider = $( "#" + id ).slider({
@@ -181,6 +205,24 @@ function makeSliderLookup(id, defval, lut, slide_func)
 
     register_ui(slider, id, handler);
     ui_list[id + "/lut"] = lut;
+    if (typeof slide_func === 'string' || slide_func instanceof String) {
+        autopopulate_func_list[slide_func] = function(x) {
+            var i, tgt = -1;
+            var dist = -1;
+            for (i = 0; i < lut.length; i++) {
+                var j = lut[i];
+                var k = Math.abs(x - j);
+                if (dist < 0 || k < dist) {
+                    dist = k;
+                    tgt = i;
+                }
+            }
+            if (tgt >= 0) {
+                slider.slider("value", tgt);
+                handler(tgt);
+            }
+        };
+    }
 }
 
 function makeButton(id, click_func)
@@ -196,14 +238,25 @@ function makeButton(id, click_func)
 
 function makeCheckbox(id, initstate, click_func)
 {
-    var chk = $("#" + id ).checkboxradio().prop("checked", initstate).on("change", function() {
-        var x = this.prop("checked");
+    var chk = $("#" + id ).checkboxradio().prop("checked", initstate).checkboxradio("refresh").on("change", function() {
+        var x = $("#" + id ).prop("checked");
         console.log("button \"" + id + "\" on_change: " + x);
         if (click_func) {
-            click_func(x);
+            if (typeof click_func === 'string' || click_func instanceof String) {
+                console.log("auto sending \"" + click_func + "\" = " + x);
+                queueSettingsUpdate(click_func, x);
+            }
+            else {
+                click_func(x);
+            }
         }
     });
     register_ui(chk, id, click_func);
+    if (typeof click_func === 'string' || click_func instanceof String) {
+        autopopulate_func_list[click_func] = function(x) {
+            chk.checkboxradio().prop("checked", x).checkboxradio("refresh");
+        }
+    }
 }
 
 function sliderSync(id, v)
@@ -556,18 +609,10 @@ function make_ui_guidecamconfig()
         window.location.href = "/stream?zoom";
     });
 
-    makeSlider("slider_gain", 0, 128, 32, 8, "0 dB", " dB", function(v) {
-        queueSettingsUpdate("gain", v);
-    });
-    makeSlider("slider_shutter", 100, 3000, 1000, 100, "0", " ms", function(v) {
-        queueSettingsUpdate("shutter", v);
-    });
-    makeSlider("slider_starthresh", 0, 255, 0, 1, "auto", "/255", function(v) {
-        queueSettingsUpdate("thresh", v);
-    });
-    makeSlider("slider_imgerrpanicthresh", 1, 100, 3, 1, "0", "", function(v) {
-        queueSettingsUpdate("panicthresh_expoerr", v);
-    });
+    makeSlider("slider_gain"              , 0, 128, 32, 8, "0 dB", " dB",     "gain");
+    makeSlider("slider_shutter"           , 100, 3000, 1000, 100, "0", " ms", "shutter");
+    makeSlider("slider_starthresh"        , 0, 255, 0, 1, "auto", "/255",     "thresh");
+    makeSlider("slider_imgerrpanicthresh" , 1, 100, 3, 1, "0", "",            "panicthresh_expoerr");
 }
 
     </script>
@@ -601,31 +646,14 @@ function make_ui_guidecamconfig()
     <script type="text/javascript">
 function make_ui_mountconfig()
 {
-    makeSlider("slider_pulse_minimum", 10, 500, 50, 1, "0 ms", " ms", function(v) {
-        queueSettingsUpdate("min_pulse_wid", v);
-    });
-    makeSlider("slider_pulse_maximum", 0, 3000, 900, 100, "auto", " ms", function(v) {
-        queueSettingsUpdate("max_pulse_wid", v);
-    });
-    makeSlider("slider_pulse_calistep", 100, 5000, 900, 100, "0 ms", " ms", function(v) {
-        queueSettingsUpdate("calibration_pulse", v);
-        sliderSync("slider_pulse_calistep2", v);
-    });
-    makeSlider("slider_pulse_settle", 0, 500, 50, 1, "0 ms", " ms", function(v) {
-        queueSettingsUpdate("move_grace", v);
-    });
-    makeSlider("slider_dirchangehyster", 0, 5000, 500, 1, "0 ms", " ms", function(v) {
-        queueSettingsUpdate("backlash_hyster", v);
-    });
-    makeSlider("slider_backlashlimit", 0, 10000, 5000, 100, "auto", " ms", function(v) {
-        queueSettingsUpdate("backlash_limit", v);
-    });
-    makeCheckbox("chk_flip_ra", false, function(x) {
-        queueSettingsUpdate("flip_ra", x);
-    });
-    makeCheckbox("chk_flip_dec", false, function(x) {
-        queueSettingsUpdate("flip_dec", x);
-    });
+    makeSlider("slider_pulse_minimum", 10, 500, 50, 1, "0 ms", " ms", "min_pulse_wid");
+    makeSlider("slider_pulse_maximum", 0, 3000, 900, 100, "auto", " ms", "max_pulse_wid");
+    makeSlider("slider_pulse_calistep", 100, 5000, 900, 100, "0 ms", " ms", "calibration_pulse", "slider_pulse_calistep2");
+    makeSlider("slider_pulse_settle", 0, 500, 50, 1, "0 ms", " ms", "move_grace");
+    makeSlider("slider_dirchangehyster", 0, 5000, 500, 1, "0 ms", " ms", "backlash_hyster");
+    makeSlider("slider_backlashlimit", 0, 10000, 5000, 100, "auto", " ms", "backlash_limit");
+    makeCheckbox("chk_flip_ra", false, "flip_ra");
+    makeCheckbox("chk_flip_dec", false, "flip_dec");
 }
     </script>
     <div><fieldset><legend>Minimum Pulse: <span id="slider_pulse_minimum_handle"></span></legend>
@@ -664,27 +692,10 @@ function make_ui_mountconfig()
     <script type="text/javascript">
 function make_ui_calibration()
 {
-    makeSlider("slider_pulse_calistep2", 100, 5000, 900, 100, "0 ms", " ms", function(v) {
-        queueSettingsUpdate("calibration_pulse", v);
-        sliderSync("slider_pulse_calistep", v);
-    });
-    makeSlider("slider_calistepcnt", 1, 50, 10, 1, "0", "", function(v) {
-        queueSettingsUpdate("calib_points_cnt", v);
-    });
-    makeSlider("slider_correctionscale_ra", 0, 200, 100, 1, "0 %", " %", function(v) {
-        if (v >= 98.5 && v <= 101.5) {
-            v = 100;
-            sliderSync("slider_correctionscale_ra", v);
-        }
-        queueSettingsUpdate("correction_scale_ra", v);
-    });
-    makeSlider("slider_correctionscale_dec", 0, 200, 100, 1, "0 %", " %", function(v) {
-        if (v >= 98.5 && v <= 101.5) {
-            v = 100;
-            sliderSync("slider_correctionscale_dec", v);
-        }
-        queueSettingsUpdate("correction_scale_dec", v);
-    });
+    makeSlider("slider_pulse_calistep2", 100, 5000, 900, 100, "0 ms", " ms", "calibration_pulse", "slider_pulse_calistep");
+    makeSlider("slider_calistepcnt", 1, 50, 10, 1, "0", "", "calib_points_cnt");
+    makeSlider("slider_correctionscale_ra", 75, 133, 100, 1, "0 %", " %", "correction_scale_ra");
+    makeSlider("slider_correctionscale_dec", 75, 133, 100, 1, "0 %", " %", "correction_scale_dec");
     makeButton("btn_calib_ra", function() {
         guideCmd(4); // GUIDESTATE_CALIBRATING_RA
         document.getElementById("calibinfo_ra").innerHTML = "Running Calibration...";
@@ -807,9 +818,8 @@ function make_ui_analysisparameters()
   <h3>Hot Pixels</h3>
   <div>
     <p>If the camera gets too hot, there will be pixels that appear to be stuck as white. These stuck pixels will be falsely detected as stars. You will notice these pixels when you see stars that do not move even though you are moving the camera around.</p>
-    <p>It is possible to memorize which pixels are stuck so that they are removed from the list of stars. To do so: <ol><li>turn up the gain and shutter time slightly</li><li>cover up the camera completely</li><li>click the "capture hot pixels" button</li><li>restore your original settings</li></ol></p>
+    <p>It is possible to memorize which pixels are stuck so that they are removed from the list of stars. To do so: <ol><li>turn up the guide-cam gain and guide-cam shutter time slightly</li><li>cover up the guide-camera completely</li><li>click the "capture hot pixels" button</li><li>restore your original guide-cam settings</li></ol></p>
     <p>Think of this as taking a "dark frame" but not really the same thing.</p>
-    <p>If a hot pixel is near where an important star exists, then rotate the camera.</p>
     <p><button id="btn_hotpixels">Capture Hot Pixels</button><button id="btn_forgethotpixels">Forget Hot Pixels</button></p>
     <p><fieldset><legend>Hot Pixel List</legend><div id="hotpixel_list"></div></fieldset></p>
   </div>
