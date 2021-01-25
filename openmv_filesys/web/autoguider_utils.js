@@ -92,6 +92,7 @@ function parseStarsStr(x)
 
 var ui_list = {};
 var autopopulate_func_list = {};
+var autopopulate_dict_list = {};
 
 function register_ui(uiele, name, func)
 {
@@ -151,6 +152,7 @@ function makeSlider(id, minval, maxval, defval, stepval, zero_val, unit, slide_f
 
     register_ui(slider, id, handler);
     if (typeof slide_func === 'string' || slide_func instanceof String) {
+        autopopulate_dict_list[slide_func] = id;
         autopopulate_func_list[slide_func] = function(x) {
             if (x < minval) {
                 x = minval;
@@ -200,6 +202,7 @@ function makeSliderLookup(id, defval, lut, slide_func)
     register_ui(slider, id, handler);
     ui_list[id + "/lut"] = lut;
     if (typeof slide_func === 'string' || slide_func instanceof String) {
+        autopopulate_dict_list[slide_func] = id;
         autopopulate_func_list[slide_func] = function(x) {
             var i, tgt = -1;
             var dist = -1;
@@ -247,6 +250,7 @@ function makeCheckbox(id, initstate, click_func)
     });
     register_ui(chk, id, click_func);
     if (typeof click_func === 'string' || click_func instanceof String) {
+        autopopulate_dict_list[click_func] = id;
         autopopulate_func_list[click_func] = function(x) {
             chk.checkboxradio().prop("checked", x).checkboxradio("refresh");
         }

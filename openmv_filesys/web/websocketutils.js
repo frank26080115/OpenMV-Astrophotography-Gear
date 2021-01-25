@@ -33,10 +33,13 @@ function websocket_init(page)
         if (typeof websock_onmessage === "function") {
             websock_onmessage(evt);
         }
-        else if (typeof click_func === 'string' || click_func instanceof String) {
+        else if (typeof click_func === 'string' || click_func instanceof String)
+        {
             d = d.trim();
-            if (d.startsWith("{") && d.endsWith("}")) {
-                try {
+            if (d.startsWith("{") && d.endsWith("}"))
+            {
+                try
+                {
                     var jsonobj = JSON.parse(d);
                     websock_onmessage_jsonobj(jsonobj);
                     return;
@@ -44,6 +47,7 @@ function websocket_init(page)
                 catch (e) {
                     // meh
                 }
+
                 if (typeof websock_onmessage_str === "function") {
                     websock_onmessage_str(d);
                 }
@@ -54,7 +58,8 @@ function websocket_init(page)
                     console.log("websocket message JSON obj: " + d);
                 }
             }
-            else {
+            else
+            {
                 if (typeof websock_onmessage_str === "function") {
                     websock_onmessage_str(d);
                 }
@@ -66,7 +71,8 @@ function websocket_init(page)
                 }
             }
         }
-        else {
+        else
+        {
             if (typeof websock_onmessage_data === "function") {
                 websock_onmessage_data(evt.data);
             }
@@ -74,6 +80,7 @@ function websocket_init(page)
                 console.log("websocket message data: " + evt.data);
             }
         }
+    };
 
     socket.onerror = function (evt) {
         socket_err_cnt += 1;
@@ -105,4 +112,17 @@ function websock_retransmit()
     websock_send(websocket_last_transmission);
     websocket_last_transmission = null; // only 1 retry
     return true;
+}
+
+var websock_ping_timer = null;
+function websock_ping_send() {
+    websock_ping_delay();
+    websock_send("ping");
+}
+
+function websock_ping_delay() {
+    if (websock_ping_timer != null) {
+        clearTimeout(websock_ping_timer);
+    }
+    websock_ping_timer = setTimeout(websock_ping_send, 5000);
 }

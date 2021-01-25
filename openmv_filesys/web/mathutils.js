@@ -229,6 +229,7 @@ function math_roundPlaces(x, places)
 
 function time_getNowEpoch()
 {
+    var date = new Date();
     var epoch2000 = new Date(Date.UTC(2000, 0, 1));
     var nowEpoch = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), date.getUTCHours(), date.getUTCMinutes(), date.getUTCSeconds()));
     var nowEpoch2000 = nowEpoch - epoch2000;

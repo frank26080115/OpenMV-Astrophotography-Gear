@@ -17,6 +17,7 @@
 <link rel="stylesheet" href="web/jquery-ui-1.12.1-darkness.css" />
 <link rel="stylesheet" href="web/jquery.cftoaster.1.0.1.css" />
 <link rel="stylesheet" href="web/chartist.min.css" />
+<link rel="stylesheet" href="web/divtable_basic.css" />
 <!-- end ignore -->
 
 <style type="text/css">
@@ -28,6 +29,7 @@ body
 }
 .hideable-msg {
     padding-left: 1em;
+    margin-bottom: 10px;
 }
 
 .ct-series-a .ct-line, .ct-series-a .ct-point { stroke:#FF4444; }
@@ -43,6 +45,8 @@ span.ct-label.ct-vertical.ct-start { position: relative; top: 4px; }
 </style>
 
 <script type="text/javascript">
+
+var guide_state = 0;
 
 var last_msg_time = 0;
 function handleMsgLogs(obj)
@@ -139,10 +143,31 @@ function handleCalibration(obj, axis)
 }
 
 var settings = {};
+var queuedSettings = [];
 
 function queueSettingsUpdate(key, val)
 {
     settings[key] = val;
+    if (queuedSettings.includes(key) == false)
+    {
+        queuedSettings.push(key);
+    }
+}
+
+function sendNewSettings()
+{
+    if (queuedSettings.length <= 0) {
+        return;
+    }
+    var obj = {"pkt_type": "settings"};
+    queuedSettings.forEach(function (itm, idx) {
+        if ((itm in settings) != false) {
+            obj[itm] = settings[itm];
+        }
+    });
+    queuedSettings = [];
+    websock_ping_delay();
+    websock_send(obj);
 }
 
 function onLoadAll()
@@ -153,11 +178,13 @@ function onLoadAll()
 
     $( "#accordion" ).accordion({heightStyle: "content"});
 
+    make_ui_mainctrl()
     make_ui_intervalometer();
     make_ui_guidecamconfig();
     make_ui_mountconfig();
     make_ui_calibration();
     make_ui_analysisparameters();
+    make_ui_hotpixels();
     make_ui_console();
 
     $(window).on('resize', function(e) {
@@ -191,6 +218,11 @@ function websock_onopen(evt)
 
 function websock_onmessage_jsonobj(obj)
 {
+    if (queuedSettings.length > 0)
+    {
+        sendNewSettings();
+    }
+
     document.getElementById("connection_lost").style.display = "none";
     if (obj["pkt_type"] == "settings")
     {
@@ -201,18 +233,82 @@ function websock_onmessage_jsonobj(obj)
     else if (obj["pkt_type"] == "status")
     {
         document.getElementById("loading_almost").style.display = "none";
+
         handleCalibration(obj, "ra");
         handleCalibration(obj, "dec");
         handleMsgLogs(obj);
         handlePulseLogs(obj);
         imageStatsUpdate(obj);
         hotpixelsInfoUpdate(obj);
+
         if (("interval_state" in obj) && ("blub_remaining" in obj)) {
             intervalometerUpdate(obj["interval_state"], obj["blub_remaining"]);
         }
         else {
-            console.log("intervalometer data missing from status"
+            console.log("intervalometer data missing from status");
         }
+
+        var has_selectedstar = false;
+        if (("sel_star" in obj) != false) {
+            if (obj["sel_star"] != false && obj["sel_star"] != null) {
+                has_selectedstar = true;
+                selected_star = obj["sel_star"];
+            }
+        }
+        if (has_selectedstar == false) {
+            selected_star = null;
+        }
+        if (has_selectedstar != false && ("sel_star_profile" in obj) != false) {
+            document.getElementById("div_starprofile").style.display = "block";
+            starprofile = arr;
+            draw_starprofile();
+        }
+        else {
+            document.getElementById("div_starprofile").style.display = "none";
+            starprofile = [];
+            draw_starprofile();
+        }
+
+        var has_tgtstar = false;
+        if (("tgt_coord" in obj) != false) {
+            if (obj["tgt_coord"] != false && obj["tgt_coord"] != null) {
+                has_tgtstar = true;
+                tgt_coord = obj["tgt_coord"];
+            }
+        }
+        if (has_tgtstar == false) {
+            tgt_coord = null;
+        }
+
+        has_tgtstar = false;
+        if (("ori_coord" in obj) != false) {
+            if (obj["ori_coord"] != false && obj["ori_coord"] != null) {
+                has_tgtstar = true;
+                ori_coord = obj["ori_coord"];
+            }
+        }
+        if (has_tgtstar == false) {
+            ori_coord = null;
+        }
+
+        var is_dither = (settings["dither_amount"] > 0 && (guide_state == 1 || guide_state == 2) && (interval_state == 1 || interval_state == 2));
+        if (is_dither)
+        {
+            if (("dither_interval" in obj) != false)
+            {
+                var total = settings["dither_interval"];
+                if (total < 1) { total = 1; };
+                var i = obj["dither_interval"] + 1;
+                var txt = i.toString() + " / " + total.toString() + " in dithering group";
+                document.getElementById("dither_status").style.display = "block";
+                document.getElementById("dither_status").innerHTML = txt;
+            }
+        }
+        else {
+            document.getElementById("dither_status").style.display = "none";
+        }
+
+        var infoele = document.getElementById("div_statusinfo");
     }
 }
 
@@ -231,12 +327,8 @@ function miscCmd(x)
     obj["pkt_type"] = "misc_cmd";
     obj["time"]     = time_getNowEpoch();
     obj["cmd"]      = x;
-    if (socket != null) {
-        socket.send(obj);
-    }
-    else {
-        msglog_appendLocal("WEBSOCK ERR: no socket to send misc. cmd. with");
-    }
+    websock_ping_delay();
+    websock_send(obj);
 }
 
 function guideCmd(x)
@@ -245,12 +337,8 @@ function guideCmd(x)
     obj["pkt_type"] = "guide_cmd";
     obj["time"]     = time_getNowEpoch();
     obj["cmd"]      = x;
-    if (socket != null) {
-        socket.send(obj);
-    }
-    else {
-        msglog_appendLocal("WEBSOCK ERR: no socket to send guide cmd. with");
-    }
+    websock_ping_delay();
+    websock_send(obj);
 }
 
 function selectStar(x, y)
@@ -258,27 +346,24 @@ function selectStar(x, y)
     var obj = {}
     obj["pkt_type"] = "select_star";
     obj["time"]     = time_getNowEpoch();
-    obj["cmd"]      = x;
-    if (socket != null) {
-        socket.send(obj);
-    }
-    else {
-        msglog_appendLocal("WEBSOCK ERR: no socket to send select-star cmd. with");
-    }
+    obj["star_x"]   = x;
+    obj["star_y"]   = y;
+    websock_ping_delay();
+    websock_send(cmd);
 }
 
 </script>
 
 </head>
 <body onload="onLoadAll();">
-<div id="loading"><h2>OpenMV AutoGuider</h2><br /><h2>Loading, Please Wait! <span id="load_tries"></span></h2></div>
-<div id="loading_failed" style="display:none;"><h1>Loading FAILED! Please refresh the page.</h1></div>
-<div id="loading_connecting" style="display:none;"><h2>OpenMV AutoGuider</h2><br /><h2>Connecting to guide-cam...</h2></div>
-<div id="loading_settings" style="display:none;"><h2>OpenMV AutoGuider</h2><br /><h2>Fetching settings...</h2></div>
-<div id="loading_almost" style="display:none;"><h2>OpenMV AutoGuider</h2><br /><h2>Connected and settings loaded! Waiting for status data...</h2></div>
+<div id="loading"><h2>OpenMV AutoGuider</h2><div class="ui-widget hideable-msg ui-state-error ui-corner-all .ui-state-error-text"><h4>Loading, Please Wait!</h4></div></div>
+<div id="loading_failed" style="display:none;" class="ui-widget"><div class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text"><h1>Loading FAILED! Please refresh the page.</h1></div></div>
+<div id="loading_connecting" style="display:none;"><h2>OpenMV AutoGuider</h2><div class="ui-widget hideable-msg ui-state-error ui-corner-all .ui-state-error-text"><h4>Connecting to guide-cam...</h4></div></div>
+<div id="loading_settings" style="display:none;"><h2>OpenMV AutoGuider</h2><div class="ui-widget hideable-msg ui-state-error ui-corner-all .ui-state-error-text"><h4>Fetching settings...</h4></div></div>
+<div id="loading_almost" style="display:none;"><h2>OpenMV AutoGuider</h2><div class="ui-widget hideable-msg ui-state-error ui-corner-all .ui-state-error-text"><h4>Connected and settings loaded! Waiting for status data...</h4></div></div>
 <div id="showme" style="display:none;">
 
-<div style="width:100%"><fieldset style="padding-top: 1em;"><legend>OpenMV AutoGuider</legend><div id="viewme" style="display: inline-block; width:100%; padding: 0 0 0 0; margin: 0 0 0 0;"><div id="viewmejpeg" style="position: relative; z-index: 1"></div><div id="viewmesvg" style="position: relative; z-index: 2; top: 0; left: 0;">&nbsp;&nbsp;Please wait for image...</div>
+<div style="width:100%"><fieldset style="padding-top: 1em;"><legend style="font-size: 14pt;">OpenMV AutoGuider Camera</legend><div id="viewme" style="display: inline-block; width:100%; padding: 0 0 0 0; margin: 0 0 0 0;"><div id="viewmejpeg" style="position: relative; z-index: 1"></div><div id="viewmesvg" style="position: relative; z-index: 2; top: 0; left: 0;">&nbsp;&nbsp;Please wait for image...</div>
 </div></fieldset></div>
 
 <div id="div_errgraph"><fieldset><legend>Error Graph</legend><div id="errgraph-chart" class="ct-graph ct-major-eleventh"><div style="text-align:right;position:relative;top:-3px;"><span style="color:#FF4444"><b>&mdash;</b>&nbsp;RA&nbsp;<span>&nbsp;&nbsp;<span style="color:#4488FF">&nbsp;<b>&mdash;</b>&nbsp;DEC<span></div></fieldset></div>
@@ -289,9 +374,42 @@ function selectStar(x, y)
 <div id="mount_hardware_error" class="ui-widget" style="display: none;"><div id="mount_hardware_error_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p>MOUNT HARDWARE ERROR!<br />Do a full power-off-power-on reset if the problem is not solved.</p></div></div>
 <div id="camera_hardware_wait" class="ui-widget" style="display: none;"><div id="camera_hardware_wait_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p>WAITING for camera to load new exposure settings...</p></div></div>
 
-<div id="div_starprofile" style="display:none;"><fieldset><legend>Star Profile</legend><div id="starprofile_div"></div></fieldset></div>
+<fieldset><legend>Status</legend>
+<div class="divTable">
+    <div class="divTableBody">
+        <div class="divTableRow">
+            <div class="divTableCell divTableCellLeft" style="padding-right: 10px">
+                <div id="div_starprofile" style="display:inline;"><fieldset><legend>Star Profile</legend><div id="starprofile_div">no data</div></fieldset></div>
+            </div>
+            <div class="divTableCell divTableCellFill" style="width: 100%; vertical-align: top;">
+                <div id="div_statusinfo" style="vertical-align: top;">no data</div>
+            </div>
+        </div>
+    </div>
+</div>
+</fieldset>
 
+<script type="text/javascript">
+function make_ui_mainctrl()
+{
+    makeButton("btn_guidestart", function( event ) {
+        ui_list["btn_guideend"  ].button("option", "disabled", false);
+        ui_list["btn_guidestart"].button("option", "disabled", true);
+    });
+    makeButton("btn_guideend", function( event ) {
+        ui_list["btn_guideend"  ].button("option", "disabled", true);
+        ui_list["btn_guidestart"].button("option", "disabled", false);
+    });
+    makeButton("btn_gotocalibration", function( event ) {
+        $( "#accordion" ).accordion('option', 'active' , 3);
+        
+    });
+}
+</script>
 
+<br />
+<div><button id="btn_guidestart">Start Auto-Guiding</button>&nbsp;&nbsp;<button id="btn_guideend">&nbsp;&nbsp;&nbsp;&nbsp;Stop&nbsp;&nbsp;&nbsp;&nbsp;</button>&nbsp;&nbsp;<button id="btn_gotocalibration">Calibrate</button></div>
+<br />
 
 <div id="accordion">
   <h3>Intervalometer</h3>
@@ -299,6 +417,8 @@ function selectStar(x, y)
     <script type="text/javascript">
 
 var bulb_times_lut = [1, 5, 10, 15, 20, 25, 30, 45, 60, 75, 90, 105, 120, 150, 180, 210, 240, 270, (60 * 5), (60 * 6), (60 * 7), (60 * 8), (60 * 9), (60 * 10), (60 * 12), (60 * 14), (60 * 16)];
+
+var dither_interval_lut = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17 ,18 ,19, 20, 25, 30, 35, 40, 45, 50, 60, 70, 80, 90, 100];
 
 function make_ui_intervalometer()
 {
@@ -330,25 +450,13 @@ function make_ui_intervalometer()
         ui_list["btn_interval_loop"]    .button("option", "disabled", false);
         intervalometerCmd(4);
     });
-    makeSliderLookup("slider_bulbtime", 6, bulb_times_lut, function(v) {
-            queueSettingsUpdate("intervalometer_bulb_time", v);
-        }
-    );
-    makeSlider("slider_ditherinterval", 1, 100, 1, 1, "0", "", function(v) {
-        queueSettingsUpdate("dither_interval", v);
-    });
-    makeSlider("slider_ditherlimit", 0, 500, 0, 1, "OFF", " pix", function(v) {
-        queueSettingsUpdate("dither_amount", v);
-    });
-    makeSlider("slider_dithersettlethresh", 0, 10, 3, 1, "0 pix", " pix", function(v) {
-        queueSettingsUpdate("dither_calmness", v);
-    });
-    makeSlider("slider_dithersettleframecnt", 1, 10, 3, 1, "0 frames", " frames", function(v) {
-        queueSettingsUpdate("dither_calm_cnt", v);
-    });
-    makeSlider("slider_dithertimeout", 1, 10, 5, 1, "0 frames", " frames", function(v) {
-        queueSettingsUpdate("dither_frames_cnt", v);
-    });
+    makeSliderLookup("slider_bulbtime", 6, bulb_times_lut, "intervalometer_bulb_time");
+    makeSliderLookup("slider_ditherinterval", 2, dither_interval_lut, "dither_interval");
+    makeSlider("slider_ditherlimit", 0, 500, 0, 1, "OFF", " pix", "dither_amount");
+    makeSlider("slider_dithersettlethresh", 0, 20, 3, 1, "0 pix", " pix", "dither_calmness");
+    makeSlider("slider_dithersettleframecnt", 1, 20, 3, 1, "0 frames", " frames", "dither_calm_cnt");
+    makeSlider("slider_dithertimeout", 1, 20, 5, 1, "0 frames", " frames", "dither_frames_cnt");
+    makeCheckbox("chk_useled" , true, "use_led" );
 
     // TODO: digital intervalometer mode
 }
@@ -395,7 +503,12 @@ function intervalometerShow()
     }
     else if (intervalometer_status == 1 || intervalometer_status == 2)
     {
-        ele.innerHTML = "Looping: " + timetxt;
+        if (guide_state != 2) {
+            ele.innerHTML = "Looping: " + timetxt;
+        }
+        else {
+            ele.innerHTML = "Dithering...";
+        }
         ui_list["btn_interval_stopnext"].button("option", "disabled", false);
         ui_list["btn_interval_stopnow"] .button("option", "disabled", false);
         ui_list["btn_interval_single"]  .button("option", "disabled", true);
@@ -465,18 +578,15 @@ function intervalometerCmd(cmd)
     var obj = {}
     obj["pkt_type"] = "intervalometer_cmd";
     obj["time"]     = time_getNowEpoch();
-    obj["cmd"]      = x;
-    if (socket != null) {
-        socket.send(obj);
-    }
-    else {
-        msglog_appendLocal("WEBSOCK ERR: no socket to send intervalometer cmd. with");
-    }
+    obj["cmd"]      = cmd;
+    websock_ping_delay();
+    websock_send(obj);
 }
     </script>
     <p><button id="btn_interval_loop">Loop</button>&nbsp;<button id="btn_interval_single">Single</button>&nbsp;<button id="btn_interval_stopnext">Stop On Next</button>&nbsp;<button id="btn_interval_stopnow">Stop Now</button></p>
     <div><fieldset><legend>Status</legend>
         <div id="bulb_status" style="font-size:20pt;">0</div>
+        <div id="dither_status" style="font-size:12pt; display:none;">0</div>
     </fieldset></div>
     <div><fieldset><legend>Bulb Time: <span id="slider_bulbtime_handle"></span> sec</legend>
         <div id="slider_bulbtime"></div>
@@ -498,6 +608,7 @@ function intervalometerCmd(cmd)
         <div id="slider_dithertimeout"></div>
     </fieldset></div>
     <!-- TODO: digital intervalometer mode --><br />
+    <div><span><label for="chk_useled">Enable LED Light?</label><input type="checkbox" name="chk_useled" id="chk_useled"></span></div>
     <br />
     <div><fieldset><legend>Help</legend><p>
         <p>This auto-guider features an intervalometer that can control the shutter of a camera. The camera must be set in <b>bulb</b> mode for this to work.</p>
@@ -604,7 +715,17 @@ function imageStatsUpdate(obj)
 }
 
     </script>
-    <div><button id="btn_streamimg">Stream Image Full Screen</button><button id="btn_streamimg_star">Stream Image of Selected Star</button></div><br />
+    <div>
+        <div class="divTable">
+            <div class="divTableBody">
+                <div class="divTableRow">
+                    <div class="divTableCell divTableCellLeft"><button id="btn_streamimg">Stream Image Full Screen</button></div>
+                    <div class="divTableCell divTableCellFill">&nbsp;</div>
+                    <div class="divTableCell divTableCellRight"><button id="btn_streamimg_star">Stream Image of Selected Star</button></div>
+                </div>
+            </div>
+        </div>
+    </div>
     <div><fieldset><legend>Image Statistics</legend>
     <div id="div_histogram"></div>
     </fieldset></div>
@@ -711,22 +832,7 @@ function make_ui_calibration()
 }
     </script>
     <p>Calibration is required before auto-guiding. It correlates how much a star mas moved in the guide-cam image, to how long of a movement command pulse needs to be. It also determines the angular orientation of the guide-camera.</p>
-    <div><fieldset><legend>Calibration Step Pulse: <span id="slider_pulse_calistep2_handle"></span></legend>
-        <div id="slider_pulse_calistep2"></div>
-    </fieldset></div>
-    <div><fieldset><legend>Calibration Step Count: <span id="slider_calistepcnt_handle"></span></legend>
-        <div id="slider_calistepcnt"></div>
-    </fieldset></div>
-    <div><fieldset><legend>Correction Scale R.A.: <span id="slider_correctionscale_ra_handle"></span></legend>
-        <div id="slider_correctionscale_ra"></div>
-    </fieldset></div>
-        <div><fieldset><legend>Correction Scale Dec.: <span id="slider_correctionscale_dec_handle"></span></legend>
-        <div id="slider_correctionscale_dec"></div>
-    </fieldset></div>
-    <br />
-    <button id="btn_calib_save">Save File</button>&nbsp;<button id="btn_calib_load">Load File</button>
-    <br />
-    <br />
+
     <div><fieldset><legend>R.A. Calibration</legend>
         <div><button id="btn_calib_ra">Run Calibration</button>&nbsp;&nbsp;<button id="btn_calib_remove_ra">Remove</button></div>
         <br />
@@ -737,6 +843,24 @@ function make_ui_calibration()
         <br />
         <div id="calibinfo_dec">None</div>
     </fieldset></div>
+    <br />
+
+    <div><button id="btn_calib_save">Save File</button>&nbsp;&nbsp;&nbsp;&nbsp;<button id="btn_calib_load">Load File</button></div>
+    <br />
+
+    <div><fieldset><legend>Calibration Step Pulse: <span id="slider_pulse_calistep2_handle"></span></legend>
+        <div id="slider_pulse_calistep2"></div>
+    </fieldset></div>
+    <div><fieldset><legend>Calibration Step Count: <span id="slider_calistepcnt_handle"></span></legend>
+        <div id="slider_calistepcnt"></div>
+    </fieldset></div>
+    <div><fieldset><legend>Correction Scale R.A.&nbsp;&nbsp;: <span id="slider_correctionscale_ra_handle"></span></legend>
+        <div id="slider_correctionscale_ra"></div>
+    </fieldset></div>
+        <div><fieldset><legend>Correction Scale Dec.&nbsp;&nbsp;: <span id="slider_correctionscale_dec_handle"></span></legend>
+        <div id="slider_correctionscale_dec"></div>
+    </fieldset></div>
+
     <br />
     <div><fieldset><legend>Help</legend><p>
         <p>During calibration, a star will be tracked and movement command pulses will be given to the tracking telescope mount. If the pulse given is 1000 ms long, and the star moved 10 pixels in the guide-cam image, then the scaling is remembered as 100 ms-per-pixel, or as 0.01 pixels-per-ms. The direction of the movement is also remembed.</p>
@@ -856,7 +980,19 @@ function hotpixelsInfoUpdate(obj)
     <p>If the camera gets too hot, there will be pixels that appear to be stuck as white. These stuck pixels will be falsely detected as stars. You will notice these pixels when you see stars that do not move even though you are moving the camera around.</p>
     <p>It is possible to memorize which pixels are stuck so that they are removed from the list of stars. To do so: <ol><li>turn up the guide-cam gain and guide-cam shutter time slightly</li><li>cover up the guide-camera completely</li><li>click the "capture hot pixels" button</li><li>restore your original guide-cam settings</li></ol></p>
     <p>Think of this as taking a "dark frame" but not really the same thing.</p>
-    <p><button id="btn_hotpixels">Capture Hot Pixels</button><button id="btn_forgethotpixels">Forget Hot Pixels</button><button id="btn_loadhotpixels">Load Hot Pixels File</button></p>
+
+    <div class="divTable">
+        <div class="divTableBody">
+            <div class="divTableRow">
+                <div class="divTableCell"><button id="btn_hotpixels">Capture Hot Pixels</button></div>
+                <div class="divTableCell divTableCellFill">&nbsp;</div>
+                <div class="divTableCell"><button id="btn_forgethotpixels">Forget Hot Pixels</button></div>
+                <div class="divTableCell divTableCellFill">&nbsp;</div>
+                <div class="divTableCell"><button id="btn_loadhotpixels">Load Hot Pixels File</button></div>
+            </div>
+        </div>
+    </div>
+
     <p><fieldset><legend>Hot Pixel Info</legend><div id="hotpixel_info"></div></fieldset></p>
   </div>
   <h3>Console</h3>
@@ -913,8 +1049,6 @@ function msglog_appendLocal(txt)
     <fieldset><legend>Messages</legend><div id="div_msglog" style="font-family: monospace; color: #8F8;"></div><br /><button id="btn_consoleclear">Clear</button></div></fieldset>
   </div>
 </div><!-- accordion -->
-
-
 
 </div><!-- showme -->
 </body>

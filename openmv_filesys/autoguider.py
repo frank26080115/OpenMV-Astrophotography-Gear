@@ -221,7 +221,7 @@ class AutoGuider(object):
         state.update({"tgt_coord": self.target_coord})
         state.update({"ori_coord": self.origin_coord})
         state.update({"last_move_err": self.last_move_err})
-        state.update({"calib_ra" : self.calibration[CALIIDX_RA].get_json_obj() if self.calibration[CALIIDX_RA] is not None else None})
+        state.update({"calib_ra" : self.calibration[CALIIDX_RA] .get_json_obj() if self.calibration[CALIIDX_RA]  is not None else None})
         state.update({"calib_dec": self.calibration[CALIIDX_DEC].get_json_obj() if self.calibration[CALIIDX_DEC] is not None else None})
         if self.hotpixels is not None:
             state.update({"hotpix"     : True})
@@ -340,6 +340,8 @@ class AutoGuider(object):
         return True
 
     def parse_websocket(self, x):
+        if x == "ping":
+            return
         obj = ujson.loads(x)
         if "time" in obj:
             v = comutils.try_parse_setting(obj["time"])
@@ -377,6 +379,8 @@ class AutoGuider(object):
             self.apply_settings()
             if need_save:
                 self.save_settings()
+        elif pkt_type == "ping":
+            pass
 
     def apply_settings(self):
         self.backlash_ra.hysteresis  = v = self.settings["backlash_hyster"]
