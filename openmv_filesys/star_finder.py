@@ -21,6 +21,7 @@ EXPO_TOO_BIG      = micropython.const(4)
 EXPO_TOO_MANY     = micropython.const(5)
 EXPO_MEMORY_ERR   = micropython.const(6)
 EXPO_CAMERA_ERR   = micropython.const(7)
+EXPO_NOT_READY    = micropython.const(8)
 
 def find_stars(img, hist = None, stats = None, thresh = 0, max_dia = 100, region = None, force_solve = False, guider = False):
 

@@ -178,7 +178,9 @@ class AutoGuider(object):
         state.update({"interval_state"      : self.intervalometer_state})
         state.update({"blub_remaining"      : guidepulser.shutter_remaining()})
         state.update({"dither_interval"     : self.dither_interval})
-        if self.img is not None and self.cam_err <= 0:
+        if self.cam.check_init() == False:
+            state.update({"expo_code": star_finder.EXPO_NOT_READY})
+        elif self.img is not None and self.cam_err <= 0:
             state.update({"expo_code": self.expo_code})
         elif self.img is None:
             state.update({"expo_code": star_finder.EXPO_NO_IMG})
@@ -187,10 +189,13 @@ class AutoGuider(object):
         else:
             state.update({"expo_code": self.expo_code})
         if self.img_stats is not None:
+            state.update({"img"      : True})
             state.update({"img_mean" : self.img_stats.mean()})
             state.update({"img_stdev": self.img_stats.stdev()})
             state.update({"img_max"  : self.img_stats.max()})
             state.update({"img_min"  : self.img_stats.min()})
+        else:
+            state.update({"img"      : False})
 
         # star list can be sent here but there's a huge risk of memory allocation error if the list is long
         # problem is solved by sending it separately, in small chunks
@@ -224,7 +229,7 @@ class AutoGuider(object):
             state.update({"hotpix_cnt" : len(self.hotpixels)})
             state.update({"hotpix_last": self.hotpixels_eff})
         else:
-            state.update({"hotpixels": False})
+            state.update({"hotpix"     : False})
         state.update({"logs"        : self.get_logs_obj()})
         state.update({"hw_err"      : self.hw_err})
         state.update({"analysis_dur": self.analysis_dur})
@@ -243,6 +248,7 @@ class AutoGuider(object):
             obj.update({("pulse_ra_%u"   % i) : pulselog[1]})
             obj.update({("pulse_dec_%u"  % i) : pulselog[2]})
             obj.update({("pulse_sum_%u"  % i) : pulselog[3]})
+            obj.update({("pulse_shutter_%u" % i) : pulselog[4]})
             i += 1
         return obj
 
@@ -766,7 +772,7 @@ class AutoGuider(object):
             self.cam.init(gain_db = self.settings["gain"], shutter_us = self.settings["shutter"] * 1000, force_reset = self.cam_err)
             while self.cam.check_init() == False:
                 self.task_network()
-                guidepulser.task()
+                self.task_pulser()
             self.cam.snapshot_start()
             self.snap_millis = pyb.millis()
             self.cam_err = 0
@@ -784,11 +790,12 @@ class AutoGuider(object):
 
     def snap_wait(self):
         self.task_network()
-        guidepulser.task()
+        self.task_pulser()
         while True:
             if pyb.elapsed_millis(self.snap_millis) <= (self.move - self.settings["net_quiet_time"]) or self.move == 0 or guidepulser.is_moving() == False:
                 self.task_network()
-            guidepulser.task()
+            #guidepulser.task()
+            self.task_pulser()
             if guidepulser.is_moving():
                 if self.cam.snapshot_check():
                     # moving more than a frame duration
@@ -809,7 +816,7 @@ class AutoGuider(object):
 
         if self.cam is None:
             guidepulser.panic(True)
-            guidepulser.task()
+            self.task_pulser()
             self.task_network()
             if ((pyb.millis() // 500) % 2) == 0:
                 self.log_msg("ERROR: guidecam fatal error, must reboot")

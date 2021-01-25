@@ -146,7 +146,7 @@ class GuiderCalibration(object):
         obj = {}
         obj.update({"success"      : self.has_cal})
         #obj.update({"points"       : self.accepted_points})
-        #obj.update({"points_cnt"   : len(self.accepted_points)})
+        obj.update({"points_cnt"   : len(self.accepted_points)})
         obj.update({"start_x"      : self.points[0][0]})
         obj.update({"start_y"      : self.points[0][1]})
         obj.update({"pix_per_ms"   : self.pix_per_ms})

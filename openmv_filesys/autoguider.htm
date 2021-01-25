@@ -11,6 +11,9 @@
 <script type="application/javascript" src="web/chartist.min.js"></script>
 <script type="application/javascript" src="web/mathutils.js"></script>
 <script type="application/javascript" src="web/websocketutils.js"></script>
+<script type="application/javascript" src="web/autoguider_utils.js"></script>
+<script type="application/javascript" src="web/draw_guideerror.js"></script>
+<script type="application/javascript" src="web/draw_starprofile.js"></script>
 <link rel="stylesheet" href="web/jquery-ui-1.12.1-darkness.css" />
 <link rel="stylesheet" href="web/jquery.cftoaster.1.0.1.css" />
 <link rel="stylesheet" href="web/chartist.min.css" />
@@ -26,67 +29,113 @@ body
 .hideable-msg {
     padding-left: 1em;
 }
+
+.ct-series-a .ct-line, .ct-series-a .ct-point { stroke:#FF4444; }
+.ct-series-b .ct-line, .ct-series-b .ct-point { stroke:#4488FF; }
+.ct-series-c .ct-area { fill-opacity: 0.5; }
+.ct-series-d .ct-line { stroke:#888888; }
+.ct-series-d .ct-area { fill:  #888888; fill-opacity: 0.2; }
+.ct-series-e .ct-line { stroke:#888888; }
+.ct-series-e .ct-area { fill:  #888888; fill-opacity: 0.2; }
+.ct-series-f .ct-line { stroke:#FFFFFF; }
+span.ct-label.ct-vertical.ct-start { position: relative; top: 4px; }
+
 </style>
 
 <script type="text/javascript">
 
-var dataw = 2592;
-var datah = 1944;
-
-var socket;
-
-function getExposureCode(exposure_code) {
-    if (exposure_code == 0) {
-        return "correct";
-    }
-    else if (exposure_code == -1) {
-        return "too dark";
-    }
-    else if (exposure_code == -2) {
-        return "no image";
-    }
-    else if (exposure_code == 1) {
-        return "too bright";
-    }
-    else if (exposure_code == 2) {
-        return "too noisy";
-    }
-    else if (exposure_code == 3) {
-        return "movement";
-    }
-    else if (exposure_code == 4) {
-        return "big blob";
-    }
-    else if (exposure_code == 5) {
-        return "too many stars";
-    }
-    else if (exposure_code == 6) {
-        return "INTERNAL MEMORY ERROR";
-    }
-    else if (exposure_code == 7) {
-        return "CAMERA HARDWARE ERROR";
-    }
-    return "unknown";
-}
-
-function checkHotPixel(star) {
-    if (hotpixels == undefined) {
-        return false;
-    }
-    if (hotpixels == null || hotpixels == false) {
-        return false;
-    }
-    if (hotpixels.length <= 0) {
-        return false;
-    }
-    var i, cnt = hotpixels.length;
-    for (i = 0; i < cnt; i++) {
-        var v = math_getVector([star.cx, star.cy], hotpixels[i]);
-        if (v[0] < 2) {
-            return true;
+var last_msg_time = 0;
+function handleMsgLogs(obj)
+{
+    var buff = [];
+    var i;
+    for (i = 0; i < 10; i++)
+    {
+        var istr = i.toString();
+        if ((('msg_tick_' + istr) in obj) && (('msg_tick_' + istr) in obj) && (('msg_str_' + istr) in obj))
+        {
+            var itm = {};
+            itm["tick"] = obj["msg_tick_" + istr];
+            itm["time"] = obj["msg_time_" + istr];
+            itm["str"]  = obj["msg_str_"  + istr];
+            buff.push(itm);
         }
     }
-    return false;
+    buff.sort(function(a, b) {
+        return a["tick"] - b["tick"];
+    });
+    for (i = 0; i < buff.length; i++)
+    {
+        var itm = buff[i];
+        if (itm["time"] > last_msg_time) {
+            last_msg_time = itm["time"];
+            msglog_append("[" + fmtTime(epochToDate(itm["time"])) + "]: " + itm["str"].trim());
+        }
+    }
+}
+
+var last_pulselog_time = 0;
+function handlePulseLogs(obj)
+{
+    var buff = [];
+    var i;
+    for (i = 0; i < 10; i++)
+    {
+        var istr = i.toString();
+        if ((('pulse_time_' + istr) in obj) && (('pulse_ra_' + istr) in obj) && (('pulse_dec_' + istr) in obj) && (('pulse_sum_' + istr) in obj))
+        {
+            var itm = {};
+            itm["time"] = obj["pulse_time_" + istr];
+            itm["ra"]   = obj["pulse_ra_"   + istr];
+            itm["dec"]  = obj["pulse_dec_"  + istr];
+            itm["sum"]  = obj["pulse_sum_"  + istr];
+            itm["shutter"] = obj["pulse_shutter_" + istr];
+            buff.push(itm);
+        }
+    }
+    buff.sort(function(a, b) {
+        return a["time"] - b["time"];
+    });
+    for (i = 0; i < buff.length; i++)
+    {
+        var itm = buff[i];
+        if (itm["time"] > last_pulselog_time) {
+            last_pulselog_time = itm["time"];
+            errgraph_push(itm["time"], itm["ra"], itm["dec"], itm["sum"], itm["shutter"]);
+        }
+    }
+}
+
+var calibration = {"ra": null, "dec": null};
+function handleCalibration(obj, axis)
+{
+    var inner = obj["calib_" + axis];
+    var ele = document.getElementById("calibinfo_" + axis);
+    if (inner == null || inner == false)
+    {
+        calibration[axis] = null;
+        ele.innerHTML = "None";
+        return;
+    }
+
+    calibration[axis] = inner;
+
+    var txt = "";
+
+    if (inner["success"] == false)
+    {
+        txt += "Calibration has failed.<br />";
+    }
+
+    var t = epochToDate(inner["time"]);
+    txt += "Time: " + fmtDate(t) + " " + fmtTime(t) + "<br />";
+    txt += "Pixels-per-ms = " + inner["pix_per_ms"].toFixed(1) + "<br />";
+    txt += "Angle = " + inner["angle"].toFixed(1) + "&deg;<br />";
+    if (("points_cnt" in inner) != false) {
+        txt += "Points Used: " + inner["points_cnt"].toString() + "<br />";
+    }
+    txt += "Starting Coordinates: ( " + inner["start_x"].toFixed(1) + " , " + inner["start_y"].toFixed(1) + " )";
+    ele.innerHTML = txt;
 }
 
 var settings = {};
@@ -96,181 +145,12 @@ function queueSettingsUpdate(key, val)
     settings[key] = val;
 }
 
-var ui_list = {};
-var autopopulate_func_list = {};
-
-function register_ui(uiele, name, func)
-{
-    ui_list[name] = uiele;
-    ui_list[name + "/func"] = func;
-}
-
-function makeSlider(id, minval, maxval, defval, stepval, zero_val, unit, slide_func, sync_with)
-{
-    if (defval < minval) {
-        defval = minval;
-    }
-    if (defval > maxval) {
-        defval = maxval;
-    }
-
-    var handle = $( "#" + id + "_handle" );
-    var handler = function(v) {
-        var text = v;
-        if (v == 0) { text = zero_val; }
-        else { text = v.toString() + unit; }
-        handle.text( text );
-        console.log("slider \"" + id + "\" evt = " + text);
-        if (slide_func)
-        {
-            if (typeof slide_func === 'string' || slide_func instanceof String) {
-                console.log("auto sending \"" + slide_func + "\" = " + v.toString());
-                queueSettingsUpdate(slide_func, v);
-            }
-            else {
-                slide_func(v);
-            }
-        }
-
-        if (sync_with !== undefined && typeof sync_with !== 'undefined') {
-            if (typeof sync_with === 'string' || sync_with instanceof String) {
-                sliderSync(sync_with, v);
-            }
-        }
-    };
-    var slider = $( "#" + id ).slider({
-      create: function() {
-        var v = $( this ).slider( "value" );
-        if (v == 0) { v = zero_val; }
-        else { v = v.toString() + unit; }
-        handle.text( v );
-      },
-      min: minval,
-      max: maxval,
-      step: stepval,
-      value: defval,
-      slide: function( event, ui ) {
-        var v = ui.value;
-        handler(v);
-      }
-    });
-
-    register_ui(slider, id, handler);
-    if (typeof slide_func === 'string' || slide_func instanceof String) {
-        autopopulate_func_list[slide_func] = function(x) {
-            if (x < minval) {
-                x = minval;
-            }
-            if (x > maxval) {
-                x = maxval;
-            }
-            sliderSync(id, x);
-        };
-    }
-}
-
-function makeSliderLookup(id, defval, lut, slide_func)
-{
-    var handle = $( "#" + id + "_handle" );
-    var handler = function(v) {
-        var text = lut[v].toString();
-        handle.text( text );
-        console.log("slider \"" + id + "\" evt = " + text);
-        if (slide_func)
-        {
-            if (typeof slide_func === 'string' || slide_func instanceof String) {
-                console.log("auto sending \"" + slide_func + "\" = " + lut[v].toString());
-                queueSettingsUpdate(slide_func, lut[v]);
-            }
-            else {
-                slide_func(lut[v]);
-            }
-        }
-    };
-    var slider = $( "#" + id ).slider({
-      create: function() {
-        var v = $( this ).slider( "value" );
-        v = lut[v].toString();
-        handle.text( v );
-      },
-      min: 0,
-      max: lut.length -1,
-      step: 1,
-      value: defval,
-      slide: function( event, ui ) {
-        var v = ui.value;
-        handler(v);
-      }
-    });
-
-    register_ui(slider, id, handler);
-    ui_list[id + "/lut"] = lut;
-    if (typeof slide_func === 'string' || slide_func instanceof String) {
-        autopopulate_func_list[slide_func] = function(x) {
-            var i, tgt = -1;
-            var dist = -1;
-            for (i = 0; i < lut.length; i++) {
-                var j = lut[i];
-                var k = Math.abs(x - j);
-                if (dist < 0 || k < dist) {
-                    dist = k;
-                    tgt = i;
-                }
-            }
-            if (tgt >= 0) {
-                slider.slider("value", tgt);
-                handler(tgt);
-            }
-        };
-    }
-}
-
-function makeButton(id, click_func)
-{
-    var btn = $("#" + id ).button().click(function() {
-        console.log("button \"" + id + "\" click");
-        if (click_func) {
-            click_func();
-        }
-    });
-    register_ui(btn, id, click_func);
-}
-
-function makeCheckbox(id, initstate, click_func)
-{
-    var chk = $("#" + id ).checkboxradio().prop("checked", initstate).checkboxradio("refresh").on("change", function() {
-        var x = $("#" + id ).prop("checked");
-        console.log("button \"" + id + "\" on_change: " + x);
-        if (click_func) {
-            if (typeof click_func === 'string' || click_func instanceof String) {
-                console.log("auto sending \"" + click_func + "\" = " + x);
-                queueSettingsUpdate(click_func, x);
-            }
-            else {
-                click_func(x);
-            }
-        }
-    });
-    register_ui(chk, id, click_func);
-    if (typeof click_func === 'string' || click_func instanceof String) {
-        autopopulate_func_list[click_func] = function(x) {
-            chk.checkboxradio().prop("checked", x).checkboxradio("refresh");
-        }
-    }
-}
-
-function sliderSync(id, v)
-{
-    if (v != $("#" + id).slider( "value" )) {
-        $("#" + id).slider( "value", v );
-        ui_list[id + "/func"](v);
-    }
-}
-
 function onLoadAll()
 {
     document.getElementById("loading").style.display = "none";
+
     document.getElementById("showme").style.display = "block";
+
     $( "#accordion" ).accordion({heightStyle: "content"});
 
     make_ui_intervalometer();
@@ -280,82 +160,110 @@ function onLoadAll()
     make_ui_analysisparameters();
     make_ui_console();
 
-    $("#btn_hotpixels").button().click(function( event ) {
-        console.log("click btn_hotpixels");
-        hotpixels = [];
-        var pixstr = "";
-        var settingsStr = "";
-        //if (lastStatus != null) {
-        //    var stars = lastStatus["stars"];
-        //    stars.forEach(function(ele, idx) {
-        //        //if (ele["brightness"] % 2 == 1) // odd number means contains saturated pixel
-        //        // nevermind, a hot pixel isn't necessarily saturated
-        //        {
-        //            hotpixels.push([ele["cx"], ele["cy"]]);
-        //        }
-        //    });
-        //}
-        //else {
-        //    pixstr = "Error: no data from camera";
-        //}
-        var divele = document.getElementById("hotpixel_list");
-        if (hotpixels.length > 0)
-        {
-            pixstr += "<ol>";
-            hotpixels.forEach(function(ele, idx) {
-                pixstr += "<li>( " + math_roundPlaces(ele[0], 1) + " , " + math_roundPlaces(ele[1], 1) + " )</li>";
-                settingsStr += math_roundPlaces(ele[0], 1) + "," + math_roundPlaces(ele[1], 1) + ";";
-            });
-            pixstr += "</ol>";
-            //settings["hotpixels"] = settingsStr;
-            //queueSettingsUpdate("hotpixels");
-        }
-        else
-        {
-            pixstr = "No hot-pixels detected by camera";
-        }
-        divele.innerHTML = pixstr;
-    });
-
-    $("#btn_forgethotpixels").button().click(function( event ) {
-        console.log("click btn_forgethotpixels");
-        hotpixels = [];
-        var divele = document.getElementById("hotpixel_list");
-        divele.innerHTML = "";
-        //settings["hotpixels"] = "";
-        //queueSettingsUpdate("hotpixels");
-    });
-
     $(window).on('resize', function(e) {
-        needUiRefresh = true; // this will force a re-scaling of the drawn view
+        needUiRefresh = true;
+        errgraph_onresize();
     });
 
-    //setTimeout(() => { startStatusUpdate(); }, 1000);
-
-    websocket_init();
+    websocket_init("websocket");
+    document.getElementById("loading_connecting").style.display = "block";
 }
 
-function websocket_init()
+function websock_onerror(evt)
 {
-    var cur_url = window.location.href;
-    var r = new RegExp("([a-z]+):\/\/([^\/]+)(.*)", 'i');
-    var res = r.exec(cur_url);
-    var domain = res[2];
-    var sock_url = "ws://" + domain + "/websocket";
-    console.log(sock_url);
-    socket = new WebSocket(sock_url);
+    msglog_appendLocal("WEBSOCK ERR: " + evt.message);
+    websocket_init("websocket");
+    document.getElementById("connection_lost").style.display = "block";
+}
 
-    socket.onopen = function (evt) {
-        console.log("websocket open");
-    };
+function websock_onopen(evt)
+{
+    document.getElementById("connection_lost").style.display = "none";
+    msglog_appendLocal("websocket opened!");
+    if (websock_retransmit() == false)
+    {
+        miscCmd("getsettings");
+        document.getElementById("loading").style.display = "none";
+        document.getElementById("loading_connecting").style.display = "none";
+        document.getElementById("loading_settings").style.display = "block";
+    }
+}
 
-    socket.onmessage = function (evt) {
-        console.log("websocket message " + evt.data);
-    };
+function websock_onmessage_jsonobj(obj)
+{
+    document.getElementById("connection_lost").style.display = "none";
+    if (obj["pkt_type"] == "settings")
+    {
+        document.getElementById("loading_settings").style.display = "none";
+        document.getElementById("loading_almost").style.display = "block";
+        autoFillSettingsUi(obj);
+    }
+    else if (obj["pkt_type"] == "status")
+    {
+        document.getElementById("loading_almost").style.display = "none";
+        handleCalibration(obj, "ra");
+        handleCalibration(obj, "dec");
+        handleMsgLogs(obj);
+        handlePulseLogs(obj);
+        imageStatsUpdate(obj);
+        hotpixelsInfoUpdate(obj);
+        if (("interval_state" in obj) && ("blub_remaining" in obj)) {
+            intervalometerUpdate(obj["interval_state"], obj["blub_remaining"]);
+        }
+        else {
+            console.log("intervalometer data missing from status"
+        }
+    }
+}
 
-    socket.onerror = function (evt) {
-        console.log("websocket error " + evt.message);
-        websocket_init();
+function autoFillSettingsUi(obj)
+{
+    for (let key in obj) {
+        if ((key in autopopulate_func_list) != false) {
+            autopopulate_func_list[key](obj[key]);
+        }
+    }
+}
+
+function miscCmd(x)
+{
+    var obj = {}
+    obj["pkt_type"] = "misc_cmd";
+    obj["time"]     = time_getNowEpoch();
+    obj["cmd"]      = x;
+    if (socket != null) {
+        socket.send(obj);
+    }
+    else {
+        msglog_appendLocal("WEBSOCK ERR: no socket to send misc. cmd. with");
+    }
+}
+
+function guideCmd(x)
+{
+    var obj = {}
+    obj["pkt_type"] = "guide_cmd";
+    obj["time"]     = time_getNowEpoch();
+    obj["cmd"]      = x;
+    if (socket != null) {
+        socket.send(obj);
+    }
+    else {
+        msglog_appendLocal("WEBSOCK ERR: no socket to send guide cmd. with");
+    }
+}
+
+function selectStar(x, y)
+{
+    var obj = {}
+    obj["pkt_type"] = "select_star";
+    obj["time"]     = time_getNowEpoch();
+    obj["cmd"]      = x;
+    if (socket != null) {
+        socket.send(obj);
+    }
+    else {
+        msglog_appendLocal("WEBSOCK ERR: no socket to send select-star cmd. with");
     }
 }
 
@@ -365,11 +273,15 @@ function websocket_init()
 <body onload="onLoadAll();">
 <div id="loading"><h2>OpenMV AutoGuider</h2><br /><h2>Loading, Please Wait! <span id="load_tries"></span></h2></div>
 <div id="loading_failed" style="display:none;"><h1>Loading FAILED! Please refresh the page.</h1></div>
-<div id="loading_almost" style="display:none;"><h2>OpenMV AutoGuider</h2><br /><h2>Settings loaded! Waiting for star data...</h2></div>
+<div id="loading_connecting" style="display:none;"><h2>OpenMV AutoGuider</h2><br /><h2>Connecting to guide-cam...</h2></div>
+<div id="loading_settings" style="display:none;"><h2>OpenMV AutoGuider</h2><br /><h2>Fetching settings...</h2></div>
+<div id="loading_almost" style="display:none;"><h2>OpenMV AutoGuider</h2><br /><h2>Connected and settings loaded! Waiting for status data...</h2></div>
 <div id="showme" style="display:none;">
 
 <div style="width:100%"><fieldset style="padding-top: 1em;"><legend>OpenMV AutoGuider</legend><div id="viewme" style="display: inline-block; width:100%; padding: 0 0 0 0; margin: 0 0 0 0;"><div id="viewmejpeg" style="position: relative; z-index: 1"></div><div id="viewmesvg" style="position: relative; z-index: 2; top: 0; left: 0;">&nbsp;&nbsp;Please wait for image...</div>
 </div></fieldset></div>
+
+<div id="div_errgraph"><fieldset><legend>Error Graph</legend><div id="errgraph-chart" class="ct-graph ct-major-eleventh"><div style="text-align:right;position:relative;top:-3px;"><span style="color:#FF4444"><b>&mdash;</b>&nbsp;RA&nbsp;<span>&nbsp;&nbsp;<span style="color:#4488FF">&nbsp;<b>&mdash;</b>&nbsp;DEC<span></div></fieldset></div>
 
 <div id="connection_lost" class="ui-widget" style="display: none;"><div id="connection_lost_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p>Connection LOST! Attempting to re-establish...</p></div></div>
 <div id="memory_error" class="ui-widget" style="display: none;"><div id="memory_error_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p>INTERNAL MEMORY ERROR! Please check the camera exposure settings!</p></div></div>
@@ -377,11 +289,11 @@ function websocket_init()
 <div id="mount_hardware_error" class="ui-widget" style="display: none;"><div id="mount_hardware_error_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p>MOUNT HARDWARE ERROR!<br />Do a full power-off-power-on reset if the problem is not solved.</p></div></div>
 <div id="camera_hardware_wait" class="ui-widget" style="display: none;"><div id="camera_hardware_wait_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p>WAITING for camera to load new exposure settings...</p></div></div>
 
+<div id="div_starprofile" style="display:none;"><fieldset><legend>Star Profile</legend><div id="starprofile_div"></div></fieldset></div>
+
+
+
 <div id="accordion">
-  <h3>Auto-Guidance</h3>
-  <div>
-    <p>TODO: main controls here</p>
-  </div>
   <h3>Intervalometer</h3>
   <div>
     <script type="text/javascript">
@@ -550,6 +462,16 @@ function intervalometerCountDown()
 function intervalometerCmd(cmd)
 {
     intervalometerUpdate(cmd, settings["intervalometer_bulb_time"] * 1000);
+    var obj = {}
+    obj["pkt_type"] = "intervalometer_cmd";
+    obj["time"]     = time_getNowEpoch();
+    obj["cmd"]      = x;
+    if (socket != null) {
+        socket.send(obj);
+    }
+    else {
+        msglog_appendLocal("WEBSOCK ERR: no socket to send intervalometer cmd. with");
+    }
 }
     </script>
     <p><button id="btn_interval_loop">Loop</button>&nbsp;<button id="btn_interval_single">Single</button>&nbsp;<button id="btn_interval_stopnext">Stop On Next</button>&nbsp;<button id="btn_interval_stopnow">Stop Now</button></p>
@@ -615,6 +537,72 @@ function make_ui_guidecamconfig()
     makeSlider("slider_imgerrpanicthresh" , 1, 100, 3, 1, "0", "",            "panicthresh_expoerr");
 }
 
+function imageStatsUpdate(obj)
+{
+    var ele = document.getElementById("div_histogram");
+    var stats_str = "";
+    if (obj !== undefined && typeof obj !== 'undefined') {
+        stats_str = "no data available";
+        ele.innerHTML = stats_str;
+        return;
+    }
+    else if (('img' in obj) == false)
+    {
+        stats_str = "no image data    \t";
+    }
+    else if (obj["img"] == false || obj["img"] == null)
+    {
+        stats_str = "no image captured    \t";
+    }
+    else
+    {
+        stats_str = "num of stars: " + star_cnt.toString() + "&nbsp;&nbsp;&nbsp;&nbsp;";
+        stats_str += "image mean: "  + math_roundPlaces(obj["img_mean"], 1).toString() + "/255    \t";
+        stats_str += "image stdev: " + math_roundPlaces(obj["img_stdev"], 1).toString() + "/255    \t";
+        stats_str += "image max: " + Math.round(obj["img_max"]).toString() + "/255    \t";
+        stats_str += "image min: " + Math.round(obj["img_min"]).toString() + "/255    \t";
+    }
+
+    stats_str += "exposure code: ";
+
+    if (('expo_code' in obj) == false)
+    {
+        stats_str += "missing code";
+    }
+    else
+    {
+        var exposure_code = obj["expo_code"];
+        var exposure_code_txt = getExposureCode(exposure_code);
+        stats_str += exposure_code_txt;
+
+        if (exposure_code == 6) {
+            document.getElementById("memory_error").style.display = "block";
+        }
+        else {
+            document.getElementById("memory_error").style.display = "none";
+        }
+
+        if (exposure_code == 7) {
+            document.getElementById("camera_hardware_error").style.display = "block";
+        }
+        else {
+            document.getElementById("camera_hardware_error").style.display = "none";
+        }
+
+        if (exposure_code == 8) {
+            document.getElementById("camera_hardware_wait").style.display = "block";
+        }
+        else {
+            document.getElementById("camera_hardware_wait").style.display = "none";
+        }
+    }
+
+    while (stats_str.includes(" ")) {
+        stats_str = stats_str.replace(" ", "&nbsp;");
+    }
+    ele.innerHTML = stats_str;
+}
+
     </script>
     <div><button id="btn_streamimg">Stream Image Full Screen</button><button id="btn_streamimg_star">Stream Image of Selected Star</button></div><br />
     <div><fieldset><legend>Image Statistics</legend>
@@ -652,7 +640,7 @@ function make_ui_mountconfig()
     makeSlider("slider_pulse_settle", 0, 500, 50, 1, "0 ms", " ms", "move_grace");
     makeSlider("slider_dirchangehyster", 0, 5000, 500, 1, "0 ms", " ms", "backlash_hyster");
     makeSlider("slider_backlashlimit", 0, 10000, 5000, 100, "auto", " ms", "backlash_limit");
-    makeCheckbox("chk_flip_ra", false, "flip_ra");
+    makeCheckbox("chk_flip_ra" , false, "flip_ra" );
     makeCheckbox("chk_flip_dec", false, "flip_dec");
 }
     </script>
@@ -766,24 +754,12 @@ function make_ui_calibration()
     <script type="text/javascript">
 function make_ui_analysisparameters()
 {
-    makeSlider("slider_multistar", 1, 100, 1, 1, "0", "", function(v) {
-        queueSettingsUpdate("multistar_cnt_max", v);
-    });
-    makeSlider("slider_motionerrortolerance", 1, 200, 50, 1, "0 pix", " pix", function(v) {
-        queueSettingsUpdate("starmove_tolerance", v);
-    });
-    makeSlider("slider_motionerrorpanicthresh", 0, 500, 50, 1, "0 pix", " pix", function(v) {
-        queueSettingsUpdate("panicthresh_move_err", v);
-    });
-    makeSlider("slider_motionerrorcountpanicthresh", 1, 100, 2, 1, "0", "", function(v) {
-        queueSettingsUpdate("panicthresh_move_cnt", v);
-    });
-    makeSlider("slider_multistarratingthresh", 0, 100, 50, 1, "0 %", " %", function(v) {
-        queueSettingsUpdate("multistar_ratings_thresh", v);
-    });
-    makeSlider("slider_clustertolerance", 0, 500, 100, 1, "0 pix", " pix", function(v) {
-        queueSettingsUpdate("clustering_tolerance", v);
-    });
+    makeSlider("slider_multistar", 1, 100, 1, 1, "0", "", "multistar_cnt_max");
+    makeSlider("slider_motionerrortolerance", 1, 200, 50, 1, "0 pix", " pix", "starmove_tolerance");
+    makeSlider("slider_motionerrorpanicthresh", 0, 500, 50, 1, "0 pix", " pix", "panicthresh_move_err");
+    makeSlider("slider_motionerrorcountpanicthresh", 1, 100, 2, 1, "0", "", "panicthresh_move_cnt");
+    makeSlider("slider_multistarratingthresh", 0, 100, 50, 1, "0 %", " %", "multistar_ratings_thresh");
+    makeSlider("slider_clustertolerance", 0, 500, 100, 1, "0 pix", " pix", "clustering_tolerance");
 }
     </script>
     <p>These parameters are used to fine tune the star motion analysis software.</p>
@@ -817,11 +793,71 @@ function make_ui_analysisparameters()
   </div>
   <h3>Hot Pixels</h3>
   <div>
+    <script type="text/javascript">
+function make_ui_hotpixels()
+{
+    makeButton("btn_hotpixels", function() {
+        miscCmd("hotpixels_save");
+        ui_list["btn_hotpixels"]      .button("option", "disabled", true);
+    });
+    makeButton("btn_forgethotpixels", function() {
+        miscCmd("hotpixels_disable");
+        ui_list["btn_forgethotpixels"].button("option", "disabled", true);
+    });
+    makeButton("btn_loadhotpixels", function() {
+        miscCmd("hotpixels_load");
+    });
+}
+
+function hotpixelsInfoUpdate(obj)
+{
+    var ele = document.getElementById("hotpixel_info");
+    if (obj !== undefined && typeof obj !== 'undefined') {
+        ele.innerHTML = "no data available";
+        ui_list["btn_hotpixels"]      .button("option", "disabled", false);
+        ui_list["btn_forgethotpixels"].button("option", "disabled", true);
+        ui_list["btn_loadhotpixels"]  .button("option", "disabled", false);
+        return;
+    }
+    if (('hotpix' in obj) == false)
+    {
+        ele.innerHTML = "no hot-pixel info available";
+        ui_list["btn_hotpixels"]      .button("option", "disabled", false);
+        ui_list["btn_forgethotpixels"].button("option", "disabled", true);
+        ui_list["btn_loadhotpixels"]  .button("option", "disabled", false);
+        return;
+    }
+    if (obj["hotpix"] == false || obj["hotpix"] == null)
+    {
+        ele.innerHTML = "no hot-pixels";
+        ui_list["btn_hotpixels"]      .button("option", "disabled", false);
+        ui_list["btn_forgethotpixels"].button("option", "disabled", true);
+        ui_list["btn_loadhotpixels"]  .button("option", "disabled", false);
+        return;
+    }
+    var cnt = obj["hotpix_cnt"];
+    if (obj["hotpix_used"] != false)
+    {
+        ele.innerHTML = cnt.toString() + " hot-pixels being used. Currently removing " + obj["hotpix_last"].toString() + " false stars.";
+        ui_list["btn_hotpixels"]      .button("option", "disabled", true);
+        ui_list["btn_forgethotpixels"].button("option", "disabled", false);
+        ui_list["btn_loadhotpixels"]  .button("option", "disabled", true);
+    }
+    else
+    {
+        ele.innerHTML = cnt.toString() + " hot-pixels registered, but not being used.";
+        ui_list["btn_hotpixels"]      .button("option", "disabled", false);
+        ui_list["btn_forgethotpixels"].button("option", "disabled", true);
+        ui_list["btn_loadhotpixels"]  .button("option", "disabled", false);
+    }
+}
+
+    </script>
     <p>If the camera gets too hot, there will be pixels that appear to be stuck as white. These stuck pixels will be falsely detected as stars. You will notice these pixels when you see stars that do not move even though you are moving the camera around.</p>
     <p>It is possible to memorize which pixels are stuck so that they are removed from the list of stars. To do so: <ol><li>turn up the guide-cam gain and guide-cam shutter time slightly</li><li>cover up the guide-camera completely</li><li>click the "capture hot pixels" button</li><li>restore your original guide-cam settings</li></ol></p>
     <p>Think of this as taking a "dark frame" but not really the same thing.</p>
-    <p><button id="btn_hotpixels">Capture Hot Pixels</button><button id="btn_forgethotpixels">Forget Hot Pixels</button></p>
-    <p><fieldset><legend>Hot Pixel List</legend><div id="hotpixel_list"></div></fieldset></p>
+    <p><button id="btn_hotpixels">Capture Hot Pixels</button><button id="btn_forgethotpixels">Forget Hot Pixels</button><button id="btn_loadhotpixels">Load Hot Pixels File</button></p>
+    <p><fieldset><legend>Hot Pixel Info</legend><div id="hotpixel_info"></div></fieldset></p>
   </div>
   <h3>Console</h3>
   <div>
@@ -851,6 +887,14 @@ function msglog_append(txt)
     var old = ele.innerHTML;
     ele.innerHTML = txt + "\r\n<br />\r\n" + old;
 }
+
+function msglog_appendLocal(txt)
+{
+    var ele = document.getElementById("div_msglog");
+    var old = ele.innerHTML;
+    ele.innerHTML = "[" + fmtTime(new Date()) + "]: " + txt + "\r\n<br />\r\n" + old;
+}
+
     </script>
     <style type="text/css">
 .consoleinput-textfield {
@@ -869,6 +913,9 @@ function msglog_append(txt)
     <fieldset><legend>Messages</legend><div id="div_msglog" style="font-family: monospace; color: #8F8;"></div><br /><button id="btn_consoleclear">Clear</button></div></fieldset>
   </div>
 </div><!-- accordion -->
+
+
+
 </div><!-- showme -->
 </body>
 </html>
