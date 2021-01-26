@@ -642,10 +642,10 @@ function make_ui_guidecamconfig()
         window.location.href = "/stream?zoom";
     });
 
-    makeSlider("slider_gain"              , 0, 128, 32, 8, "0 dB", " dB",     "gain");
-    makeSlider("slider_shutter"           , 100, 3000, 1000, 100, "0", " ms", "shutter");
-    makeSlider("slider_starthresh"        , 0, 255, 0, 1, "auto", "/255",     "thresh");
-    makeSlider("slider_imgerrpanicthresh" , 1, 100, 3, 1, "0", "",            "panicthresh_expoerr");
+    makeSlider("slider_gain"              , 0  , 128 , 32  , 8  , "0 dB", " dB" , "guidecam_gain"      );
+    makeSlider("slider_shutter"           , 100, 3000, 1000, 100, "0"   , " ms" , "guidecam_shutter"   );
+    makeSlider("slider_starthresh"        , 0  , 255 , 0   , 1  , "auto", "/255", "guidecam_thresh"    );
+    makeSlider("slider_imgerrpanicthresh" , 1  , 100 , 3   , 1  , "0"   , ""    , "panicthresh_expoerr");
 }
 
 function imageStatsUpdate(obj)
@@ -719,7 +719,7 @@ function imageStatsUpdate(obj)
         <div class="divTable">
             <div class="divTableBody">
                 <div class="divTableRow">
-                    <div class="divTableCell divTableCellLeft"><button id="btn_streamimg">Stream Image Full Screen</button></div>
+                    <div class="divTableCell divTableCellLeft"><button id="btn_streamimg"      >Stream Image Full Screen</button></div>
                     <div class="divTableCell divTableCellFill">&nbsp;</div>
                     <div class="divTableCell divTableCellRight"><button id="btn_streamimg_star">Stream Image of Selected Star</button></div>
                 </div>
@@ -755,12 +755,15 @@ function imageStatsUpdate(obj)
     <script type="text/javascript">
 function make_ui_mountconfig()
 {
-    makeSlider("slider_pulse_minimum", 10, 500, 50, 1, "0 ms", " ms", "min_pulse_wid");
-    makeSlider("slider_pulse_maximum", 0, 3000, 900, 100, "auto", " ms", "max_pulse_wid");
-    makeSlider("slider_pulse_calistep", 100, 5000, 900, 100, "0 ms", " ms", "calibration_pulse", "slider_pulse_calistep2");
-    makeSlider("slider_pulse_settle", 0, 500, 50, 1, "0 ms", " ms", "move_grace");
-    makeSlider("slider_dirchangehyster", 0, 5000, 500, 1, "0 ms", " ms", "backlash_hyster");
-    makeSlider("slider_backlashlimit", 0, 10000, 5000, 100, "auto", " ms", "backlash_limit");
+    makeSlider("slider_pulse_minimum"      , 10 , 500  , 50  , 1  , "0 ms", " ms", "min_pulse_wid");
+    makeSlider("slider_pulse_maximum"      , 0  , 3000 , 900 , 100, "auto", " ms", "max_pulse_wid");
+    makeSlider("slider_pulse_calistep_ra"  , 100, 5000 , 900 , 100, "0 ms", " ms", "calibration_pulse_ra" , "slider_pulse_calistep_ra_2" );
+    makeSlider("slider_pulse_calistep_dec" , 100, 5000 , 900 , 100, "0 ms", " ms", "calibration_pulse_dec", "slider_pulse_calistep_dec_2");
+    makeSlider("slider_pulse_settle"       , 0  , 500  , 50  , 1  , "0 ms", " ms", "move_grace"         );
+    makeSlider("slider_dirchangehyster_ra" , 0  , 5000 , 0   , 1  , "0 ms", " ms", "backlash_hyster_ra" );
+    makeSlider("slider_backlashlimit_ra"   , 0  , 10000, 0   , 100, "auto", " ms", "backlash_limit_ra"  );
+    makeSlider("slider_dirchangehyster_dec", 0  , 5000 , 500 , 1  , "0 ms", " ms", "backlash_hyster_dec");
+    makeSlider("slider_backlashlimit_dec"  , 0  , 10000, 5000, 100, "auto", " ms", "backlash_limit_dec" );
     makeCheckbox("chk_flip_ra" , false, "flip_ra" );
     makeCheckbox("chk_flip_dec", false, "flip_dec");
 }
@@ -771,17 +774,26 @@ function make_ui_mountconfig()
     <div><fieldset><legend>Maximum Pulse: <span id="slider_pulse_maximum_handle"></span></legend>
         <div id="slider_pulse_maximum"></div>
     </fieldset></div>
-    <div><fieldset><legend>Calibration Step Pulse: <span id="slider_pulse_calistep_handle"></span></legend>
-        <div id="slider_pulse_calistep"></div>
+    <div><fieldset><legend>Calibration Step Pulse (R.A.): <span id="slider_pulse_calistep_ra_handle"></span></legend>
+        <div id="slider_pulse_ra_calistep"></div>
+    </fieldset></div>
+    <div><fieldset><legend>Calibration Step Pulse (Dec.): <span id="slider_pulse_calistep_ra_handle"></span></legend>
+        <div id="slider_pulse_calistep_ra"></div>
     </fieldset></div>
     <div><fieldset><legend>Settle Time: <span id="slider_pulse_settle_handle"></span></legend>
         <div id="slider_pulse_settle"></div>
     </fieldset></div>
-    <div><fieldset><legend>Direction Change Hysteresis: <span id="slider_dirchangehyster_handle"></span></legend>
-        <div id="slider_dirchangehyster"></div>
+    <div><fieldset><legend>Direction Change Hysteresis (R.A.): <span id="slider_dirchangehyster_ra_handle"></span></legend>
+        <div id="slider_dirchangehyster_ra"></div>
     </fieldset></div>
-    <div><fieldset><legend>Direction Bias Limiter: <span id="slider_backlashlimit_handle"></span></legend>
-        <div id="slider_backlashlimit"></div>
+    <div><fieldset><legend>Direction Bias Limiter (R.A.): <span id="slider_backlashlimit_ra_handle"></span></legend>
+        <div id="slider_backlashlimit_ra"></div>
+    </fieldset></div>
+    <div><fieldset><legend>Direction Change Hysteresis (Dec.): <span id="slider_dirchangehyster_dec_handle"></span></legend>
+        <div id="slider_dirchangehyster_dec"></div>
+    </fieldset></div>
+    <div><fieldset><legend>Direction Bias Limiter (Dec.): <span id="slider_backlashlimit_dec_handle"></span></legend>
+        <div id="slider_backlashlimit_dec"></div>
     </fieldset></div>
     <br />
     <div><span><label for="chk_flip_ra">Flip RA?</label><input type="checkbox" name="chk_flip_ra" id="chk_flip_ra"></span>&nbsp;&nbsp;&nbsp;&nbsp;<span><label for="chk_flip_dec">Flip DEC?</label><input type="checkbox" name="chk_flip_dec" id="chk_flip_dec"></span></div>
@@ -793,6 +805,8 @@ function make_ui_mountconfig()
         <p>Tracking errors of an electronic mount usually are biased in one direction. These mounts also have some backlash in their gears. This means that changing the direction of consecutive corrective movements is a bad idea as it can become ineffective, or over-correct. The corrective-movement-calculation firmware will track the direction bias, and if it detects a bias, it will lock-in a direction, preventing movements in the other direction. The "<b>Direction Change Hysteresis</b>" value represents how easy it is to detect the bias, and also how easy it is to change that bias.</p>
         <p>For example, the hysteresis value is 100 ms, a star moved and required a 100 ms movement to the right, the firmware will remember that the bias is towards the right. Then, if the star moved and required a 50 ms move to the left, the command to move will not actually be given, because the bias is towards the right, and all left-ward commands will be ignored. But if the star moved and required 200 ms move to the left, then it will actually perform the 200 ms move to the left, because with 200 ms, it has crossed the direction change hysteresis value.</p>
         <p>This technique helps the most with "momentary movements that naturally returns to original position", such as movement caused by wind. These types of moments shouldn't require correction, as the risk of (and penalty for) over-correction is high. It is similar to the "<b>ResistSwitch</b>" algorithm present in PHD2.</p>
+        <p>This feature is most useful for the declination axis because it shouldn't need to actually spin unless there's a bad polar-alignment, and in that case, the declination motor should only spin in one direction, never the other direction.</p>
+        <p>For the R.A. axis, the axis is always spinning and the small imperfections of the gears. Locking in the direction of correction would make sense for small imperfections of the gears, but not larger ones.</p>
         <p>"<b>Direction Bias Limiter</b>" is an internal maximum limit value for the accumulated value that determines the direction bias. Leave it at zero for it to be automatic. A large value will cause direction bias to never switch directions! The appropriate hysteresis value and limit value are different for every tracking telescope mount. More backlash requires higher values.</p>
     </p></fieldset></div>
   </div>
@@ -801,10 +815,11 @@ function make_ui_mountconfig()
     <script type="text/javascript">
 function make_ui_calibration()
 {
-    makeSlider("slider_pulse_calistep2", 100, 5000, 900, 100, "0 ms", " ms", "calibration_pulse", "slider_pulse_calistep");
-    makeSlider("slider_calistepcnt", 1, 50, 10, 1, "0", "", "calib_points_cnt");
-    makeSlider("slider_correctionscale_ra", 75, 133, 100, 1, "0 %", " %", "correction_scale_ra");
-    makeSlider("slider_correctionscale_dec", 75, 133, 100, 1, "0 %", " %", "correction_scale_dec");
+    makeSlider("slider_pulse_calistep_ra_2" , 100, 5000, 900, 100, "0 ms", " ms", "calibration_pulse_ra" , "slider_pulse_calistep_ra");
+    makeSlider("slider_pulse_calistep_dec_2", 100, 5000, 900, 100, "0 ms", " ms", "calibration_pulse_dec", "slider_pulse_calistep_dec");
+    makeSlider("slider_calistepcnt"         , 1  , 50  , 10 , 1  , "0"   , ""   , "calib_points_cnt"    );
+    makeSlider("slider_correctionscale_ra"  , 75 , 133 , 100, 1  , "0 %" , " %" , "correction_scale_ra" );
+    makeSlider("slider_correctionscale_dec" , 75 , 133 , 100, 1  , "0 %" , " %" , "correction_scale_dec");
     makeButton("btn_calib_ra", function() {
         guideCmd(4); // GUIDESTATE_CALIBRATING_RA
         document.getElementById("calibinfo_ra").innerHTML = "Running Calibration...";
@@ -852,8 +867,11 @@ function make_ui_calibration()
     <div><button id="btn_calib_save">Save File</button>&nbsp;&nbsp;&nbsp;&nbsp;<button id="btn_calib_load">Load File</button>&nbsp;&nbsp;&nbsp;&nbsp;<label for="chk_visualize_cali">Visualize?</label><input type="checkbox" name="chk_visualize_cali" id="chk_visualize_cali"></span></div>
     <br />
 
-    <div><fieldset><legend>Calibration Step Pulse: <span id="slider_pulse_calistep2_handle"></span></legend>
-        <div id="slider_pulse_calistep2"></div>
+    <div><fieldset><legend>Calibration Step Pulse (R.A.): <span id="slider_pulse_calistep_ra_2_handle"></span></legend>
+        <div id="slider_pulse_calistep_ra_2"></div>
+    </fieldset></div>
+    <div><fieldset><legend>Calibration Step Pulse (Dec.): <span id="slider_pulse_calistep_dec_2_handle"></span></legend>
+        <div id="slider_pulse_calistep_dec_2"></div>
     </fieldset></div>
     <div><fieldset><legend>Calibration Step Count: <span id="slider_calistepcnt_handle"></span></legend>
         <div id="slider_calistepcnt"></div>

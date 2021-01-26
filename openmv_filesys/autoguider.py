@@ -94,9 +94,9 @@ class AutoGuider(object):
         self.hotpixels_eff = 0
 
         self.settings = {}
-        self.settings.update({"gain"                     : self.cam.gain})
-        self.settings.update({"shutter"                  : self.cam.shutter // 1000})
-        self.settings.update({"thresh"                   : 0})
+        self.settings.update({"guidecam_gain"            : self.cam.gain})
+        self.settings.update({"guidecam_shutter"         : self.cam.shutter // 1000})
+        self.settings.update({"guidecam_thresh"          : 0})
         self.settings.update({"use_hotpixels"            : False})
         self.settings.update({"panicthresh_expoerr"      : 3})
         self.settings.update({"panicthresh_move_err"     : 50})
@@ -109,7 +109,8 @@ class AutoGuider(object):
         self.settings.update({"intervalometer_bulb_time" : 30})
         self.settings.update({"intervalometer_gap_time"  : 2})
         self.settings.update({"intervalometer_digital"   : False})
-        self.settings.update({"calibration_pulse"        : 750})
+        self.settings.update({"calibration_pulse_ra"     : 750})
+        self.settings.update({"calibration_pulse_dec"    : 750})
         self.settings.update({"calib_points_cnt"         : 10})
         self.settings.update({"correction_scale_ra"      : 100})
         self.settings.update({"correction_scale_dec"     : 100})
@@ -119,10 +120,14 @@ class AutoGuider(object):
         self.settings.update({"min_pulse_wid"            : 50})
         self.settings.update({"max_pulse_wid"            : (self.cam.shutter // 1000) - 100})
         self.settings.update({"net_quiet_time"           : 100})
-        self.settings.update({"backlash_hyster"          : 500})
-        self.settings.update({"backlash_limit"           : 1000})
-        self.settings.update({"backlash_reduc"           : 0})
-        self.settings.update({"backlash_lock"            : False})
+        self.settings.update({"backlash_hyster_ra"       : 0})
+        self.settings.update({"backlash_hyster_dec"      : 500})
+        self.settings.update({"backlash_limit_ra"        : 0})
+        self.settings.update({"backlash_limit_dec"       : 1000})
+        self.settings.update({"backlash_reduc_ra"        : 0})
+        self.settings.update({"backlash_reduc_dec"       : 0})
+        self.settings.update({"backlash_lock_ra"         : False})
+        self.settings.update({"backlash_lock_dec"        : False})
         self.settings.update({"multistar_cnt_min"        : 1})
         self.settings.update({"multistar_cnt_max"        : 10})
         self.settings.update({"multistar_ratings_thresh" : 50})
@@ -384,14 +389,14 @@ class AutoGuider(object):
             pass
 
     def apply_settings(self):
-        self.backlash_ra.hysteresis  = v = self.settings["backlash_hyster"]
-        self.backlash_dec.hysteresis = v
-        self.backlash_ra.max_limit   = v = self.settings["backlash_limit"]
-        self.backlash_dec.max_limit  = v
-        self.backlash_ra.reduction   = v = self.settings["backlash_reduc"]
-        self.backlash_dec.reduction  = v
-        self.backlash_ra.hard_lock   = v = self.settings["backlash_lock"]
-        self.backlash_dec.hard_lock  = v
+        self.backlash_ra.hysteresis   = self.settings["backlash_hyster_ra"]
+        self.backlash_dec.hysteresis  = self.settings["backlash_hyster_dec"]
+        self.backlash_ra.max_limit    = self.settings["backlash_limit_ra"]
+        self.backlash_dec.max_limit   = self.settings["backlash_limit_dec"]
+        self.backlash_ra.reduction    = self.settings["backlash_reduc_ra"]
+        self.backlash_dec.reduction   = self.settings["backlash_reduc_dec"]
+        self.backlash_ra.hard_lock    = self.settings["backlash_lock_ra"]
+        self.backlash_dec.hard_lock   = self.settings["backlash_lock_dec"]
         guidepulser.set_flip_ra (self.settings["flip_ra" ])
         guidepulser.set_flip_dec(self.settings["flip_dec"])
         if self.settings["use_led"]:
@@ -413,7 +418,7 @@ class AutoGuider(object):
         if self.img is not None:
             self.histogram = self.img.get_histogram()
             self.img_stats = self.histogram.get_statistics()
-            latest_stars, code = star_finder.find_stars(self.img, hist = self.histogram, stats = self.img_stats, thresh = self.settings["thresh"], force_solve = True, guider = True)
+            latest_stars, code = star_finder.find_stars(self.img, hist = self.histogram, stats = self.img_stats, thresh = self.settings["guidecam_thresh"], force_solve = True, guider = True)
             self.dbg_t1 = pyb.millis()
             if self.simulator is not None:
                 latest_stars = self.simulator.get_stars(self, latest_stars)
@@ -571,10 +576,10 @@ class AutoGuider(object):
                         i = CALIIDX_DEC
                         dir = "DEC"
                     if self.calibration[i] is None:
-                        pulse_width = self.settings["calibration_pulse"]
+                        pulse_width = self.settings["calibration_pulse_" + dir.lower()]
                         if pulse_width <= 0:
                             # use automatic mode
-                            pulse_width = int(round(self.settings["shutter"] * 0.9))
+                            pulse_width = int(round(self.settings["guidecam_shutter"] * 0.9))
                         self.calibration[i] = guider_calibration.GuiderCalibration(virtual_star[0], virtual_star[1], pulse_width)
                     else:
                         self.calibration[i].append_pt(self.virtual_star)
@@ -649,7 +654,7 @@ class AutoGuider(object):
         if min_pulse_wid < 5:
             min_pulse_wid = 5
         if max_pulse_wid < 5:
-            max_pulse_wid = int(round(self.settings["shutter"] * 0.9 - 300))
+            max_pulse_wid = int(round(self.settings["guidecam_shutter"] * 0.9 - 300))
         if pulse_ra_abs < min_pulse_wid * 0.75:
             pulse_ra_abs = 0
             pulse_ra_ori = 0
@@ -775,7 +780,7 @@ class AutoGuider(object):
 
     def snap_start(self):
         try:
-            self.cam.init(gain_db = self.settings["gain"], shutter_us = self.settings["shutter"] * 1000, force_reset = self.cam_err)
+            self.cam.init(gain_db = self.settings["guidecam_gain"], shutter_us = self.settings["guidecam_shutter"] * 1000, force_reset = self.cam_err)
             while self.cam.check_init() == False:
                 self.task_network()
                 self.task_pulser()
