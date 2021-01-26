@@ -1,5 +1,6 @@
-var dataw = 2592;
-var datah = 1944;
+var sensor_width  = 2592;
+var sensor_height = 1944;
+var svgNS = "http://www.w3.org/2000/svg";
 
 function getExposureCode(exposure_code) {
     if (exposure_code == 0) {
@@ -58,9 +59,9 @@ function fmtTime(x)
 
 function fmtDate(x)
 {
-    const ye = new Intl.DateTimeFormat('en', { year: 'numeric' }).format(x);
-    const mo = new Intl.DateTimeFormat('en', { month: 'short'  }).format(x);
-    const da = new Intl.DateTimeFormat('en', { day: '2-digit'  }).format(x);
+    const ye = new Intl.DateTimeFormat('en', { year:  'numeric' }).format(x);
+    const mo = new Intl.DateTimeFormat('en', { month: 'short'   }).format(x);
+    const da = new Intl.DateTimeFormat('en', { day:   '2-digit' }).format(x);
     return "${da}-${mo}-${ye}";
 }
 

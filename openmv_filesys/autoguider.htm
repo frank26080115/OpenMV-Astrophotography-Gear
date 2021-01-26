@@ -829,6 +829,10 @@ function make_ui_calibration()
         miscCmd("calib_reset_dec");
         document.getElementById("calibinfo_dec").innerHTML = "None";
     });
+    makeCheckbox("chk_visualize_cali", false, function (x) {
+        viz_calib = x;
+        draw_guidescope();
+    });
 }
     </script>
     <p>Calibration is required before auto-guiding. It correlates how much a star mas moved in the guide-cam image, to how long of a movement command pulse needs to be. It also determines the angular orientation of the guide-camera.</p>
@@ -845,7 +849,7 @@ function make_ui_calibration()
     </fieldset></div>
     <br />
 
-    <div><button id="btn_calib_save">Save File</button>&nbsp;&nbsp;&nbsp;&nbsp;<button id="btn_calib_load">Load File</button></div>
+    <div><button id="btn_calib_save">Save File</button>&nbsp;&nbsp;&nbsp;&nbsp;<button id="btn_calib_load">Load File</button>&nbsp;&nbsp;&nbsp;&nbsp;<label for="chk_visualize_cali">Visualize?</label><input type="checkbox" name="chk_visualize_cali" id="chk_visualize_cali"></span></div>
     <br />
 
     <div><fieldset><legend>Calibration Step Pulse: <span id="slider_pulse_calistep2_handle"></span></legend>

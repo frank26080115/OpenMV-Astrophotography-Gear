@@ -145,7 +145,8 @@ class GuiderCalibration(object):
     def get_json_obj(self):
         obj = {}
         obj.update({"success"      : self.has_cal})
-        #obj.update({"points"       : self.accepted_points})
+        obj.update({"pulse_width"  : self.pulse_width})
+        obj.update({"points"       : self.accepted_points})
         obj.update({"points_cnt"   : len(self.accepted_points)})
         obj.update({"start_x"      : self.points[0][0]})
         obj.update({"start_y"      : self.points[0][1]})
@@ -160,6 +161,7 @@ class GuiderCalibration(object):
         if "str" in str(type(obj)):
             obj = ujson.loads(obj)
         self.has_cal = True
+        self.pulse_width = comutils.try_parse_setting(obj["pulse_width"])
         self.accepted_points = []
         self.points = [[comutils.try_parse_setting(obj["start_x"]),  comutils.try_parse_setting(obj["start_y"])]]
         pix_per_ms = comutils.try_parse_setting(obj["pix_per_ms"])

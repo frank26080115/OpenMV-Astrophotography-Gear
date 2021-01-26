@@ -221,8 +221,9 @@ class AutoGuider(object):
         state.update({"tgt_coord": self.target_coord})
         state.update({"ori_coord": self.origin_coord})
         state.update({"last_move_err": self.last_move_err})
-        state.update({"calib_ra" : self.calibration[CALIIDX_RA] .get_json_obj() if self.calibration[CALIIDX_RA]  is not None else None})
-        state.update({"calib_dec": self.calibration[CALIIDX_DEC].get_json_obj() if self.calibration[CALIIDX_DEC] is not None else None})
+        state.update({"multistar_cnt": self.multistar_cnt})
+        state.update({"calib_ra" : self.calibration[CALIIDX_RA] .get_json_obj(short = self.guide_state != GUIDESTATE_IDLE) if self.calibration[CALIIDX_RA]  is not None else None})
+        state.update({"calib_dec": self.calibration[CALIIDX_DEC].get_json_obj(short = self.guide_state != GUIDESTATE_IDLE) if self.calibration[CALIIDX_DEC] is not None else None})
         if self.hotpixels is not None:
             state.update({"hotpix"     : True})
             state.update({"hotpix_used": self.settings["use_hotpixels"]})
@@ -455,6 +456,7 @@ class AutoGuider(object):
                 virtual_star = [res[1], res[2]]
                 move_err     = res[3]
                 self.last_move_err = move_err
+                self.multistar_cnt = [res[4], res[5]]
 
                 self.dbg_t3 = pyb.millis()
                 if self.selected_star is None and real_star is not None:
