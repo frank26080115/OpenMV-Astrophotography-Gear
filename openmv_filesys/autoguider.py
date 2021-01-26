@@ -2,7 +2,7 @@ import micropython
 micropython.opt_level(2)
 
 import comutils
-import blobstar, astro_sensor, time_location, captive_portal, star_finder, guider_calibration, backlash_mgr
+import blobstar, astro_sensor, time_location, captive_portal, star_finder, guider_calibration, backlash_mgr, guide_filter
 import guidepulser
 import guidestar
 import exclogger
@@ -75,9 +75,11 @@ class AutoGuider(object):
         if guidepulser.get_hw_err() > 0:
             print("ERROR: I2C hardware failure")
 
-        self.calibration = [None, None]
-        self.backlash_ra = backlash_mgr.BacklashManager()
+        self.calibration  = [None, None]
+        self.backlash_ra  = backlash_mgr.BacklashManager()
         self.backlash_dec = backlash_mgr.BacklashManager()
+        self.advfilt_ra   = guide_filter.GuideFilter("ra")
+        self.advfilt_dec  = guide_filter.GuideFilter("dec")
 
         self.cam_err = 0
         self.expo_err = 0
@@ -530,6 +532,11 @@ class AutoGuider(object):
                             self.dither_frames = 0
                             self.backlash_ra.neutralize()
                             self.backlash_dec.neutralize()
+                            self.advfilt_ra.pause(True)
+                            self.advfilt_dec.pause(True)
+                    if self.guide_state == GUIDESTATE_GUIDING:
+                        self.advfilt_ra.pause(False)
+                        self.advfilt_dec.pause(False)
                     decided_pulse = self.pulse_to_target()
                     return decided_pulse
                 elif self.guide_state == GUIDESTATE_DITHER:
@@ -537,6 +544,8 @@ class AutoGuider(object):
                     self.dither_frames += 1
                     self.backlash_ra.neutralize()
                     self.backlash_dec.neutralize()
+                    self.advfilt_ra.pause(True)
+                    self.advfilt_dec.pause(True)
                     decided_pulse = self.pulse_to_target()
                     if decided_pulse <= self.settings["dither_calmness"]:
                         self.dither_calm += 1
@@ -555,6 +564,8 @@ class AutoGuider(object):
                             print("dither finished due to timeout")
                     if done_dither:
                         self.guide_state = GUIDESTATE_GUIDING
+                        self.advfilt_ra.pause(False)
+                        self.advfilt_dec.pause(False)
                         guidepulser.shutter(self.settings["intervalometer_bulb_time"])
                         self.intervalometer_timestamp = 0
                         if self.settings["intervalometer_digital"]:
@@ -563,6 +574,8 @@ class AutoGuider(object):
                 elif self.guide_state == GUIDESTATE_CALIBRATING_RA or self.guide_state == GUIDESTATE_CALIBRATING_DEC:
                     self.backlash_ra.neutralize()
                     self.backlash_dec.neutralize()
+                    self.advfilt_ra.pause(True)
+                    self.advfilt_dec.pause(True)
                     if self.selected_star is None:
                         self.log_msg("WARN: calibration requested without selected star")
                         self.guide_state = GUIDESTATE_IDLE
@@ -605,6 +618,8 @@ class AutoGuider(object):
                 elif self.guide_state == GUIDESTATE_IDLE:
                     self.backlash_ra.neutralize()
                     self.backlash_dec.neutralize()
+                    self.advfilt_ra.neutralize()
+                    self.advfilt_dec.neutralize()
                     self.dither_interval = 0
                     if self.selected_star is None:
                         return decided_pulse
@@ -644,6 +659,9 @@ class AutoGuider(object):
         pulse_dec_ori *= self.settings["correction_scale_dec"]
         pulse_ra_ori  /= 100
         pulse_dec_ori /= 100
+
+        pulse_ra_ori  = self.advfilt_ra.filter(pulse_ra_ori)
+        pulse_dec_ori = self.advfilt_dec.filter(pulse_dec_ori)
 
         pulse_ra_abs  = abs(pulse_ra_ori)
         pulse_dec_abs = abs(pulse_dec_ori)
@@ -731,6 +749,8 @@ class AutoGuider(object):
     def reset_guiding(self):
         self.backlash_ra.neutralize()
         self.backlash_dec.neutralize()
+        self.advfilt_ra.neutralize()
+        self.advfilt_dec.neutralize()
         self.selected_star   = None
         self.prev_stars      = None
         self.target_origin   = None
