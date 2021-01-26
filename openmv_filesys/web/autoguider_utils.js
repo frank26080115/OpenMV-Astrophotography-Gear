@@ -2,6 +2,20 @@ var sensor_width  = 2592;
 var sensor_height = 1944;
 var svgNS = "http://www.w3.org/2000/svg";
 
+const GUIDESTATE_IDLE              = 0;
+const GUIDESTATE_GUIDING           = 1;
+const GUIDESTATE_DITHER            = 2;
+const GUIDESTATE_PANIC             = 3;
+const GUIDESTATE_CALIBRATING_RA    = 4;
+const GUIDESTATE_CALIBRATING_DEC   = 5;
+
+const INTERVALSTATE_IDLE           = 0;
+const INTERVALSTATE_ACTIVE         = 1;
+const INTERVALSTATE_ACTIVE_GAP     = 2;
+const INTERVALSTATE_BULB_TEST      = 3;
+const INTERVALSTATE_HALT           = 4;
+const INTERVALSTATE_ENDING         = 5;
+
 function getExposureCode(exposure_code) {
     if (exposure_code == 0) {
         return "correct";

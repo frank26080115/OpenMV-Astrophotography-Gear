@@ -372,6 +372,7 @@ function selectStar(x, y)
 <div id="memory_error" class="ui-widget" style="display: none;"><div id="memory_error_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p>INTERNAL MEMORY ERROR! Please check the camera exposure settings!</p></div></div>
 <div id="camera_hardware_error" class="ui-widget" style="display: none;"><div id="camera_hardware_error_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p>CAMERA HARDWARE ERROR! Please check the camera exposure settings.<br />Lower the shutter time.<br />Do a full power-off-power-on reset if the problem is not solved.</p></div></div>
 <div id="mount_hardware_error" class="ui-widget" style="display: none;"><div id="mount_hardware_error_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p>MOUNT HARDWARE ERROR!<br />Do a full power-off-power-on reset if the problem is not solved.</p></div></div>
+<div id="guide_panic_error" class="ui-widget" style="display: none;"><div id="guide_panic_error_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p>Guiding Panic! Please check everything and re-start auto-guiding.</p></div></div>
 <div id="camera_hardware_wait" class="ui-widget" style="display: none;"><div id="camera_hardware_wait_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p>WAITING for camera to load new exposure settings...</p></div></div>
 
 <fieldset><legend>Status</legend>
@@ -427,28 +428,28 @@ function make_ui_intervalometer()
         ui_list["btn_interval_stopnow"] .button("option", "disabled", false);
         ui_list["btn_interval_single"]  .button("option", "disabled", true);
         ui_list["btn_interval_loop"]    .button("option", "disabled", true);
-        intervalometerCmd(1);
+        intervalometerCmd(INTERVALSTATE_ACTIVE);
     });
     makeButton("btn_interval_single", function( event ) {
         ui_list["btn_interval_stopnext"].button("option", "disabled", true);
         ui_list["btn_interval_stopnow"] .button("option", "disabled", false);
         ui_list["btn_interval_single"]  .button("option", "disabled", false);
         ui_list["btn_interval_loop"]    .button("option", "disabled", false);
-        intervalometerCmd(3);
+        intervalometerCmd(INTERVALSTATE_BULB_TEST);
     });
     makeButton("btn_interval_stopnext", function( event ) {
         ui_list["btn_interval_stopnext"].button("option", "disabled", true);
         ui_list["btn_interval_stopnow"] .button("option", "disabled", false);
         ui_list["btn_interval_single"]  .button("option", "disabled", true);
         ui_list["btn_interval_loop"]    .button("option", "disabled", true);
-        intervalometerCmd(5);
+        intervalometerCmd(INTERVALSTATE_ENDING);
     });
     makeButton("btn_interval_stopnow", function( event ) {
         ui_list["btn_interval_stopnext"].button("option", "disabled", true);
         ui_list["btn_interval_stopnow"] .button("option", "disabled", true);
         ui_list["btn_interval_single"]  .button("option", "disabled", false);
         ui_list["btn_interval_loop"]    .button("option", "disabled", false);
-        intervalometerCmd(4);
+        intervalometerCmd(INTERVALSTATE_HALT);
     });
     makeSliderLookup("slider_bulbtime", 6, bulb_times_lut, "intervalometer_bulb_time");
     makeSliderLookup("slider_ditherinterval", 2, dither_interval_lut, "dither_interval");
@@ -489,7 +490,7 @@ function intervalometerShow()
 
     var timetxt = (Math.round(intervalometer_remaining/100.0)/10.0).toFixed(1) + " sec Remaining";
 
-    if (intervalometer_status == 0)
+    if (intervalometer_status == INTERVALSTATE_IDLE)
     {
         ele.innerHTML = "IDLE";
         ui_list["btn_interval_stopnext"].button("option", "disabled", true);
@@ -501,9 +502,9 @@ function intervalometerShow()
             intervalometer_gotoidletimer = null;
         }
     }
-    else if (intervalometer_status == 1 || intervalometer_status == 2)
+    else if (intervalometer_status == INTERVALSTATE_ACTIVE || intervalometer_status == INTERVALSTATE_ACTIVE_GAP)
     {
-        if (guide_state != 2) {
+        if (guide_state != GUIDESTATE_DITHER) {
             ele.innerHTML = "Looping: " + timetxt;
         }
         else {
@@ -514,7 +515,7 @@ function intervalometerShow()
         ui_list["btn_interval_single"]  .button("option", "disabled", true);
         ui_list["btn_interval_loop"]    .button("option", "disabled", true);
     }
-    else if (intervalometer_status == 3)
+    else if (intervalometer_status == INTERVALSTATE_BULB_TEST)
     {
         ele.innerHTML = "Single-Shot: " + timetxt;
         if (intervalometer_remaining > 0)
@@ -537,7 +538,7 @@ function intervalometerShow()
             }
         }
     }
-    else if (intervalometer_status == 4)
+    else if (intervalometer_status == INTERVALSTATE_HALT)
     {
         ele.innerHTML = "Stopping Now";
         ui_list["btn_interval_stopnext"].button("option", "disabled", true);
@@ -550,7 +551,7 @@ function intervalometerShow()
             }, 1000);
         }
     }
-    else if (intervalometer_status == 5)
+    else if (intervalometer_status == INTERVALSTATE_ENDING)
     {
         ele.innerHTML = "Stopping On Next, " + timetxt;
         ui_list["btn_interval_stopnext"].button("option", "disabled", true);
@@ -821,11 +822,11 @@ function make_ui_calibration()
     makeSlider("slider_correctionscale_ra"  , 75 , 133 , 100, 1  , "0 %" , " %" , "correction_scale_ra" );
     makeSlider("slider_correctionscale_dec" , 75 , 133 , 100, 1  , "0 %" , " %" , "correction_scale_dec");
     makeButton("btn_calib_ra", function() {
-        guideCmd(4); // GUIDESTATE_CALIBRATING_RA
+        guideCmd(GUIDESTATE_CALIBRATING_RA);
         document.getElementById("calibinfo_ra").innerHTML = "Running Calibration...";
     });
     makeButton("btn_calib_dec", function() {
-        guideCmd(5); // GUIDESTATE_CALIBRATING_DEC
+        guideCmd(GUIDESTATE_CALIBRATING_DEC);
         document.getElementById("calibinfo_dec").innerHTML = "Running Calibration...";
     });
     makeButton("btn_calib_save", function() {
