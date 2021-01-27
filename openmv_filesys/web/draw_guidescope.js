@@ -27,30 +27,14 @@ function get_draw_scale(zoom, scale_vert)
 
 function draw_guidescope(obj)
 {
-    if (obj === undefined || typeof obj === 'undefined')
-    {
-        if (last_status !== undefined && typeof last_status !== 'undefined') {
-            obj = last_status;
-        }
-        else {
-            return;
-        }
-    }
-
-    if (obj == null)
-    {
-        if (last_status !== undefined && typeof last_status !== 'undefined') {
-            obj = last_status;
-        }
-        else {
-            return;
-        }
-    }
+    if (obj === undefined || typeof obj === 'undefined') { if (last_status !== undefined && typeof last_status !== 'undefined') { obj = last_status; } else { return; } }
+    if (obj == null) { if (last_status !== undefined && typeof last_status !== 'undefined') { obj = last_status; } else { return; } }
+    //if (obj == null) { return ; }
 
     var wrapdiv = document.getElementById("viewme");
     var imgdiv = document.getElementById("viewmesvg");
 
-    var ds = get_draw_scale(1, scale_vert);
+    var ds = get_draw_scale(1, false);
     var dataw    = ds[0];
     var datah    = ds[1];
     var imgw     = ds[2];
@@ -81,7 +65,8 @@ function draw_guidescope(obj)
     bgrect.setAttribute("height", imgh);
     bgrect.setAttribute("x", 0);
     bgrect.setAttribute("y", 0);
-    var bgc = Math.round(obj["img_mean"] * 0.9).toString();
+    var bgc = 0;
+    if (obj != null) { Math.round(obj["img_mean"] * 0.9).toString(); }
     bgrect.setAttribute("style", "fill:rgb(" + bgc + "," + bgc + "," + bgc + ");stroke:none;");
     svgele.appendChild(bgrect);
 
@@ -132,7 +117,7 @@ function draw_guidescope(obj)
         need_parse_stars = true;
     }
 
-    if (need_parse_stars) {
+    if (need_parse_stars && obj != null) {
         if (obj["stars"] != null && obj["stars"] != false) {
             star_list = parseStarsStr(obj["stars"]);
         }
@@ -242,6 +227,10 @@ function draw_guidescope(obj)
         }
     }
 
+    var to_draw_calib = 0;
+
+    if (viz_calib !== undefined && typeof viz_calib !== 'undefined') { to_draw_calib = viz_calib; }
+
     if (guide_state !== undefined && typeof guide_state !== 'undefined')
     {
         if (guide_state == 0)
@@ -250,11 +239,31 @@ function draw_guidescope(obj)
             txtele = document.createElementNS(svgNS, "text");
             txtele.setAttribute("x", 2);
             txtele.setAttribute("y", imgh - 20);
-            txtele.innerText = "click/touch star to change selection";
-            txtele.setAttribute("style", "font-size:12pt;fill:rgb(" + color +")");
+            if (star_list.length > 0) {
+                txtele.innerHTML = "click/touch star to change selection";
+            }
+            else {
+                txtele.innerHTML = "no stars detected";
+            }
+            txtele.setAttribute("style", "font-size:12pt;fill:rgb(255,255,128)");
             svgele.appendChild(txtele);
         }
     }
+
+    if (to_draw_calib == 1) {
+        draw_calibration(svgele, ds, obj, "ra");
+    }
+    else if (to_draw_calib == 2) {
+        draw_calibration(svgele, ds, obj, "dec");
+    }
+    else if (to_draw_calib == 3) {
+        draw_calibration(svgele, ds, obj, null);
+    }
+    else if (to_draw_calib == true) {
+        draw_calibration(svgele, ds, obj, null);
+    }
+
+    imgdiv.appendChild(svgele);
 }
 
 function get_star_color(star)
@@ -272,6 +281,14 @@ function draw_calibration(svgele, drawscale, obj, axis)
     if (axis == undefined || typeof axis == 'undefined') {
         draw_calibration(svgele, drawscale, obj, "ra");
         draw_calibration(svgele, drawscale, obj, "dec");
+        return;
+    }
+    if (axis == null) {
+        draw_calibration(svgele, drawscale, obj, "ra");
+        draw_calibration(svgele, drawscale, obj, "dec");
+        return;
+    }
+    if (obj == null) {
         return;
     }
     var mainkey = "calib_" + axis;
@@ -319,24 +336,27 @@ function draw_calibration(svgele, drawscale, obj, axis)
     cirele.setAttribute("style", "fill:rgb(" + color + ");stroke:none;");
     svgele.appendChild(cirele);
 
-    var linelength_1 = calibobj["pulse_width"] * calibobj["pix_per_ms"];
-    var linelength_2 = calibobj["pulse_width"] * calibobj["points_cnt"] * calibobj["pix_per_ms"];
-    var end_coord_1 = math_movePointTowards(coord, [linelength_1, calibobj["angle"]]);
-    var end_coord_2 = math_movePointTowards(coord, [linelength_2, calibobj["angle"]]);
-    lineele = document.createElementNS(svgNS, "line");
-    lineele.setAttribute("x1", ((coord[0]       / imgscale)).toFixed(8));
-    lineele.setAttribute("y1", ((coord[1]       / imgscale)).toFixed(8));
-    lineele.setAttribute("x2", ((end_coord_1[0] / imgscale)).toFixed(8));
-    lineele.setAttribute("y2", ((end_coord_1[1] / imgscale)).toFixed(8));
-    lineele.setAttribute("style", "stroke:rgb(" + color + ");stroke-width:2");
-    svgele.appendChild(lineele);
-    lineele = document.createElementNS(svgNS, "line");
-    lineele.setAttribute("x1", ((end_coord_1[0] / imgscale)).toFixed(8));
-    lineele.setAttribute("y1", ((end_coord_1[1] / imgscale)).toFixed(8));
-    lineele.setAttribute("x2", ((end_coord_2[0] / imgscale)).toFixed(8));
-    lineele.setAttribute("y2", ((end_coord_2[1] / imgscale)).toFixed(8));
-    lineele.setAttribute("style", "stroke:rgb(" + color + ",0.8);stroke-width:1");
-    svgele.appendChild(lineele);
+    if (calibobj["success"] == "done")
+    {
+        var linelength_1 = calibobj["pulse_width"] * calibobj["pix_per_ms"];
+        var linelength_2 = calibobj["pulse_width"] * calibobj["points_cnt"] * calibobj["pix_per_ms"];
+        var end_coord_1 = math_movePointTowards(coord, [linelength_1, calibobj["angle"]]);
+        var end_coord_2 = math_movePointTowards(coord, [linelength_2, calibobj["angle"]]);
+        lineele = document.createElementNS(svgNS, "line");
+        lineele.setAttribute("x1", ((coord[0]       / imgscale)).toFixed(8));
+        lineele.setAttribute("y1", ((coord[1]       / imgscale)).toFixed(8));
+        lineele.setAttribute("x2", ((end_coord_1[0] / imgscale)).toFixed(8));
+        lineele.setAttribute("y2", ((end_coord_1[1] / imgscale)).toFixed(8));
+        lineele.setAttribute("style", "stroke:rgb(" + color + ");stroke-width:2");
+        svgele.appendChild(lineele);
+        lineele = document.createElementNS(svgNS, "line");
+        lineele.setAttribute("x1", ((end_coord_1[0] / imgscale)).toFixed(8));
+        lineele.setAttribute("y1", ((end_coord_1[1] / imgscale)).toFixed(8));
+        lineele.setAttribute("x2", ((end_coord_2[0] / imgscale)).toFixed(8));
+        lineele.setAttribute("y2", ((end_coord_2[1] / imgscale)).toFixed(8));
+        lineele.setAttribute("style", "stroke:rgb(" + color + ",0.8);stroke-width:1");
+        svgele.appendChild(lineele);
+    }
 
     if (("points" in calibobj) != false)
     {

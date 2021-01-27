@@ -303,6 +303,67 @@ class AutoGuider(object):
                 self.kill_websocket()
             pass
 
+"""
+    def send_file(self, filename, shortname):
+        if self.websock is None:
+            return
+        headstr = "file:" + shortname + ":"
+        estimated_len = len(headstr)
+        f = None
+        fsize = 0
+        errstr = ""
+        try:
+            fstats = uos.stat(filename)
+            fsize = fstats[6]
+            f = open(filename, "rb")
+            estimated_len += fsize
+        except Exception as exc:
+            es = exclogger.log_exception(exc, to_file=False)
+            errstr = "Failed to open file \"" + filename + "\" due to error exception: " + es
+        if f is None:
+            estimated_len += len(es)
+        remaining = estimated_len
+
+        # this function sends websocket packet in chunks with an estimated length
+        # this avoids potential memory allocation errors
+
+        try:
+            self.portal.websocket_send_start(self.websock, remaining, 0x81)
+            self.websock.sock.send(headstr)
+            remaining -= len(headstr)
+
+            if f is not None:
+                while fsize > 0 and remaining > 0:
+                    rlen = fsize
+                    if rlen > 256:
+                        rlen = 256
+                    x = f.read(rlen)
+                    self.websock.sock.send(x)
+                    remaining -= len(x)
+                    fsize     -= len(x)
+                f.close()
+                del f
+                f = None
+            else:
+                self.websock.sock.send(es)
+                remaining -= len(es)
+            # pad the remaining with blank space
+            x = " " * remaining
+            self.websock.sock.send(x)
+            self.portal.tickle()
+        except Exception as exc:
+            self.stream_sock_err += 1
+            if self.stream_sock_err > 5:
+                if self.debug:
+                    print("websock too many errors")
+                exclogger.log_exception(exc, to_file=False)
+                self.kill_websocket()
+            pass
+        if f is not None:
+            f.close()
+            del f
+"""
+
     def send_logs(self):
         if self.websock is None:
             return

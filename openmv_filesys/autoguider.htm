@@ -15,6 +15,7 @@
 <script type="application/javascript" src="web/draw_guideerror.js"></script>
 <script type="application/javascript" src="web/draw_starprofile.js"></script>
 <script type="application/javascript" src="web/draw_guidescope.js"></script>
+<script type="application/javascript" src="web/autoguider_test.js"></script>
 <link rel="stylesheet" href="web/jquery-ui-1.12.1-darkness.css" />
 <link rel="stylesheet" href="web/chartist.min.css" />
 <link rel="stylesheet" href="web/divtable_basic.css" />
@@ -47,6 +48,11 @@ span.ct-label.ct-vertical.ct-start { position: relative; top: 4px; }
 <script type="text/javascript">
 
 var guide_state = 0;
+var settings = {};
+var queuedSettings = [];
+var last_status = null;
+
+var selected_star = null, tgt_coord = null, ori_coord = null;
 
 var last_msg_time = 0;
 function handleMsgLogs(obj)
@@ -80,6 +86,9 @@ function handleMsgLogs(obj)
 }
 
 var last_pulselog_time = 0;
+var last_pulse_sum = 0;
+var pulse_maxsum = 0;
+var pulse_maxsum_cache = 0;
 function handlePulseLogs(obj)
 {
     var buff = [];
@@ -107,6 +116,14 @@ function handlePulseLogs(obj)
         if (itm["time"] > last_pulselog_time) {
             last_pulselog_time = itm["time"];
             errgraph_push(itm["time"], itm["ra"], itm["dec"], itm["sum"], itm["shutter"]);
+            if (itm["sum"] < last_pulse_sum) {
+                pulse_maxsum_cache = pulse_maxsum;
+                pulse_maxsum = 0;
+            }
+            if (itm["sum"] > pulse_maxsum) {
+                pulse_maxsum = itm["sum"];
+            }
+            last_pulse_sum = itm["sum"];
         }
     }
 }
@@ -127,24 +144,28 @@ function handleCalibration(obj, axis)
 
     var txt = "";
 
-    if (inner["success"] == false)
-    {
+    if (inner["success"].include("fail")) {
         txt += "Calibration has failed.<br />";
+    }
+    else if (inner["success"].include("wait")) {
+        txt += "Calibration in progress... (or incomplete)<br />";
+    }
+    else if (inner["success"].include("init")) {
+        txt += "Calibration not started<br />";
     }
 
     var t = epochToDate(inner["time"]);
-    txt += "Time: " + fmtDate(t) + " " + fmtTime(t) + "<br />";
+    if (inner["success"].include("done")) {
+        txt += "Time: " + fmtDate(t) + " " + fmtTime(t) + "<br />";
+    }
     txt += "Pixels-per-ms = " + inner["pix_per_ms"].toFixed(1) + "<br />";
     txt += "Angle = " + inner["angle"].toFixed(1) + "&deg;<br />";
     if (("points_cnt" in inner) != false) {
         txt += "Points Used: " + inner["points_cnt"].toString() + "<br />";
     }
-    txt += "Starting Coordinates: ( " + inner["start_x"].toFixed(1) + " , " + inner["start_y"].toFixed(1) + " )";
+    txt += "Starting Coordinates: ( " + inner["start_coord"][0].toFixed(1) + " , " + inner["start_coord"][2].toFixed(1) + " )";
     ele.innerHTML = txt;
 }
-
-var settings = {};
-var queuedSettings = [];
 
 function queueSettingsUpdate(key, val)
 {
@@ -160,7 +181,7 @@ function sendNewSettings()
     if (queuedSettings.length <= 0) {
         return;
     }
-    var obj = {"pkt_type": "settings"};
+    var obj = {"pkt_type": "settings", "time": time_getNowEpoch()};
     queuedSettings.forEach(function (itm, idx) {
         if ((itm in settings) != false) {
             obj[itm] = settings[itm];
@@ -190,23 +211,34 @@ function onLoadAll()
     make_ui_console();
 
     $(window).on('resize', function(e) {
-        needUiRefresh = true;
         errgraph_onresize();
+        draw_guidescope(last_status);
     });
 
     websocket_init("websocket");
     document.getElementById("loading_connecting").style.display = "block";
 }
 
+var websock_total_err = 0;
+
 function websock_onerror(evt)
 {
+    show_toast_msg("ERR: web-socket error");
     msglog_appendLocal("WEBSOCK ERR: " + evt.message);
-    websocket_init("websocket");
     document.getElementById("connection_lost").style.display = "block";
+    websock_total_err += 1;
+    if (websock_total_err > 3 && last_status == null) {
+        document.getElementById("loading_failed").style.display = "block";
+        document.getElementById("showme").style.display = "none";
+    }
+    else {
+        websocket_init("websocket");
+    }
 }
 
 function websock_onopen(evt)
 {
+    websock_total_err = 0;
     document.getElementById("connection_lost").style.display = "none";
     msglog_appendLocal("websocket opened!");
     if (websock_retransmit() == false)
@@ -216,10 +248,15 @@ function websock_onopen(evt)
         document.getElementById("loading_connecting").style.display = "none";
         document.getElementById("loading_settings").style.display = "block";
     }
+    if (last_status != null)
+    {
+        show_toast_msg("SUCCESS: web-socket reconnected");
+    }
 }
 
 function websock_onmessage_jsonobj(obj)
 {
+    websock_total_err = 0;
     if (queuedSettings.length > 0)
     {
         sendNewSettings();
@@ -321,33 +358,107 @@ function websock_onmessage_jsonobj(obj)
         var infoele = document.getElementById("div_statusinfo");
         var txt = "";
         guide_state = obj["guide_state"];
-        if (guide_state == GUIDESTATE_IDLE) {
+        if (guide_state == GUIDESTATE_IDLE)
+        {
             txt = "status: idle";
+            ui_list["btn_guideend"       ].button("option", "disabled", true);
+            ui_list["btn_guidestart"     ].button("option", "disabled", false);
+            ui_list["btn_calib_ra"       ].button("option", "disabled", false);
+            ui_list["btn_calib_dec"      ].button("option", "disabled", false);
+            ui_list["btn_gotocalibration"].button("option", "disabled", false);
+            ui_list["btn_streamimg"      ].button("option", "disabled", false);
+            ui_list["btn_streamimg_star" ].button("option", "disabled", false);
+            ui_list["btn_hotpixels"      ].button("option", "disabled", false);
+            //ui_list["btn_advfilt_update" ].button("option", "disabled", false);
+            //ui_list["btn_advfilt_reset"  ].button("option", "disabled", false);
         }
-        else if (guide_state == GUIDESTATE_GUIDING) {
-            txt = "status: auto-guiding";
-        }
-        else if (guide_state == GUIDESTATE_DITHER) {
-            txt = "status: auto-guiding (dithering)";
-        }
-        else if (guide_state == GUIDESTATE_PANIC) {
-            txt = "status: PANIC";
-        }
-        else if (guide_state == GUIDESTATE_CALIBRATING_RA) {
-            txt = "status: calibrating R.A.";
-        }
-        else if (guide_state == GUIDESTATE_CALIBRATING_DEC) {
-            txt = "status: calibrating Dec.";
-        }
-        else {
-            txt = "status: unknown";
+        else
+        {
+            ui_list["btn_guideend"  ].button("option", "disabled", false);
+            if (guide_state == GUIDESTATE_PANIC)
+            {
+                txt = "status: PANIC";
+                ui_list["btn_guidestart"     ].button("option", "disabled", false);
+                ui_list["btn_calib_ra"       ].button("option", "disabled", true);
+                ui_list["btn_calib_dec"      ].button("option", "disabled", true);
+                ui_list["btn_gotocalibration"].button("option", "disabled", true);
+                ui_list["btn_streamimg"      ].button("option", "disabled", false);
+                ui_list["btn_streamimg_star" ].button("option", "disabled", false);
+                ui_list["btn_hotpixels"      ].button("option", "disabled", false);
+                //ui_list["btn_advfilt_update" ].button("option", "disabled", false);
+                //ui_list["btn_advfilt_reset"  ].button("option", "disabled", false);
+            }
+            else
+            {
+                ui_list["btn_guidestart"     ].button("option", "disabled", true);
+                ui_list["btn_calib_ra"       ].button("option", "disabled", true);
+                ui_list["btn_calib_dec"      ].button("option", "disabled", true);
+                ui_list["btn_gotocalibration"].button("option", "disabled", true);
+                ui_list["btn_streamimg"      ].button("option", "disabled", true);
+                ui_list["btn_streamimg_star" ].button("option", "disabled", true);
+                ui_list["btn_hotpixels"      ].button("option", "disabled", true);
+                //ui_list["btn_advfilt_update" ].button("option", "disabled", true);
+                //ui_list["btn_advfilt_reset"  ].button("option", "disabled", true);
+                if (guide_state == GUIDESTATE_GUIDING) {
+                    txt = "status: auto-guiding";
+                }
+                else if (guide_state == GUIDESTATE_DITHER) {
+                    txt = "status: auto-guiding (dithering)";
+                }
+                else if (guide_state == GUIDESTATE_CALIBRATING_RA) {
+                    txt = "status: calibrating R.A.";
+                    if (viz_calib == 0) {
+                        viz_calib = 1;
+                    }
+                    else if (vis_calib == 2) {
+                        viz_calib = 3;
+                    }
+                }
+                else if (guide_state == GUIDESTATE_CALIBRATING_DEC) {
+                    txt = "status: calibrating dec.";
+                    if (viz_calib == 0) {
+                        viz_calib = 2;
+                    }
+                    else if (vis_calib == 1) {
+                        viz_calib = 3;
+                    }
+                }
+                else {
+                    txt = "status: unknown";
+                }
+            }
         }
         txt += "<br />stars seen: " + (star_list.length).toString();
+        if (guide_state == GUIDESTATE_GUIDING && intervalometer_status != INTERVALSTATE_IDLE) {
+            txt += "<br />drift sum: " + pulse_maxsum.toString() + " (prev=" + pulse_maxsum_cache.toString() + ")";
+        }
         txt += "<br />analysis quality: error=" + obj["last_move_err"] + "&nbsp;;&nbsp;matches=" + obj["multistar_cnt"][0];
-        if (settings["multistar_cnt_max"] > 1) {
+        if (settings["multistar_cnt_max"] > 1 || obj["multistar_cnt"][1] > 1) {
             txt += "<br />multi-star used: " + obj["multistar_cnt"][1];
         }
         infoele.innerHTML = txt;
+
+        draw_guidescope(obj);
+    }
+}
+
+function websock_onmessage_str(data)
+{
+    websock_total_err = 0;
+    websock_ping_delay();
+
+    if (typeof data === 'string' || data instanceof String)
+    {
+        if (data.startsWith("file:"))
+        {
+            var data2 = data.substring(5);
+            if (data2.includes(":")) {
+                var colonIdx = data2.indexOf(":");
+                var eleId    = data2.substring(0, colonIdx);
+                var content  = data2.substring(colonIdx + 1);
+                document.getElementById(eleId).innerHTML = content;
+            }
+        }
     }
 }
 
@@ -391,6 +502,13 @@ function selectStar(x, y)
     websock_send(cmd);
 }
 
+function star_onclick(x, y)
+{
+    if (guide_state == GUIDESTATE_IDLE) {
+        selectStar(x, y);
+    }
+}
+
 </script>
 
 </head>
@@ -402,7 +520,7 @@ function selectStar(x, y)
 <div id="loading_almost" style="display:none;"><h2>OpenMV AutoGuider</h2><div class="ui-widget hideable-msg ui-state-error ui-corner-all .ui-state-error-text"><h4>Connected and settings loaded! Waiting for status data...</h4></div></div>
 <div id="showme" style="display:none;">
 
-<div style="width:100%"><fieldset style="padding-top: 1em;"><legend style="font-size: 14pt;">OpenMV AutoGuider Camera</legend><div id="viewme" style="display: inline-block; width:100%; padding: 0 0 0 0; margin: 0 0 0 0;"><div id="viewmejpeg" style="position: relative; z-index: 1"></div><div id="viewmesvg" style="position: relative; z-index: 2; top: 0; left: 0;">&nbsp;&nbsp;Please wait for image...</div>
+<div style="width:100%"><fieldset style="padding-top: 1em;"><legend style="font-size: 14pt;">OpenMV AutoGuider Camera</legend><div id="viewme" style="display: inline-block; width:100%; padding: 0 0 0 0; margin: 0 0 0 0;"><div id="viewmesvg" style="top: 0; left: 0; display: block;">&nbsp;&nbsp;Please wait for image...</div>
 </div></fieldset></div>
 
 <div id="div_errgraph"><fieldset><legend>Error Graph</legend><div id="errgraph-chart" class="ct-graph ct-major-eleventh"><div style="text-align:right;position:relative;top:-3px;"><span style="color:#FF4444"><b>&mdash;</b>&nbsp;RA&nbsp;<span>&nbsp;&nbsp;<span style="color:#4488FF">&nbsp;<b>&mdash;</b>&nbsp;DEC<span></div></fieldset></div>
@@ -435,14 +553,19 @@ function make_ui_mainctrl()
     makeButton("btn_guidestart", function( event ) {
         ui_list["btn_guideend"  ].button("option", "disabled", false);
         ui_list["btn_guidestart"].button("option", "disabled", true);
+        guideCmd(GUIDESTATE_GUIDING);
+        if (viz_calib > 0) {
+            viz_calib = 0;
+            draw_guidescope();
+        }
     });
     makeButton("btn_guideend", function( event ) {
         ui_list["btn_guideend"  ].button("option", "disabled", true);
         ui_list["btn_guidestart"].button("option", "disabled", false);
+        guideCmd(GUIDESTATE_IDLE);
     });
     makeButton("btn_gotocalibration", function( event ) {
         $( "#accordion" ).accordion('option', 'active' , 3);
-        
     });
 }
 </script>
@@ -490,13 +613,13 @@ function make_ui_intervalometer()
         ui_list["btn_interval_loop"]    .button("option", "disabled", false);
         intervalometerCmd(INTERVALSTATE_HALT);
     });
-    makeSliderLookup("slider_bulbtime", 6, bulb_times_lut, "intervalometer_bulb_time");
-    makeSliderLookup("slider_ditherinterval", 2, dither_interval_lut, "dither_interval");
-    makeSlider("slider_ditherlimit", 0, 500, 0, 1, "OFF", " pix", "dither_amount");
-    makeSlider("slider_dithersettlethresh", 0, 20, 3, 1, "0 pix", " pix", "dither_calmness");
-    makeSlider("slider_dithersettleframecnt", 1, 20, 3, 1, "0 frames", " frames", "dither_calm_cnt");
-    makeSlider("slider_dithertimeout", 1, 20, 5, 1, "0 frames", " frames", "dither_frames_cnt");
-    makeCheckbox("chk_useled" , true, "use_led" );
+    makeSliderLookup("slider_bulbtime"            , 6, bulb_times_lut                  , "intervalometer_bulb_time");
+    makeSliderLookup("slider_ditherinterval"      , 2, dither_interval_lut             , "dither_interval");
+    makeSlider      ("slider_ditherlimit"         , 0, 500, 0, 1, "OFF"     , " pix"   , "dither_amount");
+    makeSlider      ("slider_dithersettlethresh"  , 0, 20 , 3, 1, "0 pix"   , " pix"   , "dither_calmness");
+    makeSlider      ("slider_dithersettleframecnt", 1, 20 , 3, 1, "0 frames", " frames", "dither_calm_cnt");
+    makeSlider      ("slider_dithertimeout"       , 1, 20 , 5, 1, "0 frames", " frames", "dither_frames_cnt");
+    makeCheckbox    ("chk_useled" , true, "use_led" );
 
     // TODO: digital intervalometer mode
 }
@@ -708,10 +831,10 @@ function imageStatsUpdate(obj)
     else
     {
         stats_str = "num of stars: " + star_cnt.toString() + "&nbsp;&nbsp;&nbsp;&nbsp;";
-        stats_str += "image mean: "  + math_roundPlaces(obj["img_mean"], 1).toString() + "/255    \t";
+        stats_str += "image mean: "  + math_roundPlaces(obj["img_mean"], 1).toString()  + "/255    \t";
         stats_str += "image stdev: " + math_roundPlaces(obj["img_stdev"], 1).toString() + "/255    \t";
-        stats_str += "image max: " + Math.round(obj["img_max"]).toString() + "/255    \t";
-        stats_str += "image min: " + Math.round(obj["img_min"]).toString() + "/255    \t";
+        stats_str += "image max: "   + Math.round(obj["img_max"]).toString() +            "/255    \t";
+        stats_str += "image min: "   + Math.round(obj["img_min"]).toString() +            "/255    \t";
     }
 
     stats_str += "exposure code: ";
@@ -885,7 +1008,7 @@ function make_ui_calibration()
         document.getElementById("calibinfo_dec").innerHTML = "None";
     });
     makeCheckbox("chk_visualize_cali", false, function (x) {
-        viz_calib = x;
+        viz_calib = x ? 3 : 0;
         draw_guidescope();
     });
 }
@@ -1226,6 +1349,16 @@ function make_ui_console()
             }
             else if (txt.startsWith("websock:")) {
                 websock_send(txt.substring(8).trim());
+            }
+            else if (txt.startsWith("draw:")) {
+                draw_guidescope();
+            }
+            else if (txt.startsWith("teststarprofile:")) {
+                document.getElementById("div_starprofile").style.display = "block";
+                test_starprofile();
+            }
+            else if (txt.startsWith("testerrgraph:")) {
+                test_errgraph();
             }
             else {
                 msglog_append("> " + txt);

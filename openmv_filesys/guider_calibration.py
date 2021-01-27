@@ -22,6 +22,8 @@ class GuiderCalibration(object):
         self.pix_per_ms = 0
         self.ms_per_pix = 0
 
+        self.success = "init"
+
     def set_origin(self, x, y):
         self.points = [[x, y]]
 
@@ -30,6 +32,7 @@ class GuiderCalibration(object):
         #self.points.append([x, y])
 
     def append_pt(self, pt):
+        self.success = "wait"
         self.points.append(pt)
 
     def append_all(self, pts):
@@ -134,9 +137,11 @@ class GuiderCalibration(object):
         self.farthest = farthest
 
         if len(self.accepted_points) < MINIMUM_REQUIRED_POINTS:
+            self.success = "failed"
             return False
         else:
             self.has_cal = True
+            self.success = "done"
             return True
 
     def summary(self):
@@ -144,7 +149,7 @@ class GuiderCalibration(object):
 
     def get_json_obj(self):
         obj = {}
-        obj.update({"success"      : self.has_cal})
+        obj.update({"success"      : self.success})
         obj.update({"pulse_width"  : self.pulse_width})
         obj.update({"points"       : self.accepted_points})
         obj.update({"points_cnt"   : len(self.accepted_points)})
