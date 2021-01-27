@@ -7,15 +7,15 @@
 <!-- ignore -->
 <script type="application/javascript" src="web/jquery-3.5.1.min.js"></script>
 <script type="application/javascript" src="web/jquery-ui-1.12.1.min.js"></script>
-<script type="application/javascript" src="web/jquery.cftoaster.1.0.1.min.js"></script>
+<script type="application/javascript" src="web/toast.js"></script>
 <script type="application/javascript" src="web/chartist.min.js"></script>
 <script type="application/javascript" src="web/mathutils.js"></script>
 <script type="application/javascript" src="web/websocketutils.js"></script>
 <script type="application/javascript" src="web/autoguider_utils.js"></script>
 <script type="application/javascript" src="web/draw_guideerror.js"></script>
 <script type="application/javascript" src="web/draw_starprofile.js"></script>
+<script type="application/javascript" src="web/draw_guidescope.js"></script>
 <link rel="stylesheet" href="web/jquery-ui-1.12.1-darkness.css" />
-<link rel="stylesheet" href="web/jquery.cftoaster.1.0.1.css" />
 <link rel="stylesheet" href="web/chartist.min.css" />
 <link rel="stylesheet" href="web/divtable_basic.css" />
 <!-- end ignore -->
@@ -73,6 +73,7 @@ function handleMsgLogs(obj)
         var itm = buff[i];
         if (itm["time"] > last_msg_time) {
             last_msg_time = itm["time"];
+            show_toast_msg(itm["str"]);
             msglog_append("[" + fmtTime(epochToDate(itm["time"])) + "]: " + itm["str"].trim());
         }
     }
@@ -184,6 +185,7 @@ function onLoadAll()
     make_ui_mountconfig();
     make_ui_calibration();
     make_ui_analysisparameters();
+    make_ui_advflt();
     make_ui_hotpixels();
     make_ui_console();
 
@@ -222,6 +224,10 @@ function websock_onmessage_jsonobj(obj)
     {
         sendNewSettings();
     }
+    else
+    {
+        websock_ping_delay();
+    }
 
     document.getElementById("connection_lost").style.display = "none";
     if (obj["pkt_type"] == "settings")
@@ -229,10 +235,14 @@ function websock_onmessage_jsonobj(obj)
         document.getElementById("loading_settings").style.display = "none";
         document.getElementById("loading_almost").style.display = "block";
         autoFillSettingsUi(obj);
+        fillAdvFilterSettings(obj);
+        settings = obj;
     }
     else if (obj["pkt_type"] == "status")
     {
         document.getElementById("loading_almost").style.display = "none";
+
+        last_status = obj;
 
         handleCalibration(obj, "ra");
         handleCalibration(obj, "dec");
@@ -309,6 +319,35 @@ function websock_onmessage_jsonobj(obj)
         }
 
         var infoele = document.getElementById("div_statusinfo");
+        var txt = "";
+        guide_state = obj["guide_state"];
+        if (guide_state == GUIDESTATE_IDLE) {
+            txt = "status: idle";
+        }
+        else if (guide_state == GUIDESTATE_GUIDING) {
+            txt = "status: auto-guiding";
+        }
+        else if (guide_state == GUIDESTATE_DITHER) {
+            txt = "status: auto-guiding (dithering)";
+        }
+        else if (guide_state == GUIDESTATE_PANIC) {
+            txt = "status: PANIC";
+        }
+        else if (guide_state == GUIDESTATE_CALIBRATING_RA) {
+            txt = "status: calibrating R.A.";
+        }
+        else if (guide_state == GUIDESTATE_CALIBRATING_DEC) {
+            txt = "status: calibrating Dec.";
+        }
+        else {
+            txt = "status: unknown";
+        }
+        txt += "<br />stars seen: " + (star_list.length).toString();
+        txt += "<br />analysis quality: error=" + obj["last_move_err"] + "&nbsp;;&nbsp;matches=" + obj["multistar_cnt"][0];
+        if (settings["multistar_cnt_max"] > 1) {
+            txt += "<br />multi-star used: " + obj["multistar_cnt"][1];
+        }
+        infoele.innerHTML = txt;
     }
 }
 
@@ -938,6 +977,158 @@ function make_ui_analysisparameters()
         <p>When too many stars are very close together, it might confuse the motion analysis software. "<b>Cluster Tolerance</b>" determines how far apart a star need to be away from its nearest neighbouring star for it to be used for motion analysis.</p>
     </p></fieldset></div>
   </div>
+  <h3>Advanced Filtering</h3>
+  <div>
+<script>
+const advfilter_table = [
+    ["advfilt_xxx_term_i" , "num_advfilt_xxx_iterm"],
+    ["advfilt_xxx_term_d" , "num_advfilt_xxx_dterm"],
+    ["advfilt_xxx_decay_i", "num_advfilt_xxx_idecay"],
+    ["advfilt_xxx_limit_i", "num_advfilt_xxx_ilimit"],
+    ["advfilt_xxx_lpf_k"  , "num_advfilt_xxx_lpfconst"],
+    ["advfilt_xxx_lpf_mix", "num_advfilt_xxx_lpfmix"],
+];
+
+function get_num_input(id) {
+    var ele = document.getElementById(id);
+    return parseInt(ele.value);
+}
+
+function queueAllAdvFilt()
+{
+    var i;
+    for (i = 0; i < advfilter_table.length; i++)
+    {
+        var pair = advfilter_table[i];
+        var setting_key_ra  = pair[0].replace("xxx", "ra");
+        var input_key_ra    = pair[1].replace("xxx", "ra");
+        var setting_key_dec = pair[0].replace("xxx", "dec");
+        var input_key_dec   = pair[1].replace("xxx", "dec");
+        queueSettingsUpdate(setting_key_ra,  get_num_input(input_key_ra ));
+        queueSettingsUpdate(setting_key_dec, get_num_input(input_key_dec));
+    }
+}
+
+function make_ui_advflt()
+{
+    resetAdvFilterSettings();
+    makeButton("btn_advfilt_update", function() {
+        queueAllAdvFilt();
+    });
+    makeButton("btn_advfilt_undo", function() {
+        fillAdvFilterSettings(settings);
+    });
+    makeButton("btn_advfilt_reset", function() {
+        resetAdvFilterSettings();
+        queueAllAdvFilt();
+    });
+}
+
+function fillAdvFilterSettings(obj)
+{
+    if (obj === undefined || typeof obj === 'undefined')
+    {
+        if (settings !== undefined && typeof settings !== 'undefined') {
+            obj = settings;
+        }
+        else {
+            return;
+        }
+    }
+
+    if (obj == null)
+    {
+        if (settings !== undefined && typeof settings !== 'undefined') {
+            obj = settings;
+        }
+        else {
+            return;
+        }
+    }
+
+    var i;
+    for (i = 0; i < advfilter_table.length; i++)
+    {
+        var pair = advfilter_table[i];
+        var setting_key_ra  = pair[0].replace("xxx", "ra");
+        var input_key_ra    = pair[1].replace("xxx", "ra");
+        var setting_key_dec = pair[0].replace("xxx", "dec");
+        var input_key_dec   = pair[1].replace("xxx", "dec");
+        if ((setting_key_ra in obj)) {
+            document.getElementById(input_key_ra) .value = obj[setting_key_ra];
+        }
+        if ((setting_key_dec in obj)) {
+            document.getElementById(input_key_dec).value = obj[setting_key_dec];
+        }
+    }
+}
+
+function resetAdvFilterSettings()
+{
+    var i;
+    for (i = 0; i < advfilter_table.length; i++)
+    {
+        var pair = advfilter_table[i];
+        var input_key_ra    = pair[1].replace("xxx", "ra");
+        var input_key_dec   = pair[1].replace("xxx", "dec");
+        document.getElementById(input_key_ra) .value = 0;
+        document.getElementById(input_key_dec).value = 0;
+    }
+}
+</script>
+    <div>
+        <p>The sources of tracking errors can be totally random (such as gear imperfections), or have a directional bias (such as bad polar-alignment). The latter is more frequent and more important, because random errors are self-correcting in nature. To fine tune the performance of the error correction, the auto-guider can employ a P.I.D. filter and a L.P.F. (<b>L</b>ow-<b>P</b>ass <b>F</b>ilter). The L.P.F. filter simply follows the equation:<br />&nbsp;&nbsp;&nbsp;&nbsp;<i>next = input * k + (prev * (1 - k))</i><br /> These filter can be used to prevent over-correction due to sporatic random errors, and cronic under-correction of heavily biased errors.</p>
+        <p>The P-term of the PID is always unity, as it is actually determined by the calibration and the calibration scaling. The Integral term and Derivative term can be set as a percentage (100 means 1, 0 means disable). The accumulator for the integral term has a limiter and a decay value to prevent it from getting stuck. Setting the I-term and D-term to 0 would disable this PID.</p>
+        <p>The LPF filter constant is expressed also as a percentage, a filter constant of 100% would cause the filter to be a unity pass-through, a filter constant of 0% would disable the LPF.</p>
+        <p>The mixture between the PID and the LPF can be mixed, the mixture value is a percentage between 0% and 100%. 0% would mean the LPF is disabled, and the result from the PID is used. 100% means the PID is disabled, and the result from the LPF is used. Any value in between would mix the results from the PID and the LPF together.</p>
+    </div>
+    <div style="font-family:monospace;">
+        <style type="text/css">
+.advfilt_num { width:100px; }
+        </style>
+        <div class="divTable" style="width:80%;">
+            <div class="divTableBody">
+                <div class="divTableRow">
+                    <div class="divTableCell">&nbsp;</div>
+                    <div class="divTableCell">&nbsp;&nbsp;R.A.</div>
+                    <div class="divTableCell">&nbsp;&nbsp;Dec.</div>
+                </div>
+                <div class="divTableRow">
+                    <div class="divTableCell" style="text-align:right;">I-term&nbsp;&nbsp;</div>
+                    <div class="divTableCell"><input class="advfilt_num" type="number" id="num_advfilt_ra_iterm" name="num_advfilt_ra_iterm" min="-99999" max="99999" step="1" /></div>
+                    <div class="divTableCell"><input class="advfilt_num" type="number" id="num_advfilt_dec_iterm" name="num_advfilt_dec_iterm" min="-99999" max="99999" step="1" />&nbsp; %</div>
+                </div>
+                <div class="divTableRow">
+                    <div class="divTableCell" style="text-align:right;">I&nbsp;limiter&nbsp;&nbsp;</div>
+                    <div class="divTableCell"><input class="advfilt_num" type="number" id="num_advfilt_ra_ilimit" name="num_advfilt_ra_ilimit" min="0" max="9999999" step="1" /></div>
+                    <div class="divTableCell"><input class="advfilt_num" type="number" id="num_advfilt_dec_ilimit" name="num_advfilt_dec_ilimit" min="0" max="9999999" step="1" />&nbsp; ms</div>
+                </div>
+                <div class="divTableRow">
+                    <div class="divTableCell" style="text-align:right;">I&nbsp;decay&nbsp;&nbsp;</div>
+                    <div class="divTableCell"><input class="advfilt_num" type="number" id="num_advfilt_ra_idecay" name="num_advfilt_ra_idecay" min="0" max="9999999" step="1" /></div>
+                    <div class="divTableCell"><input class="advfilt_num" type="number" id="num_advfilt_dec_idecay" name="num_advfilt_dec_idecay" min="0" max="9999999" step="1" />&nbsp; ms</div>
+                </div>
+                <div class="divTableRow">
+                    <div class="divTableCell" style="text-align:right;">D-term&nbsp;&nbsp;</div>
+                    <div class="divTableCell"><input class="advfilt_num" type="number" id="num_advfilt_ra_dterm" name="num_advfilt_ra_dterm" min="-99999" max="99999" step="1" /></div>
+                    <div class="divTableCell"><input class="advfilt_num" type="number" id="num_advfilt_dec_dterm" name="num_advfilt_dec_dterm" min="-99999" max="99999" step="1" />&nbsp; %</div>
+                </div>
+                <div class="divTableRow">
+                    <div class="divTableCell" style="text-align:right;">LPF const&nbsp;&nbsp;</div>
+                    <div class="divTableCell"><input class="advfilt_num" type="number" id="num_advfilt_ra_lpfconst" name="num_advfilt_ra_lpfconst" min="0" max="100" step="1" /></div>
+                    <div class="divTableCell"><input class="advfilt_num" type="number" id="num_advfilt_dec_lpfconst" name="num_advfilt_dec_lpfconst" min="0" max="100" step="1" />&nbsp; %</div>
+                </div>
+                <div class="divTableRow">
+                    <div class="divTableCell" style="text-align:right;">LPF mix&nbsp;&nbsp;</div>
+                    <div class="divTableCell"><input class="advfilt_num" type="number" id="num_advfilt_ra_lpfmix" name="num_advfilt_ra_lpfmix" min="0" max="100" step="1" /></div>
+                    <div class="divTableCell"><input class="advfilt_num" type="number" id="num_advfilt_dec_lpfmix" name="num_advfilt_dec_lpfmix" min="0" max="100" step="1" />&nbsp; %</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <br />
+    <div><button id="btn_advfilt_update">Update Values</button>&nbsp;&nbsp;&nbsp;<button id="btn_advfilt_undo">Undo Changes</button>&nbsp;&nbsp;&nbsp;<button id="btn_advfilt_reset">Reset</button></div>
+  </div>
   <h3>Hot Pixels</h3>
   <div>
     <script type="text/javascript">
@@ -1030,13 +1221,22 @@ function make_ui_console()
         {
             ui_list["btn_consoleinput_send"].button("option", "disabled", true);
             setTimeout(function(){ ui_list["btn_consoleinput_send"].button("option", "disabled", false); }, 2000);
-            msglog_append("> " + txt);
-            miscCmd(txt);
+            if (txt.startsWith("toast:")) {
+                show_toast_msg(txt.substring(6).trim());
+            }
+            else if (txt.startsWith("websock:")) {
+                websock_send(txt.substring(8).trim());
+            }
+            else {
+                msglog_append("> " + txt);
+                miscCmd(txt);
+            }
         }
     });
-    $("#txt_consoleinput").button().addClass('consoleinput-textfield');
+    //$("#txt_consoleinput").button().addClass('consoleinput-textfield');
     makeButton("btn_consoleclear", function() {
-        document.getElementById("div_msglog").innerHTML = "messages cleared at " + new Date().toString();
+        var date = new Date();
+        document.getElementById("div_msglog").innerHTML = "messages cleared at " + fmtDate(date) + " - " + fmtTime(date);
     });
 }
 
@@ -1067,7 +1267,7 @@ function msglog_appendLocal(txt)
     background-color: #DDD;
 }
     </style>
-    <fieldset><legend>Input</legend><div><input type="text" id="txt_consoleinput" name="txt_consoleinput" /><br /><br /><button id="btn_consoleinput_send">Send</button></div></fieldset>
+    <fieldset><legend>Input</legend><div><input type="text" id="txt_consoleinput" name="txt_consoleinput" class="consoleinput-textfield" /><br /><br /><button id="btn_consoleinput_send">Send</button></div></fieldset>
     <br />
     <fieldset><legend>Messages</legend><div id="div_msglog" style="font-family: monospace; color: #8F8;"></div><br /><button id="btn_consoleclear">Clear</button></div></fieldset>
   </div>

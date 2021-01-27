@@ -76,7 +76,7 @@ function fmtDate(x)
     const ye = new Intl.DateTimeFormat('en', { year:  'numeric' }).format(x);
     const mo = new Intl.DateTimeFormat('en', { month: 'short'   }).format(x);
     const da = new Intl.DateTimeFormat('en', { day:   '2-digit' }).format(x);
-    return "${da}-${mo}-${ye}";
+    return da + "-" + mo + "-" + ye;
 }
 
 function parseStarsStr(x)
@@ -278,4 +278,26 @@ function sliderSync(id, v)
         $("#" + id).slider( "value", v );
         ui_list[id + "/func"](v);
     }
+}
+
+function show_toast_msg(s)
+{
+    var toast = new iqwerty.toast.Toast();
+    toast = toast.setText(s);
+
+    var slower = s.toLowerCase();
+    if (slower.startsWith("err:") || slower.startsWith("error:") || slower.startsWith("fail:") || slower.startsWith("failed:")) {
+        toast = toast.stylize({background: "red", color: "white",}).setDuration(5000);
+    }
+    else if (slower.startsWith("warn:") || slower.startsWith("warning:")) {
+        toast = toast.stylize({background: "#D07000", color: "white",});
+    }
+    else if (slower.startsWith("success:") || slower.startsWith("done:")) {
+        toast = toast.stylize({background: "green", color: "white",});
+    }
+    else if (slower.startsWith("info:") || slower.startsWith("msg:") || slower.startsWith("message:")) {
+        toast = toast.stylize({background: "blue", color: "white",});
+    }
+
+    toast.show();
 }

@@ -321,8 +321,8 @@ function draw_calibration(svgele, drawscale, obj, axis)
 
     var linelength_1 = calibobj["pulse_width"] * calibobj["pix_per_ms"];
     var linelength_2 = calibobj["pulse_width"] * calibobj["points_cnt"] * calibobj["pix_per_ms"];
-    var end_coord_1 = math_movePointTowards(coord, [linelength_1, calibobj["angle"]);
-    var end_coord_2 = math_movePointTowards(coord, [linelength_2, calibobj["angle"]);
+    var end_coord_1 = math_movePointTowards(coord, [linelength_1, calibobj["angle"]]);
+    var end_coord_2 = math_movePointTowards(coord, [linelength_2, calibobj["angle"]]);
     lineele = document.createElementNS(svgNS, "line");
     lineele.setAttribute("x1", ((coord[0]       / imgscale)).toFixed(8));
     lineele.setAttribute("y1", ((coord[1]       / imgscale)).toFixed(8));
@@ -338,7 +338,7 @@ function draw_calibration(svgele, drawscale, obj, axis)
     lineele.setAttribute("style", "stroke:rgb(" + color + ",0.8);stroke-width:1");
     svgele.appendChild(lineele);
 
-    if (("points") in calibobj) != false)
+    if (("points" in calibobj) != false)
     {
         var points = calibobj["points"];
         if (points != null && points != false)
