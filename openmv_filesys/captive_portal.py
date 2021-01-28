@@ -124,10 +124,14 @@ class CaptivePortal(object):
                 self.wlan = network.WINC(mode = self.winc_mode)
                 self.hw_retries = 0
             except OSError as exc:
-                exclogger.log_exception(exc)
-                exclogger.log_exception("most likely hardware fault")
-                self.wlan = None
-                self.hw_retries += 1
+                excstr = exclogger.log_exception(exc)
+                if "irmware version mismatch" in excstr:
+                    print("WiFi shield requires a firmware update!")
+                    attempt_fw_update()
+                else:
+                    exclogger.log_exception("most likely hardware fault")
+                    self.wlan = None
+                    self.hw_retries += 1
 
         if self.wlan is None:
             self.wifi_timestamp = pyb.millis()
@@ -730,6 +734,7 @@ def stream_html_to_body(dest, f):
         elif "<!-- end ignore -->" in strbuf:
             strbuf = ""
             ignoring = False
+            break
         elif "\n" in strbuf and ignoring == False:
             sent += len(strbuf)
             dest.write(strbuf)
@@ -978,6 +983,30 @@ def handle_test(client_stream, req, headers, content):
     print("test handler")
     client_stream.write(default_reply_header() + "<html>test<br />" + req + "</html>\r\n")
     client_stream.close()
+
+def attempt_fw_update(fpath = "/winc_19_6_1.bin"):
+    try:
+        st = uos.stat(fpath)
+        wlan = network.WINC(mode=network.WINC.MODE_FIRMWARE)
+        wlan.fw_update(fpath)
+    except OSError as exc2:
+        if exc2.args[0] == 2:
+            while True:
+                print("WiFi shield firmware update file is missing at \"" + fpath + "\"")
+                pyb.delay(500)
+                pass
+        else:
+            exclogger.log_exception(exc2)
+            while True:
+                print("WiFi shield firmware update failed")
+                pyb.delay(500)
+                pass
+    except Exception as exc2:
+        exclogger.log_exception(exc2)
+        while True:
+            print("WiFi shield firmware update failed")
+            pyb.delay(500)
+            pass
 
 if __name__ == "__main__":
     print("Starting CaptivePortal")
