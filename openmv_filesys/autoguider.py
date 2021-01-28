@@ -516,8 +516,9 @@ class AutoGuider(object):
 
                 if self.selected_star is None and latest_stars is not None:
                     if len(latest_stars) > 0:
-                        self.selected_star = latest_stars[0]
-                        self.log_msg("MSG: auto selected star at %0.1f %0.1f" % (self.selected_star.cxf(), self.selected_star.cyf()))
+                        self.selected_star = guidestar.select_first(latest_stars)
+                        if self.selected_star is not None:
+                            self.log_msg("MSG: auto selected star at %0.1f %0.1f" % (self.selected_star.cxf(), self.selected_star.cyf()))
 
                 res = guidestar.get_multi_star_motion(self.prev_stars, latest_stars, self.selected_star, self.settings["starmove_tolerance"], False, self.settings["multistar_ratings_thresh"], self.settings["multistar_cnt_min"], self.settings["multistar_cnt_max"])
                 real_star    = res[0]

@@ -271,7 +271,7 @@ function get_star_color(star)
     var s = 1;
     var v = star["max_brite"] / 255.0;
     if (v < 0.5) { v = 0.5; }
-    var h = star["rating"] * 135 / 100 / 360;
+    var h = star["rating"] * 120 / 100 / 360;
     var rgb = hsv_2_rgb(h, s, v);
     return rgb.r.toString() + "," + rgb.g.toString() + "," + rgb.b.toString();
 }
