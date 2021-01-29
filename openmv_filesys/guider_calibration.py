@@ -147,14 +147,19 @@ class GuiderCalibration(object):
     def summary(self):
         return len(self.accepted_points), self.farthest, self.angle, self.line_est_center, self.points[0]
 
-    def get_json_obj(self):
+    def get_json_obj(self, short = False):
         obj = {}
         obj.update({"success"      : self.success})
         obj.update({"pulse_width"  : self.pulse_width})
-        obj.update({"points"       : self.accepted_points})
-        obj.update({"points_cnt"   : len(self.accepted_points)})
-        obj.update({"start_x"      : self.points[0][0]})
-        obj.update({"start_y"      : self.points[0][1]})
+        if self.success == "done":
+            if short == False:
+                obj.update({"points" : self.accepted_points})
+            obj.update({"points_cnt" : len(self.accepted_points)})
+        else:
+            if short == False:
+                obj.update({"points" : self.points})
+            obj.update({"points_cnt" : len(self.points)})
+        obj.update({"start_coord"    : self.points[0])
         obj.update({"pix_per_ms"   : self.pix_per_ms})
         obj.update({"ms_per_pix"   : self.ms_per_pix})
         obj.update({"farthest"     : self.farthest})
@@ -182,6 +187,8 @@ class GuiderCalibration(object):
             self.pix_per_ms = 1.0 / ms_per_pix
         else:
             self.has_cal = False
+        if self.has_cal:
+            self.success = "done"
         self.angle = comutils.ang_normalize(comutils.try_parse_setting(obj["angle"]))
         self.farthest = comutils.try_parse_setting(obj["farthest"])
         self.timestamp = comutils.try_parse_setting(obj["time"])

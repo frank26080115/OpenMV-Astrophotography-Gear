@@ -144,26 +144,26 @@ function handleCalibration(obj, axis)
 
     var txt = "";
 
-    if (inner["success"].include("fail")) {
+    if (inner["success"].includes("fail")) {
         txt += "Calibration has failed.<br />";
     }
-    else if (inner["success"].include("wait")) {
+    else if (inner["success"].includes("wait")) {
         txt += "Calibration in progress... (or incomplete)<br />";
     }
-    else if (inner["success"].include("init")) {
+    else if (inner["success"].includes("init")) {
         txt += "Calibration not started<br />";
     }
 
     var t = epochToDate(inner["time"]);
-    if (inner["success"].include("done")) {
+    if (inner["success"].includes("done")) {
         txt += "Time: " + fmtDate(t) + " " + fmtTime(t) + "<br />";
     }
-    txt += "Pixels-per-ms = " + inner["pix_per_ms"].toFixed(1) + "<br />";
+    txt += "Pixels-per-ms = " + inner["pix_per_ms"].toFixed(4) + "<br />";
     txt += "Angle = " + inner["angle"].toFixed(1) + "&deg;<br />";
     if (("points_cnt" in inner) != false) {
         txt += "Points Used: " + inner["points_cnt"].toString() + "<br />";
     }
-    txt += "Starting Coordinates: ( " + inner["start_coord"][0].toFixed(1) + " , " + inner["start_coord"][2].toFixed(1) + " )";
+    txt += "Starting Coordinates: ( " + inner["start_coord"][0].toFixed(1) + " , " + inner["start_coord"][1].toFixed(1) + " )";
     ele.innerHTML = txt;
 }
 
@@ -428,6 +428,9 @@ function websock_onmessage_jsonobj(obj)
                 }
             }
         }
+        if (selected_star != null) {
+            txt += "<br />selected star: " + selected_star[0].toFixed(1) + " , " + selected_star[1].toFixed(1);
+        }
         txt += "<br />stars seen: " + (star_list.length).toString();
         if (guide_state == GUIDESTATE_GUIDING && intervalometer_status != INTERVALSTATE_IDLE) {
             txt += "<br />drift sum: " + pulse_maxsum.toString() + " (prev=" + pulse_maxsum_cache.toString() + ")";
@@ -499,7 +502,7 @@ function selectStar(x, y)
     obj["star_x"]   = x;
     obj["star_y"]   = y;
     websock_ping_delay();
-    websock_send(cmd);
+    websock_send(obj);
 }
 
 function star_onclick(x, y)
@@ -565,8 +568,13 @@ function make_ui_mainctrl()
         guideCmd(GUIDESTATE_IDLE);
     });
     makeButton("btn_gotocalibration", function( event ) {
-        $( "#accordion" ).accordion('option', 'active' , 3);
+        $("#accordion").accordion('option', 'active' , 3);
+        setTimeout(scroll2calibration, 450);
     });
+}
+
+function scroll2calibration() {
+    $("html, body").animate({ scrollTop: $('#scrollto_calibration').offset().top }, 500);
 }
 </script>
 
@@ -615,7 +623,7 @@ function make_ui_intervalometer()
     });
     makeSliderLookup("slider_bulbtime"            , 6, bulb_times_lut                  , "intervalometer_bulb_time");
     makeSliderLookup("slider_ditherinterval"      , 2, dither_interval_lut             , "dither_interval");
-    makeSlider      ("slider_ditherlimit"         , 0, 500, 0, 1, "OFF"     , " pix"   , "dither_amount");
+    makeSlider      ("slider_ditherlimit"         , 0, 200, 0, 1, "OFF"     , " pix"   , "dither_amount");
     makeSlider      ("slider_dithersettlethresh"  , 0, 20 , 3, 1, "0 pix"   , " pix"   , "dither_calmness");
     makeSlider      ("slider_dithersettleframecnt", 1, 20 , 3, 1, "0 frames", " frames", "dither_calm_cnt");
     makeSlider      ("slider_dithertimeout"       , 1, 20 , 5, 1, "0 frames", " frames", "dither_frames_cnt");
@@ -788,6 +796,83 @@ function intervalometerCmd(cmd)
         <p>After performing each dither movement, there is extra risk of tracking errors due to gear backlash, vibration, and other factors. The firmware will wait for things to settle down before allowing the intervalometer to re-open the camera shutter. This will prevent unwanted star-trailing in the next photo after a dithering movement.</p>
         <p>The "<b>Dither Settle Thresh</b>" is the maximum amount of star motion detected so that the mount is considered "settled", if the star moves more than this amount, then the mount is not considered "settled". "<b>Dither Settle Frame Count</b>" is the number of consecutive guide-cam frames that need to be considered settled before opening the photo-cam's shutter again. "<b>Dither Timeout Frame Count</b>" is the maximum number of guide-cam frames to wait for settling, whether or not, after this timeout, the photo-cam's shutter will open.</p>
         <p>Since dithering takes time, you can choose to only dither after a certain number of frames.</p>
+    </p></fieldset></div>
+    <br />
+    <div><fieldset><legend>Ideal Dither Distance</legend><p>
+        <script type="text/javascript">
+function dithcalc(utilize_me)
+{
+    var x = calc_idealDither(
+          document.getElementById("num_dithcalc_gcamfocallength").value
+        , document.getElementById("num_dithcalc_phcamfocallength").value
+        , document.getElementById("num_dithcalc_phcamsensormm").value
+        , document.getElementById("num_dithcalc_phcamsensorpix").value
+        , document.getElementById("num_dithcalc_phcamdither").value
+    );
+    if (isNaN(x) == false)
+    {
+        document.getElementById("span_dithcalc_result").innerHTML = x.toFixed(1);
+        if (utilize_me) {
+            sliderSync("slider_ditherlimit", Math.round(x));
+            $("html, body").animate({ scrollTop: $('#slider_bulbtime_handle').offset().top }, 1000);
+        }
+    }
+    else
+    {
+        document.getElementById("span_dithcalc_result").innerHTML = "error";
+    }
+}
+        </script>
+        <style type="">
+        #tbl_dithcalc .divTableCell { border: 1px solid #999999; padding-left: 10px; padding-right: 10px; padding-bottom: 5px; }
+        #tbl_dithcalc input { width: 100%; }
+        </style>
+        <p>Use this calculator to determine the best dithering distance for your camera</p>
+        <div id="tbl_dithcalc" class="divTable" style="font-size:10pt;">
+            <div class="divTableBody">
+                <div class="divTableRow">
+                    <div class="divTableCell" style="text-align:right;">Guide-Cam Sensor Width (mm):</div>
+                    <div class="divTableCell">4.8</div>
+                    <div class="divTableCell">&nbsp;</div>
+                </div>
+                <div class="divTableRow">
+                    <div class="divTableCell" style="text-align:right;">Guide-Cam Sensor Width (pix):</div>
+                    <div class="divTableCell">2592</div>
+                    <div class="divTableCell">&nbsp;</div>
+                </div>
+                <div class="divTableRow">
+                    <div class="divTableCell" style="text-align:right;">Guide-Scope Focal Length (mm)</div>
+                    <div class="divTableCell"><input type="number" id="num_dithcalc_gcamfocallength" name="num_dithcalc_gcamfocallength" min="1" max="10000" value="183" /></div>
+                    <div class="divTableCell">183 mm default</div>
+                </div>
+                <div class="divTableRow">
+                    <div class="divTableCell" style="text-align:right;">Photo-Cam Sensor Width (mm)</div>
+                    <div class="divTableCell"><input type="number" id="num_dithcalc_phcamsensormm" name="num_dithcalc_phcamsensormm" min="1" max="100" value="24" /></div>
+                    <div class="divTableCell">35 mm = full-frame<br />24 mm = APS-C<br />17.3 mm = MFT</div>
+                </div>
+                <div class="divTableRow">
+                    <div class="divTableCell" style="text-align:right;">Photo-Cam Sensor Width (pix)</div>
+                    <div class="divTableCell"><input type="number" id="num_dithcalc_phcamsensorpix" name="num_dithcalc_phcamsensorpix" min="1" max="10000" value="6000" /></div>
+                    <div class="divTableCell">&nbsp;</div>
+                </div>
+                <div class="divTableRow">
+                    <div class="divTableCell" style="text-align:right;">Telescope Focal Length (mm)</div>
+                    <div class="divTableCell"><input type="number" id="num_dithcalc_phcamfocallength" name="num_dithcalc_phcamfocallength" min="1" max="10000" value="700" /></div>
+                    <div class="divTableCell">&nbsp;</div>
+                </div>
+                <div class="divTableRow">
+                    <div class="divTableCell" style="text-align:right;">Desired Photo-Cam Dither (pix)</div>
+                    <div class="divTableCell"><input type="number" id="num_dithcalc_phcamdither" name="num_dithcalc_phcamdither" min="1" max="1000" value="10" /></div>
+                    <div class="divTableCell">&nbsp;</div>
+                </div>
+                <div class="divTableRow">
+                    <div class="divTableCell" style="text-align:right;"><button id="btn_dithcalc" onclick="dithcalc(false);">Calculate</button>&nbsp;&nbsp;&nbsp;Result:</div>
+                    <div class="divTableCell" style="text-align:right;"><span id="span_dithcalc_result">&nbsp;</span></div>
+                    <div class="divTableCell"><button id="btn_dithcalc2" onclick="dithcalc(true);">Utilize Value</button></div>
+                </div>
+            </div>
+        </div>
+        <br />
     </p></fieldset></div>
   </div>
   <h3>Guide-Cam Config</h3>
@@ -973,7 +1058,7 @@ function make_ui_mountconfig()
         <p>"<b>Direction Bias Limiter</b>" is an internal maximum limit value for the accumulated value that determines the direction bias. Leave it at zero for it to be automatic. A large value will cause direction bias to never switch directions! The appropriate hysteresis value and limit value are different for every tracking telescope mount. More backlash requires higher values.</p>
     </p></fieldset></div>
   </div>
-  <h3>Calibration</h3>
+  <h3 id="scrollto_calibration">Calibration</h3>
   <div>
     <script type="text/javascript">
 function make_ui_calibration()
@@ -1010,6 +1095,9 @@ function make_ui_calibration()
     makeCheckbox("chk_visualize_cali", false, function (x) {
         viz_calib = x ? 3 : 0;
         draw_guidescope();
+        if (x) {
+            $("html, body").animate({ scrollTop: $('html, body').offset().top }, 1000);
+        }
     });
 }
     </script>
@@ -1350,16 +1438,6 @@ function make_ui_console()
             else if (txt.startsWith("websock:")) {
                 websock_send(txt.substring(8).trim());
             }
-            else if (txt.startsWith("draw:")) {
-                draw_guidescope();
-            }
-            else if (txt.startsWith("teststarprofile:")) {
-                document.getElementById("div_starprofile").style.display = "block";
-                test_starprofile();
-            }
-            else if (txt.startsWith("testerrgraph:")) {
-                test_errgraph();
-            }
             else {
                 msglog_append("> " + txt);
                 miscCmd(txt);
@@ -1402,7 +1480,7 @@ function msglog_appendLocal(txt)
     </style>
     <fieldset><legend>Input</legend><div><input type="text" id="txt_consoleinput" name="txt_consoleinput" class="consoleinput-textfield" /><br /><br /><button id="btn_consoleinput_send">Send</button></div></fieldset>
     <br />
-    <fieldset><legend>Messages</legend><div id="div_msglog" style="font-family: monospace; color: #8F8;"></div><br /><button id="btn_consoleclear">Clear</button></div></fieldset>
+    <fieldset><legend>Messages</legend><div id="div_msglog" style="font-family: monospace; color: #8F8;">no messages yet</div><br /><button id="btn_consoleclear">Clear</button></div></fieldset>
   </div>
 </div><!-- accordion -->
 

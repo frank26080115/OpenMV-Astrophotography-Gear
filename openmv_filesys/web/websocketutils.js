@@ -95,7 +95,7 @@ function websocket_init(page)
 var websocket_last_transmission = null;
 
 function websock_send(x) {
-    if ((typeof sync_with === 'string' || sync_with instanceof String) == false) {
+    if ((typeof x === 'string' || x instanceof String) == false) {
         x = x.toString();
     }
     websocket_last_transmission = x;

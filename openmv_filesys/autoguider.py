@@ -1282,7 +1282,7 @@ class AutoGuider(object):
     def handle_index(self, client_stream, req, headers, content):
         self.kill_imgstreamer()
         self.kill_websocket()
-        captive_portal.gen_page(client_stream, "polarscope.htm", add_files = ["web/jquery-ui-1.12.1-darkness.css", "web/jquery-3.5.1.min.js", "web/jquery-ui-1.12.1.min.js", "web/websocketutils.js", "web/mathutils.js"], debug = self.debug)
+        captive_portal.gen_page(client_stream, "autoguider.htm", add_files = ["web/autoguider_utils.js", "web/jquery-ui-1.12.1-darkness.css", "web/jquery-3.5.1.min.js", "web/jquery-ui-1.12.1.min.js", "web/chartist.min.js", "web/chartist.min.css", "web/toast.js", "web/websocketutils.js", "web/mathutils.js", "web/draw_guideerror.js", "web/draw_guidescope.js", "web/draw_starprofile.js"], debug = self.debug)
         return True
 
     def update_imgstream(self):

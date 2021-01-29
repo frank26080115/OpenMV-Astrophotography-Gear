@@ -308,3 +308,16 @@ function fetchAndFill(eleId, filename)
     websock_ping_delay();
     websock_send(obj);
 }
+
+function calc_idealDither(gcam_focallength_mm, phcam_focallength_mm, phcam_sensorwidth_mm, phcam_sensorwidth_pixels, dither_pixels)
+{
+    var gcam_sensorwidth_mm = 4.8;
+    var gcam_sensorwidth_pix = sensor_width;
+    var gcam_fov = 2 * Math.atan(0.5 * gcam_sensorwidth_mm / gcam_focallength_mm);
+    var phcam_fov = 2 * Math.atan(0.5 * phcam_sensorwidth_mm / phcam_focallength_mm);
+
+    var dither_angle = phcam_fov * (dither_pixels / phcam_sensorwidth_pixels);
+    var gcam_dither_pix = gcam_sensorwidth_pix * (dither_angle / gcam_fov);
+
+    return gcam_dither_pix;
+}

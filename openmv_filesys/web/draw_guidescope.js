@@ -33,6 +33,9 @@ function draw_guidescope(obj)
 
     var wrapdiv = document.getElementById("viewme");
     var imgdiv = document.getElementById("viewmesvg");
+    while (imgdiv.firstChild) {
+        imgdiv.removeChild(imgdiv.firstChild);
+    }
 
     var ds = get_draw_scale(1, false);
     var dataw    = ds[0];
@@ -46,9 +49,6 @@ function draw_guidescope(obj)
 
     // start the canvas with correct size
     var svgele = document.createElementNS(svgNS, "svg");
-    while (imgdiv.firstChild) {
-        imgdiv.removeChild(imgdiv.firstChild);
-    }
     //imgdiv.setAttribute("height", imgh);
     //imgdiv.style.height  = imgh + "px";
     imgdiv.style.top     = "-" + imgh + "px";
@@ -69,6 +69,27 @@ function draw_guidescope(obj)
     if (obj != null) { Math.round(obj["img_mean"] * 0.9).toString(); }
     bgrect.setAttribute("style", "fill:rgb(" + bgc + "," + bgc + "," + bgc + ");stroke:none;");
     svgele.appendChild(bgrect);
+
+    var need_parse_stars = false;
+    if (star_list !== undefined && typeof star_list !== 'undefined') {
+        if (star_list != null) {
+            if (star_list.length <= 0) {
+                need_parse_stars = true;
+            }
+        }
+        else {
+            need_parse_stars = true;
+        }
+    }
+    else {
+        need_parse_stars = true;
+    }
+
+    if (need_parse_stars && obj != null) {
+        if (obj["stars"] != null && obj["stars"] != false) {
+            star_list = parseStarsStr(obj["stars"]);
+        }
+    }
 
     var maxr = 0; // find the biggest star, used for other things later
     var minr = 9999;
@@ -92,34 +113,13 @@ function draw_guidescope(obj)
         if (selected_star != null) {
             cx = selected_star[0];
             cy = selected_star[1];
-            var drawn_rad = math_mapStarRadius(maxr, minr, maxr, imgh) + 2;
+            var drawn_rad = math_mapStarRadius(maxr, minr, maxr, imgh) + 5;
             cirele = document.createElementNS(svgNS, "circle");
             cirele.setAttribute("cx", ((cx / imgscale) - offset_x).toFixed(8));
             cirele.setAttribute("cy", ((cy / imgscale) - offset_y).toFixed(8));
             cirele.setAttribute("r", drawn_rad);
             cirele.setAttribute("style", "stroke:rgb(32,255,32);stroke-width:1");
             svgele.appendChild(cirele);
-        }
-    }
-
-    var need_parse_stars = false;
-    if (star_list !== undefined && typeof star_list !== 'undefined') {
-        if (star_list != null) {
-            if (star_list.length <= 0) {
-                need_parse_stars = true;
-            }
-        }
-        else {
-            need_parse_stars = true;
-        }
-    }
-    else {
-        need_parse_stars = true;
-    }
-
-    if (need_parse_stars && obj != null) {
-        if (obj["stars"] != null && obj["stars"] != false) {
-            star_list = parseStarsStr(obj["stars"]);
         }
     }
 
@@ -184,7 +184,7 @@ function draw_guidescope(obj)
             {
                 cx = tgt_coord[0];
                 cy = tgt_coord[1];
-                var drawn_rad = math_mapStarRadius(maxr, minr, maxr, imgh) + 5;
+                var drawn_rad = math_mapStarRadius(maxr, minr, maxr, imgh) + 15;
                 lineele = document.createElementNS(svgNS, "line");
                 lineele.setAttribute("x1", ((cx / imgscale) - drawn_rad).toFixed(8));
                 lineele.setAttribute("y1", ((cy / imgscale) - drawn_rad).toFixed(8));
@@ -195,8 +195,8 @@ function draw_guidescope(obj)
                 lineele = document.createElementNS(svgNS, "line");
                 lineele.setAttribute("x1", ((cx / imgscale) + drawn_rad).toFixed(8));
                 lineele.setAttribute("y1", ((cy / imgscale) - drawn_rad).toFixed(8));
-                lineele.setAttribute("x2", ((cx / imgscale) + drawn_rad).toFixed(8));
-                lineele.setAttribute("y2", ((cy / imgscale) - drawn_rad).toFixed(8));
+                lineele.setAttribute("x2", ((cx / imgscale) - drawn_rad).toFixed(8));
+                lineele.setAttribute("y2", ((cy / imgscale) + drawn_rad).toFixed(8));
                 lineele.setAttribute("style", "stroke:rgb(64,64,255);stroke-width:1");
                 svgele.appendChild(lineele);
             }
@@ -209,7 +209,7 @@ function draw_guidescope(obj)
         {
             cx = ori_coord[0];
             cy = ori_coord[1];
-            var drawn_rad = math_mapStarRadius(maxr, minr, maxr, imgh) + 10;
+            var drawn_rad = math_mapStarRadius(maxr, minr, maxr, imgh) + 20;
             lineele = document.createElementNS(svgNS, "line");
             lineele.setAttribute("x1", ((cx / imgscale) - drawn_rad).toFixed(8));
             lineele.setAttribute("y1", ((cy / imgscale)).toFixed(8));
@@ -238,7 +238,7 @@ function draw_guidescope(obj)
             var txtele; 
             txtele = document.createElementNS(svgNS, "text");
             txtele.setAttribute("x", 2);
-            txtele.setAttribute("y", imgh - 20);
+            txtele.setAttribute("y", imgh - 5);
             if (star_list.length > 0) {
                 txtele.innerHTML = "click/touch star to change selection";
             }
@@ -318,11 +318,20 @@ function draw_calibration(svgele, drawscale, obj, axis)
     txtele.setAttribute("x", 2);
     if (axis == "ra") {
         txtele.setAttribute("y", 20);
-        txtele.innerText = "R.A. calibration";
+        txtele.innerHTML = "&mdash; R.A. calibration";
     }
     else if (axis == "dec") {
         txtele.setAttribute("y", 40);
-        txtele.innerText = "Dec. calibration";
+        txtele.innerHTML = "&mdash; Dec. calibration";
+    }
+    if (calibobj["success"] == "wait") {
+        txtele.innerHTML += " (in progress...)";
+    }
+    else if (calibobj["success"] == "init") {
+        txtele.innerHTML += " (not started)";
+    }
+    else if (calibobj["success"] == "failed") {
+        txtele.innerHTML += " (failed)";
     }
     txtele.setAttribute("style", "font-size:12pt;fill:rgb(" + color +")");
     svgele.appendChild(txtele);
@@ -332,8 +341,14 @@ function draw_calibration(svgele, drawscale, obj, axis)
     cirele = document.createElementNS(svgNS, "circle");
     cirele.setAttribute("cx", ((coord[0] / imgscale)).toFixed(8));
     cirele.setAttribute("cy", ((coord[1] / imgscale)).toFixed(8));
-    cirele.setAttribute("r", 6);
+    cirele.setAttribute("r", 4);
     cirele.setAttribute("style", "fill:rgb(" + color + ");stroke:none;");
+    svgele.appendChild(cirele);
+    cirele = document.createElementNS(svgNS, "circle");
+    cirele.setAttribute("cx", ((coord[0] / imgscale)).toFixed(8));
+    cirele.setAttribute("cy", ((coord[1] / imgscale)).toFixed(8));
+    cirele.setAttribute("r", 6);
+    cirele.setAttribute("style", "stroke:rgb(" + color + ");fill:none;");
     svgele.appendChild(cirele);
 
     if (calibobj["success"] == "done")
@@ -368,8 +383,14 @@ function draw_calibration(svgele, drawscale, obj, axis)
                 cirele = document.createElementNS(svgNS, "circle");
                 cirele.setAttribute("cx", ((coord[0] / imgscale)).toFixed(8));
                 cirele.setAttribute("cy", ((coord[1] / imgscale)).toFixed(8));
-                cirele.setAttribute("r", 3);
+                cirele.setAttribute("r", 2);
                 cirele.setAttribute("style", "fill:rgb(" + color + ");stroke:none;");
+                svgele.appendChild(cirele);
+                cirele = document.createElementNS(svgNS, "circle");
+                cirele.setAttribute("cx", ((coord[0] / imgscale)).toFixed(8));
+                cirele.setAttribute("cy", ((coord[1] / imgscale)).toFixed(8));
+                cirele.setAttribute("r", 4);
+                cirele.setAttribute("style", "stroke:rgb(" + color + ");fill:none;");
                 svgele.appendChild(cirele);
             });
         }
