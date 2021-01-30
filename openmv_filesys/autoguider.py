@@ -59,6 +59,7 @@ class AutoGuider(object):
 
         self.guide_state = GUIDESTATE_IDLE
         self.intervalometer_state = INTERVALSTATE_IDLE
+        self.intervalometer_timestamp = 0
         self.selected_star = None
         self.target_coord = None
         self.origin_coord = None
@@ -104,6 +105,7 @@ class AutoGuider(object):
         self.settings.update({"panicthresh_move_err"     : 50})
         self.settings.update({"panicthresh_move_cnt"     : 2})
         self.settings.update({"dither_amount"            : 0})
+        self.settings.update({"dither_amount"            : 0})
         self.settings.update({"dither_interval"          : 1})
         self.settings.update({"dither_calmness"          : 3})
         self.settings.update({"dither_calm_cnt"          : 3})
@@ -117,8 +119,8 @@ class AutoGuider(object):
         self.settings.update({"correction_scale_ra"      : 100})
         self.settings.update({"correction_scale_dec"     : 100})
         self.settings.update({"move_grace"               : 50})
-        self.settings.update({"flip_ra"                  : 1})
-        self.settings.update({"flip_dec"                 : 1})
+        self.settings.update({"flip_ra"                  : 0})
+        self.settings.update({"flip_dec"                 : 0})
         self.settings.update({"min_pulse_wid"            : 50})
         self.settings.update({"max_pulse_wid"            : (self.cam.shutter // 1000) - 100})
         self.settings.update({"net_quiet_time"           : 100})
@@ -154,6 +156,7 @@ class AutoGuider(object):
         self.stars = None
         self.prev_stars = None
         self.hotpixels = []
+        self.multistar_cnt = [0, 0]
         self.zoom = 1
         self.dither_interval = 0
 
@@ -164,16 +167,16 @@ class AutoGuider(object):
         self.stream_sock_err = 0
         self.need_send_stars = False
 
-        self.pulselog_buff = [[0, 0, 0, 0]] * LOG_BUFF_LEN
+        self.pulselog_buff = [[0, 0, 0, 0, 0]] * LOG_BUFF_LEN
         self.msglog_buff   = [[0, 0, None]] * LOG_BUFF_LEN
         self.pulselog_buff_idx = 0
         self.msglog_buff_idx   = 0
 
     def send_settings(self):
         obj = {}
-        obj.update({"pkt_type", "settings"})
+        obj.update({"pkt_type": "settings"})
         for k in self.settings.keys():
-            obj.update({k, self.settings[k]})
+            obj.update({k: self.settings[k]})
         self.send_websocket(obj)
 
     def get_state_obj(self):
@@ -303,67 +306,6 @@ class AutoGuider(object):
                 self.kill_websocket()
             pass
 
-"""
-    def send_file(self, filename, shortname):
-        if self.websock is None:
-            return
-        headstr = "file:" + shortname + ":"
-        estimated_len = len(headstr)
-        f = None
-        fsize = 0
-        errstr = ""
-        try:
-            fstats = uos.stat(filename)
-            fsize = fstats[6]
-            f = open(filename, "rb")
-            estimated_len += fsize
-        except Exception as exc:
-            es = exclogger.log_exception(exc, to_file=False)
-            errstr = "Failed to open file \"" + filename + "\" due to error exception: " + es
-        if f is None:
-            estimated_len += len(es)
-        remaining = estimated_len
-
-        # this function sends websocket packet in chunks with an estimated length
-        # this avoids potential memory allocation errors
-
-        try:
-            self.portal.websocket_send_start(self.websock, remaining, 0x81)
-            self.websock.sock.send(headstr)
-            remaining -= len(headstr)
-
-            if f is not None:
-                while fsize > 0 and remaining > 0:
-                    rlen = fsize
-                    if rlen > 256:
-                        rlen = 256
-                    x = f.read(rlen)
-                    self.websock.sock.send(x)
-                    remaining -= len(x)
-                    fsize     -= len(x)
-                f.close()
-                del f
-                f = None
-            else:
-                self.websock.sock.send(es)
-                remaining -= len(es)
-            # pad the remaining with blank space
-            x = " " * remaining
-            self.websock.sock.send(x)
-            self.portal.tickle()
-        except Exception as exc:
-            self.stream_sock_err += 1
-            if self.stream_sock_err > 5:
-                if self.debug:
-                    print("websock too many errors")
-                exclogger.log_exception(exc, to_file=False)
-                self.kill_websocket()
-            pass
-        if f is not None:
-            f.close()
-            del f
-"""
-
     def send_logs(self):
         if self.websock is None:
             return
@@ -392,13 +334,14 @@ class AutoGuider(object):
         if self.websock is None:
             return
         try:
-            self.websock.settimeout(0.001)
+            self.websock.settimeout(0.1)
             rep = captive_portal.websocket_readmsg(self.websock)
             if rep is None:
                 return False
             if len(rep) <= 0:
                 return False
-        except:
+        except Exception as exc:
+            #exclogger.log_exception(exc, to_file=False)
             return False
         self.stream_sock_err = 0
         self.websock_millis = pyb.millis()
@@ -410,6 +353,8 @@ class AutoGuider(object):
 
     def parse_websocket(self, x):
         if x == "ping":
+            if self.debug:
+                print("websock simple ping")
             return
         obj = ujson.loads(x)
         if "time" in obj:
@@ -449,7 +394,10 @@ class AutoGuider(object):
             if need_save:
                 self.save_settings()
         elif pkt_type == "ping":
-            pass
+            if self.debug:
+                print("websock json ping")
+        else:
+            print("unknown websock pkt_type: " + pkt_type)
 
     def apply_settings(self):
         self.backlash_ra.hysteresis   = self.settings["backlash_hyster_ra"]
@@ -582,33 +530,26 @@ class AutoGuider(object):
                     if self.guide_state == GUIDESTATE_GUIDING and self.settings["dither_amount"] > 0 and self.intervalometer_state == INTERVALSTATE_ACTIVE:
                         self.task_pulser() # this will cause the shutter status to update, and the dither_interval counter to go up
                         if self.dither_interval >= self.settings["dither_interval"] and guidepulser.is_shutter_open() == False:
-                            amt = int(round(self.settings["dither_amount"] * 10.0))
-                            nx = ((pyb.rng() % (amt * 2)) - amt) / 10.0
-                            ny = ((pyb.rng() % (amt * 2)) - amt) / 10.0
-                            self.target_coord = [self.origin_coord[0] + nx, self.origin_coord[1] + ny]
+                            self.set_dither_coord()
                             if self.debug:
                                 print("dithering coord: (%0.1f , %0.2f)" % (self.target_coord[0], self.target_coord[1]))
                             self.guide_state = GUIDESTATE_DITHER
                             self.dither_interval = 0
                             self.dither_calm = 0
                             self.dither_frames = 0
-                            self.backlash_ra.neutralize()
-                            self.backlash_dec.neutralize()
                             self.advfilt_ra.pause(True)
                             self.advfilt_dec.pause(True)
                     if self.guide_state == GUIDESTATE_GUIDING:
                         self.advfilt_ra.pause(False)
                         self.advfilt_dec.pause(False)
-                    decided_pulse = self.pulse_to_target()
+                    decided_pulse = self.pulse_to_target(force_move = (self.guide_state == GUIDESTATE_DITHER))
                     return decided_pulse
                 elif self.guide_state == GUIDESTATE_DITHER:
                     self.dither_interval = 0
                     self.dither_frames += 1
-                    self.backlash_ra.neutralize()
-                    self.backlash_dec.neutralize()
                     self.advfilt_ra.pause(True)
                     self.advfilt_dec.pause(True)
-                    decided_pulse = self.pulse_to_target()
+                    decided_pulse = self.pulse_to_target(force_move = True)
                     if decided_pulse <= self.settings["dither_calmness"]:
                         self.dither_calm += 1
                     else:
@@ -622,10 +563,13 @@ class AutoGuider(object):
                             print("dither finished due to calm")
                     elif self.dither_frames >= self.settings["dither_frames_cnt"]:
                         done_dither = True
+                        self.target_coord = self.selected_star # retarget to prevent additional moves
                         if self.debug:
                             print("dither finished due to timeout")
                     if done_dither:
                         self.guide_state = GUIDESTATE_GUIDING
+                        self.backlash_ra.neutralize()
+                        self.backlash_dec.neutralize()
                         self.advfilt_ra.pause(False)
                         self.advfilt_dec.pause(False)
                         guidepulser.shutter(self.settings["intervalometer_bulb_time"])
@@ -694,39 +638,76 @@ class AutoGuider(object):
             # self.img is None
             return decided_pulse
 
-    def pulse_to_target(self):
+    def set_dither_coord(self):
+        amt = int(round(self.settings["dither_amount"] * 10.0))
+        nx = ((pyb.rng() % (amt * 2)) - amt) / 10.0
+        ny = ((pyb.rng() % (amt * 2)) - amt) / 10.0
+        self.target_coord = [self.origin_coord[0] + nx, self.origin_coord[1] + ny]
+
+    def get_pulse_to_target(self):
         if self.calibration[CALIIDX_RA] is None:
-            return 0
+            return None
         if self.target_coord is None or self.selected_star is None:
-            return 0
+            return None
         if self.virtual_star is None:
             self.virtual_star = self.selected_star
+
         dx = self.target_coord[0] - self.virtual_star[0]
         dy = self.target_coord[1] - self.virtual_star[1]
         mag = math.sqrt((dx * dx) + (dy * dy))
         ang = math.degrees(math.atan2(dy, dx))
         ang_ra  = comutils.ang_normalize(ang - self.calibration[CALIIDX_RA ].angle)
         nx = mag * math.cos(math.radians(ang_ra))
-        pulse_ra_ori  = nx * self.calibration[CALIIDX_RA ].ms_per_pix
+        pulse_ra  = nx * self.calibration[CALIIDX_RA ].ms_per_pix
         if self.calibration[CALIIDX_DEC] is not None:
             ang_dec = comutils.ang_normalize(ang - self.calibration[CALIIDX_DEC].angle)
             ny = mag * math.cos(math.radians(ang_dec))
         else:
             # declination not calibrated
-            pulse_dec_ori = 0
+            pulse_dec = 0
             ny = mag * math.sin(math.radians(ang_ra))
-            pulse_dec_ori = ny * self.calibration[CALIIDX_RA].ms_per_pix
+            pulse_dec = ny * self.calibration[CALIIDX_RA].ms_per_pix
 
-        pulse_ra_ori  *= self.settings["correction_scale_ra"]
-        pulse_dec_ori *= self.settings["correction_scale_dec"]
-        pulse_ra_ori  /= 100
-        pulse_dec_ori /= 100
+        pulse_ra  *= self.settings["correction_scale_ra"]
+        pulse_dec *= self.settings["correction_scale_dec"]
+        pulse_ra  /= 100
+        pulse_dec /= 100
+        pulse_ra  = self.advfilt_ra.filter(pulse_ra)
+        pulse_dec = self.advfilt_dec.filter(pulse_dec)
+        return [pulse_ra, pulse_dec, nx, ny]
 
-        pulse_ra_ori  = self.advfilt_ra.filter(pulse_ra_ori)
-        pulse_dec_ori = self.advfilt_dec.filter(pulse_dec_ori)
+    def clamp_pulse(self, pulse, pul_abs, pul_min, pul_max):
+        if pul_abs < pul_min * 0.75:
+            pul_abs = 0
+            pulse = 0
+        elif pul_abs < pul_min:
+            pul_abs = pul_min
+            if pulse > 0:
+                pulse = pul_min
+            else:
+                pulse = -pul_min
+        if pul_abs > pul_max:
+            pul_abs = pul_max
+            if pulse > 0:
+                pulse = pul_max
+            else:
+                pulse = -pul_max
+        return pulse, pulse_abs
 
-        pulse_ra_abs  = abs(pulse_ra_ori)
-        pulse_dec_abs = abs(pulse_dec_ori)
+    def pulse_to_target(self, pulse_data = None, force_move = False):
+        if pulse_data is None:
+            res = self.get_pulse_to_target()
+            if res is None:
+                return 0
+        else:
+            res = pulse_data
+        pulse_ra = res[0]
+        pulse_dec = res[1]
+        nx = res[2]
+        ny = res[3]
+
+        pulse_ra_abs  = abs(pulse_ra)
+        pulse_dec_abs = abs(pulse_dec)
         self.pulse_sum += pulse_ra_abs + pulse_dec_abs
         self.log_pulse(nx, ny)
         min_pulse_wid = self.settings["min_pulse_wid"]
@@ -735,43 +716,15 @@ class AutoGuider(object):
             min_pulse_wid = 5
         if max_pulse_wid < 5:
             max_pulse_wid = int(round(self.settings["guidecam_shutter"] * 0.9 - 300))
-        if pulse_ra_abs < min_pulse_wid * 0.75:
-            pulse_ra_abs = 0
-            pulse_ra_ori = 0
-        elif pulse_ra_abs < min_pulse_wid:
-            pulse_ra_abs = min_pulse_wid
-            if pulse_ra_ori > 0:
-                pulse_ra_ori = min_pulse_wid
-            else:
-                pulse_ra_ori = -min_pulse_wid
-        if pulse_dec_abs < min_pulse_wid * 0.75:
-            pulse_dec_abs = 0
-            pulse_dec_ori = 0
-        elif pulse_dec_abs < min_pulse_wid:
-            pulse_dec_abs = min_pulse_wid
-            if pulse_dec_ori > 0:
-                pulse_dec_ori = min_pulse_wid
-            else:
-                pulse_dec_ori = -min_pulse_wid
-        if pulse_ra_abs > max_pulse_wid:
-            pulse_ra_abs = max_pulse_wid
-            if pulse_ra_ori > 0:
-                pulse_ra_ori = max_pulse_wid
-            else:
-                pulse_ra_ori = -max_pulse_wid
-        if pulse_dec_abs > max_pulse_wid:
-            pulse_dec_abs = max_pulse_wid
-            if pulse_dec_ori > 0:
-                pulse_dec_ori = max_pulse_wid
-            else:
-                pulse_dec_ori = -max_pulse_wid
+        pulse_ra , pulse_ra_abs  = self.clamp_pulse(pulse_ra , pulse_ra_abs , min_pulse_wid, max_pulse_wid)
+        pulse_dec, pulse_dec_abs = self.clamp_pulse(pulse_dec, pulse_dec_abs, min_pulse_wid, max_pulse_wid)
         ret = max(pulse_ra_abs, pulse_dec_abs)
         if ret > 0 and ret <= 1:
             ret = 1
-        pulse_ra_fin  = self.backlash_ra.filter(pulse_ra_ori)
+        pulse_ra_fin  = self.backlash_ra.filter(pulse_ra, force_move = force_move)
         if self.calibration[CALIIDX_DEC] is None:
-            pulse_dec_ori = 0
-        pulse_dec_fin = self.backlash_dec.filter(pulse_dec_ori)
+            pulse_dec = 0
+        pulse_dec_fin = self.backlash_dec.filter(pulse_dec, force_move = force_move)
         if pulse_ra_fin != 0 or pulse_dec_fin != 0:
             guidepulser.move(pulse_ra_fin, pulse_dec_fin, self.settings["move_grace"])
             self.stop_time = guidepulser.get_stop_time()
@@ -1182,6 +1135,7 @@ class AutoGuider(object):
                 print("ERROR: WiFi hardware failure")
                 green_led.off()
                 self.check_panic_builtin_led()
+            self.check_websocket()
 
     def register_http_handlers(self):
         if self.portal is None:
@@ -1199,14 +1153,20 @@ class AutoGuider(object):
         micropython.mem_info(True)
         return True
 
-    def save_settings(self, filename = "settings.json"):
+    def save_settings(self, filename = "settings_autoguider.json"):
         if self.debug:
             print("save_settings")
         with open(filename, mode="wb") as f:
             ujson.dump(self.settings, f)
 
-    def load_settings(self, filename = "settings.json"):
+    def load_settings(self, filename = "settings_autoguider.json"):
         obj = {}
+        try:
+            uos.stat(filename)
+        except OSError:
+            print("settings file missing")
+            self.apply_settings()
+            return
         try:
             with open(filename, mode="rb") as f:
                 obj = ujson.load(f)
@@ -1282,7 +1242,7 @@ class AutoGuider(object):
     def handle_index(self, client_stream, req, headers, content):
         self.kill_imgstreamer()
         self.kill_websocket()
-        captive_portal.gen_page(client_stream, "autoguider.htm", add_files = ["web/autoguider_utils.js", "web/jquery-ui-1.12.1-darkness.css", "web/jquery-3.5.1.min.js", "web/jquery-ui-1.12.1.min.js", "web/chartist.min.js", "web/chartist.min.css", "web/toast.js", "web/websocketutils.js", "web/mathutils.js", "web/draw_guideerror.js", "web/draw_guidescope.js", "web/draw_starprofile.js"], debug = self.debug)
+        captive_portal.gen_page(client_stream, "autoguider.htm", add_files = ["web/autoguider_utils.js", "web/jquery-ui-1.12.1-darkness.css", "web/jquery-3.5.1.min.js", "web/jquery-ui-1.12.1.min.js", "web/chartist.min.js", "web/chartist.min.css", "web/divtable_basic.css", "web/toast.js", "web/websocketutils.js", "web/mathutils.js", "web/draw_guideerror.js", "web/draw_guidescope.js", "web/draw_starprofile.js"], debug = self.debug)
         return True
 
     def update_imgstream(self):
@@ -1338,7 +1298,7 @@ class AutoGuider(object):
         else:
             print("established websock")
         self.websock = client_stream
-        self.websock.settimeout(10)
+        self.websock.settimeout(0.1)
         self.stream_sock_err = 0
         self.websock_millis = pyb.millis()
         return False # won't kill the socket

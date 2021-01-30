@@ -1,5 +1,6 @@
 var star_list = [];
 var viz_calib = false;
+var pending_select = null;
 
 function get_draw_scale(zoom, scale_vert)
 {
@@ -119,6 +120,22 @@ function draw_guidescope(obj)
             cirele.setAttribute("cy", ((cy / imgscale) - offset_y).toFixed(8));
             cirele.setAttribute("r", drawn_rad);
             cirele.setAttribute("style", "stroke:rgb(32,255,32);stroke-width:1");
+            svgele.appendChild(cirele);
+        }
+    }
+
+    if (pending_select !== undefined && typeof pending_select !== 'undefined')
+    {
+        if (pending_select != null)
+        {
+            cx = pending_select[0];
+            cy = pending_select[1];
+            var drawn_rad = math_mapStarRadius(maxr, minr, maxr, imgh) + 7;
+            cirele = document.createElementNS(svgNS, "circle");
+            cirele.setAttribute("cx", ((cx / imgscale) - offset_x).toFixed(8));
+            cirele.setAttribute("cy", ((cy / imgscale) - offset_y).toFixed(8));
+            cirele.setAttribute("r", drawn_rad);
+            cirele.setAttribute("style", "stroke:rgb(255,255,0);stroke-width:1");
             svgele.appendChild(cirele);
         }
     }

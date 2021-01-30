@@ -33,7 +33,7 @@ function websocket_init(page)
         if (typeof websock_onmessage === "function") {
             websock_onmessage(evt);
         }
-        else if (typeof click_func === 'string' || click_func instanceof String)
+        else if (typeof d === 'string' || d instanceof String)
         {
             d = d.trim();
             if (d.startsWith("{") && d.endsWith("}"))
@@ -90,13 +90,20 @@ function websocket_init(page)
             websock_onerror(evt);
         }
     };
+
+    window.onbeforeunload = function() {
+        if (socket != null) {
+            socket.onclose = function () {}; // disable onclose handler first
+            socket.close();
+        }
+    };
 }
 
 var websocket_last_transmission = null;
 
 function websock_send(x) {
     if ((typeof x === 'string' || x instanceof String) == false) {
-        x = x.toString();
+        x = JSON.stringify(x);
     }
     websocket_last_transmission = x;
     if (socket != null) {

@@ -51,6 +51,7 @@ var guide_state = 0;
 var settings = {};
 var queuedSettings = [];
 var last_status = null;
+var last_rx = null;
 
 var selected_star = null, tgt_coord = null, ori_coord = null;
 
@@ -256,6 +257,16 @@ function websock_onopen(evt)
 
 function websock_onmessage_jsonobj(obj)
 {
+    last_rx = obj;
+    setTimeout(websock_onmessage_jsonobj_inner, 1);
+    // found out the hard way that the thread that runs these onmessage callback functions will timeout and cut the function short without any notification
+    // so the solution is to just save the object and run the function in another thread that doesn't unexpectedly quit
+}
+
+function websock_onmessage_jsonobj_inner()
+{
+    var obj = last_rx;
+
     websock_total_err = 0;
     if (queuedSettings.length > 0)
     {
@@ -275,97 +286,135 @@ function websock_onmessage_jsonobj(obj)
         fillAdvFilterSettings(obj);
         settings = obj;
     }
-    else if (obj["pkt_type"] == "status")
+    else if (obj["pkt_type"] == "status" || obj["pkt_type"] == "state")
     {
+        console.log("obtained status obj");
         document.getElementById("loading_almost").style.display = "none";
 
         last_status = obj;
-
-        handleCalibration(obj, "ra");
-        handleCalibration(obj, "dec");
-        handleMsgLogs(obj);
-        handlePulseLogs(obj);
-        imageStatsUpdate(obj);
-        hotpixelsInfoUpdate(obj);
-
-        if (("interval_state" in obj) && ("blub_remaining" in obj)) {
-            intervalometerUpdate(obj["interval_state"], obj["blub_remaining"]);
+        handleStateObj();
+    }
+    else
+    {
+        if ("pkt_type" in obj) {
+            console.log("obtained unknown obj with pkt_type: " + obj["pkt_type"]);
         }
         else {
-            console.log("intervalometer data missing from status");
+            console.log("obtained unknown obj without pkt_type");
         }
+    }
+}
 
-        var has_selectedstar = false;
-        if (("sel_star" in obj) != false) {
-            if (obj["sel_star"] != false && obj["sel_star"] != null) {
-                has_selectedstar = true;
-                selected_star = obj["sel_star"];
-            }
-        }
-        if (has_selectedstar == false) {
-            selected_star = null;
-        }
-        if (has_selectedstar != false && ("sel_star_profile" in obj) != false) {
-            document.getElementById("div_starprofile").style.display = "block";
-            starprofile = arr;
-            draw_starprofile();
-        }
-        else {
-            document.getElementById("div_starprofile").style.display = "none";
-            starprofile = [];
-            draw_starprofile();
-        }
+function handleStateObj()
+{
+    var obj = last_status;
 
-        var has_tgtstar = false;
-        if (("tgt_coord" in obj) != false) {
-            if (obj["tgt_coord"] != false && obj["tgt_coord"] != null) {
-                has_tgtstar = true;
-                tgt_coord = obj["tgt_coord"];
-            }
-        }
-        if (has_tgtstar == false) {
-            tgt_coord = null;
-        }
+    handleCalibration(obj, "ra");
+    handleCalibration(obj, "dec");
+    handleMsgLogs(obj);
+    handlePulseLogs(obj);
 
-        has_tgtstar = false;
-        if (("ori_coord" in obj) != false) {
-            if (obj["ori_coord"] != false && obj["ori_coord"] != null) {
-                has_tgtstar = true;
-                ori_coord = obj["ori_coord"];
-            }
-        }
-        if (has_tgtstar == false) {
-            ori_coord = null;
-        }
+    if (obj["stars"] != null && obj["stars"] != false) {
+        star_list = parseStarsStr(obj["stars"]);
+    }
+    imageStatsUpdate(obj);
+    hotpixelsInfoUpdate(obj);
 
-        var is_dither = (settings["dither_amount"] > 0 && (guide_state == 1 || guide_state == 2) && (interval_state == 1 || interval_state == 2));
-        if (is_dither)
+    if (("interval_state" in obj) && ("blub_remaining" in obj)) {
+        intervalometerUpdate(obj["interval_state"], obj["blub_remaining"]);
+    }
+    else {
+        console.log("intervalometer data missing from status");
+    }
+
+    var has_selectedstar = false;
+    if (("sel_star" in obj) != false) {
+        if (obj["sel_star"] != false && obj["sel_star"] != null) {
+            has_selectedstar = true;
+            selected_star = obj["sel_star"];
+            pending_select = null;
+        }
+    }
+    if (has_selectedstar == false) {
+        selected_star = null;
+    }
+    if (has_selectedstar != false && ("sel_star_profile" in obj) != false) {
+        document.getElementById("div_starprofile").style.display = "block";
+        starprofile = obj["sel_star_profile"];
+        draw_starprofile();
+    }
+    else {
+        document.getElementById("div_starprofile").style.display = "none";
+        starprofile = [];
+        draw_starprofile();
+    }
+
+    var has_tgtstar = false;
+    if (("tgt_coord" in obj) != false) {
+        if (obj["tgt_coord"] != false && obj["tgt_coord"] != null) {
+            has_tgtstar = true;
+            tgt_coord = obj["tgt_coord"];
+        }
+    }
+    if (has_tgtstar == false) {
+        tgt_coord = null;
+    }
+
+    has_tgtstar = false;
+    if (("ori_coord" in obj) != false) {
+        if (obj["ori_coord"] != false && obj["ori_coord"] != null) {
+            has_tgtstar = true;
+            ori_coord = obj["ori_coord"];
+        }
+    }
+    if (has_tgtstar == false) {
+        ori_coord = null;
+    }
+
+    var is_dither = (settings["dither_amount"] > 0 && (guide_state == 1 || guide_state == 2) && (interval_state == 1 || interval_state == 2));
+    if (is_dither)
+    {
+        if (("dither_interval" in obj) != false)
         {
-            if (("dither_interval" in obj) != false)
-            {
-                var total = settings["dither_interval"];
-                if (total < 1) { total = 1; };
-                var i = obj["dither_interval"] + 1;
-                var txt = i.toString() + " / " + total.toString() + " in dithering group";
-                document.getElementById("dither_status").style.display = "block";
-                document.getElementById("dither_status").innerHTML = txt;
-            }
+            var total = settings["dither_interval"];
+            if (total < 1) { total = 1; };
+            var i = obj["dither_interval"] + 1;
+            var txt = i.toString() + " / " + total.toString() + " in dithering group";
+            document.getElementById("dither_status").style.display = "block";
+            document.getElementById("dither_status").innerHTML = txt;
         }
-        else {
-            document.getElementById("dither_status").style.display = "none";
-        }
+    }
+    else {
+        document.getElementById("dither_status").style.display = "none";
+    }
 
-        var infoele = document.getElementById("div_statusinfo");
-        var txt = "";
-        guide_state = obj["guide_state"];
-        if (guide_state == GUIDESTATE_IDLE)
+    var infoele = document.getElementById("div_statusinfo");
+    var txt = "";
+    guide_state = obj["guide_state"];
+    if (guide_state == GUIDESTATE_IDLE)
+    {
+        txt = "status: idle";
+        ui_list["btn_guideend"       ].button("option", "disabled", true);
+        ui_list["btn_guidestart"     ].button("option", "disabled", false);
+        ui_list["btn_calib_ra"       ].button("option", "disabled", false);
+        ui_list["btn_calib_dec"      ].button("option", "disabled", false);
+        ui_list["btn_gotocalibration"].button("option", "disabled", false);
+        ui_list["btn_streamimg"      ].button("option", "disabled", false);
+        ui_list["btn_streamimg_star" ].button("option", "disabled", false);
+        ui_list["btn_hotpixels"      ].button("option", "disabled", false);
+        //ui_list["btn_advfilt_update" ].button("option", "disabled", false);
+        //ui_list["btn_advfilt_reset"  ].button("option", "disabled", false);
+    }
+    else
+    {
+        ui_list["btn_guideend"  ].button("option", "disabled", false);
+        if (guide_state == GUIDESTATE_PANIC)
         {
-            txt = "status: idle";
-            ui_list["btn_guideend"       ].button("option", "disabled", true);
+            txt = "status: PANIC";
             ui_list["btn_guidestart"     ].button("option", "disabled", false);
-            ui_list["btn_calib_ra"       ].button("option", "disabled", false);
-            ui_list["btn_calib_dec"      ].button("option", "disabled", false);
-            ui_list["btn_gotocalibration"].button("option", "disabled", false);
+            ui_list["btn_calib_ra"       ].button("option", "disabled", true);
+            ui_list["btn_calib_dec"      ].button("option", "disabled", true);
+            ui_list["btn_gotocalibration"].button("option", "disabled", true);
             ui_list["btn_streamimg"      ].button("option", "disabled", false);
             ui_list["btn_streamimg_star" ].button("option", "disabled", false);
             ui_list["btn_hotpixels"      ].button("option", "disabled", false);
@@ -374,75 +423,58 @@ function websock_onmessage_jsonobj(obj)
         }
         else
         {
-            ui_list["btn_guideend"  ].button("option", "disabled", false);
-            if (guide_state == GUIDESTATE_PANIC)
-            {
-                txt = "status: PANIC";
-                ui_list["btn_guidestart"     ].button("option", "disabled", false);
-                ui_list["btn_calib_ra"       ].button("option", "disabled", true);
-                ui_list["btn_calib_dec"      ].button("option", "disabled", true);
-                ui_list["btn_gotocalibration"].button("option", "disabled", true);
-                ui_list["btn_streamimg"      ].button("option", "disabled", false);
-                ui_list["btn_streamimg_star" ].button("option", "disabled", false);
-                ui_list["btn_hotpixels"      ].button("option", "disabled", false);
-                //ui_list["btn_advfilt_update" ].button("option", "disabled", false);
-                //ui_list["btn_advfilt_reset"  ].button("option", "disabled", false);
+            ui_list["btn_guidestart"     ].button("option", "disabled", true);
+            ui_list["btn_calib_ra"       ].button("option", "disabled", true);
+            ui_list["btn_calib_dec"      ].button("option", "disabled", true);
+            ui_list["btn_gotocalibration"].button("option", "disabled", true);
+            ui_list["btn_streamimg"      ].button("option", "disabled", true);
+            ui_list["btn_streamimg_star" ].button("option", "disabled", true);
+            ui_list["btn_hotpixels"      ].button("option", "disabled", true);
+            //ui_list["btn_advfilt_update" ].button("option", "disabled", true);
+            //ui_list["btn_advfilt_reset"  ].button("option", "disabled", true);
+            if (guide_state == GUIDESTATE_GUIDING) {
+                txt = "status: auto-guiding";
             }
-            else
-            {
-                ui_list["btn_guidestart"     ].button("option", "disabled", true);
-                ui_list["btn_calib_ra"       ].button("option", "disabled", true);
-                ui_list["btn_calib_dec"      ].button("option", "disabled", true);
-                ui_list["btn_gotocalibration"].button("option", "disabled", true);
-                ui_list["btn_streamimg"      ].button("option", "disabled", true);
-                ui_list["btn_streamimg_star" ].button("option", "disabled", true);
-                ui_list["btn_hotpixels"      ].button("option", "disabled", true);
-                //ui_list["btn_advfilt_update" ].button("option", "disabled", true);
-                //ui_list["btn_advfilt_reset"  ].button("option", "disabled", true);
-                if (guide_state == GUIDESTATE_GUIDING) {
-                    txt = "status: auto-guiding";
+            else if (guide_state == GUIDESTATE_DITHER) {
+                txt = "status: auto-guiding (dithering)";
+            }
+            else if (guide_state == GUIDESTATE_CALIBRATING_RA) {
+                txt = "status: calibrating R.A.";
+                if (viz_calib == 0) {
+                    viz_calib = 1;
                 }
-                else if (guide_state == GUIDESTATE_DITHER) {
-                    txt = "status: auto-guiding (dithering)";
-                }
-                else if (guide_state == GUIDESTATE_CALIBRATING_RA) {
-                    txt = "status: calibrating R.A.";
-                    if (viz_calib == 0) {
-                        viz_calib = 1;
-                    }
-                    else if (vis_calib == 2) {
-                        viz_calib = 3;
-                    }
-                }
-                else if (guide_state == GUIDESTATE_CALIBRATING_DEC) {
-                    txt = "status: calibrating dec.";
-                    if (viz_calib == 0) {
-                        viz_calib = 2;
-                    }
-                    else if (vis_calib == 1) {
-                        viz_calib = 3;
-                    }
-                }
-                else {
-                    txt = "status: unknown";
+                else if (vis_calib == 2) {
+                    viz_calib = 3;
                 }
             }
+            else if (guide_state == GUIDESTATE_CALIBRATING_DEC) {
+                txt = "status: calibrating dec.";
+                if (viz_calib == 0) {
+                    viz_calib = 2;
+                }
+                else if (vis_calib == 1) {
+                    viz_calib = 3;
+                }
+            }
+            else {
+                txt = "status: unknown";
+            }
         }
-        if (selected_star != null) {
-            txt += "<br />selected star: " + selected_star[0].toFixed(1) + " , " + selected_star[1].toFixed(1);
-        }
-        txt += "<br />stars seen: " + (star_list.length).toString();
-        if (guide_state == GUIDESTATE_GUIDING && intervalometer_status != INTERVALSTATE_IDLE) {
-            txt += "<br />drift sum: " + pulse_maxsum.toString() + " (prev=" + pulse_maxsum_cache.toString() + ")";
-        }
-        txt += "<br />analysis quality: error=" + obj["last_move_err"] + "&nbsp;;&nbsp;matches=" + obj["multistar_cnt"][0];
-        if (settings["multistar_cnt_max"] > 1 || obj["multistar_cnt"][1] > 1) {
-            txt += "<br />multi-star used: " + obj["multistar_cnt"][1];
-        }
-        infoele.innerHTML = txt;
-
-        draw_guidescope(obj);
     }
+    if (selected_star != null) {
+        txt += "<br />selected star: " + selected_star[0].toFixed(1) + " , " + selected_star[1].toFixed(1);
+    }
+    txt += "<br />stars seen: " + (star_list.length).toString();
+    if (guide_state == GUIDESTATE_GUIDING && intervalometer_status != INTERVALSTATE_IDLE) {
+        txt += "<br />drift sum: " + pulse_maxsum.toString() + " (prev=" + pulse_maxsum_cache.toString() + ")";
+    }
+    txt += "<br />analysis quality: error=" + obj["last_move_err"] + "&nbsp;;&nbsp;matches=" + obj["multistar_cnt"][0];
+    if (settings["multistar_cnt_max"] > 1 || obj["multistar_cnt"][1] > 1) {
+        txt += "<br />multi-star used: " + obj["multistar_cnt"][1];
+    }
+    infoele.innerHTML = txt;
+
+    draw_guidescope(obj);
 }
 
 function websock_onmessage_str(data)
@@ -465,13 +497,17 @@ function websock_onmessage_str(data)
     }
 }
 
+var block_auto_queuing = false;
+
 function autoFillSettingsUi(obj)
 {
+    block_auto_queuing = true;
     for (let key in obj) {
         if ((key in autopopulate_func_list) != false) {
             autopopulate_func_list[key](obj[key]);
         }
     }
+    block_auto_queuing = false;
 }
 
 function miscCmd(x)
@@ -507,7 +543,10 @@ function selectStar(x, y)
 
 function star_onclick(x, y)
 {
-    if (guide_state == GUIDESTATE_IDLE) {
+    if (guide_state == GUIDESTATE_IDLE)
+    {
+        pending_select = [x, y];
+        draw_guidescope();
         selectStar(x, y);
     }
 }
@@ -543,7 +582,7 @@ function star_onclick(x, y)
                 <div id="div_starprofile" style="display:inline;"><fieldset><legend>Star Profile</legend><div id="starprofile_div">no data</div></fieldset></div>
             </div>
             <div class="divTableCell divTableCellFill" style="width: 100%; vertical-align: top;">
-                <div id="div_statusinfo" style="vertical-align: top;">no data</div>
+                <div id="div_statusinfo" style="vertical-align: top; font-size:14pt;">no data</div>
             </div>
         </div>
     </div>
@@ -862,8 +901,8 @@ function dithcalc(utilize_me)
                 </div>
                 <div class="divTableRow">
                     <div class="divTableCell" style="text-align:right;">Desired Photo-Cam Dither (pix)</div>
-                    <div class="divTableCell"><input type="number" id="num_dithcalc_phcamdither" name="num_dithcalc_phcamdither" min="1" max="1000" value="10" /></div>
-                    <div class="divTableCell">&nbsp;</div>
+                    <div class="divTableCell"><input type="number" id="num_dithcalc_phcamdither" name="num_dithcalc_phcamdither" min="1" max="1000" value="12" /></div>
+                    <div class="divTableCell">&GreaterEqual;12 recommended</div>
                 </div>
                 <div class="divTableRow">
                     <div class="divTableCell" style="text-align:right;"><button id="btn_dithcalc" onclick="dithcalc(false);">Calculate</button>&nbsp;&nbsp;&nbsp;Result:</div>
@@ -881,12 +920,10 @@ function dithcalc(utilize_me)
 
 function make_ui_guidecamconfig()
 {
-    $("#btn_streamimg" ).button().click(function( event ) {
-        console.log("click btn_streamimg");
+    makeButton("btn_streamimg", function( event ) {
         window.location.href = "/stream";
     });
-    $("#btn_streamimg_star" ).button().click(function( event ) {
-        console.log("click btn_streamimg_star");
+    makeButton("btn_streamimg_star", function( event ) {
         window.location.href = "/stream?zoom";
     });
 
@@ -900,9 +937,10 @@ function imageStatsUpdate(obj)
 {
     var ele = document.getElementById("div_histogram");
     var stats_str = "";
-    if (obj !== undefined && typeof obj !== 'undefined') {
+    if (obj == undefined || typeof obj == 'undefined') {
         stats_str = "no data available";
         ele.innerHTML = stats_str;
+        console.log("quit");
         return;
     }
     else if (('img' in obj) == false)
@@ -915,7 +953,7 @@ function imageStatsUpdate(obj)
     }
     else
     {
-        stats_str = "num of stars: " + star_cnt.toString() + "&nbsp;&nbsp;&nbsp;&nbsp;";
+        stats_str = "num of stars: " + star_list.length.toString() + "&nbsp;&nbsp;&nbsp;&nbsp;";
         stats_str += "image mean: "  + math_roundPlaces(obj["img_mean"], 1).toString()  + "/255    \t";
         stats_str += "image stdev: " + math_roundPlaces(obj["img_stdev"], 1).toString() + "/255    \t";
         stats_str += "image max: "   + Math.round(obj["img_max"]).toString() +            "/255    \t";
@@ -1025,8 +1063,8 @@ function make_ui_mountconfig()
     <div><fieldset><legend>Calibration Step Pulse (R.A.): <span id="slider_pulse_calistep_ra_handle"></span></legend>
         <div id="slider_pulse_ra_calistep"></div>
     </fieldset></div>
-    <div><fieldset><legend>Calibration Step Pulse (Dec.): <span id="slider_pulse_calistep_ra_handle"></span></legend>
-        <div id="slider_pulse_calistep_ra"></div>
+    <div><fieldset><legend>Calibration Step Pulse (Dec.): <span id="slider_pulse_dec_calistep_handle"></span></legend>
+        <div id="slider_pulse_dec_calistep"></div>
     </fieldset></div>
     <div><fieldset><legend>Settle Time: <span id="slider_pulse_settle_handle"></span></legend>
         <div id="slider_pulse_settle"></div>
@@ -1054,6 +1092,7 @@ function make_ui_mountconfig()
         <p>For example, the hysteresis value is 100 ms, a star moved and required a 100 ms movement to the right, the firmware will remember that the bias is towards the right. Then, if the star moved and required a 50 ms move to the left, the command to move will not actually be given, because the bias is towards the right, and all left-ward commands will be ignored. But if the star moved and required 200 ms move to the left, then it will actually perform the 200 ms move to the left, because with 200 ms, it has crossed the direction change hysteresis value.</p>
         <p>This technique helps the most with "momentary movements that naturally returns to original position", such as movement caused by wind. These types of moments shouldn't require correction, as the risk of (and penalty for) over-correction is high. It is similar to the "<b>ResistSwitch</b>" algorithm present in PHD2.</p>
         <p>This feature is most useful for the declination axis because it shouldn't need to actually spin unless there's a bad polar-alignment, and in that case, the declination motor should only spin in one direction, never the other direction.</p>
+        <p>Many astrophotographers prefer to be very slightly off in polar-alignment so that guide corrections are always in the same direction. Keeps the declination motor always spinning in the same direction, and thus this guarantees that the gears will be always meshed together.</p>
         <p>For the R.A. axis, the axis is always spinning and the small imperfections of the gears. Locking in the direction of correction would make sense for small imperfections of the gears, but not larger ones.</p>
         <p>"<b>Direction Bias Limiter</b>" is an internal maximum limit value for the accumulated value that determines the direction bias. Leave it at zero for it to be automatic. A large value will cause direction bias to never switch directions! The appropriate hysteresis value and limit value are different for every tracking telescope mount. More backlash requires higher values.</p>
     </p></fieldset></div>

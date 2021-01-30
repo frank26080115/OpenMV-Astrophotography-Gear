@@ -159,7 +159,7 @@ class GuiderCalibration(object):
             if short == False:
                 obj.update({"points" : self.points})
             obj.update({"points_cnt" : len(self.points)})
-        obj.update({"start_coord"    : self.points[0])
+        obj.update({"start_coord"    : self.points[0]})
         obj.update({"pix_per_ms"   : self.pix_per_ms})
         obj.update({"ms_per_pix"   : self.ms_per_pix})
         obj.update({"farthest"     : self.farthest})

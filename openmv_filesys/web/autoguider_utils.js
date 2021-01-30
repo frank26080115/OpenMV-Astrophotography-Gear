@@ -133,9 +133,12 @@ function makeSlider(id, minval, maxval, defval, stepval, zero_val, unit, slide_f
         console.log("slider \"" + id + "\" evt = " + text);
         if (slide_func)
         {
-            if (typeof slide_func === 'string' || slide_func instanceof String) {
-                console.log("auto sending \"" + slide_func + "\" = " + v.toString());
-                queueSettingsUpdate(slide_func, v);
+            if (typeof slide_func === 'string' || slide_func instanceof String)
+            {
+                if (block_auto_queuing == false) {
+                    console.log("auto sending \"" + slide_func + "\" = " + v.toString());
+                    queueSettingsUpdate(slide_func, v);
+                }
             }
             else {
                 slide_func(v);
@@ -189,9 +192,12 @@ function makeSliderLookup(id, defval, lut, slide_func)
         console.log("slider \"" + id + "\" evt = " + text);
         if (slide_func)
         {
-            if (typeof slide_func === 'string' || slide_func instanceof String) {
-                console.log("auto sending \"" + slide_func + "\" = " + lut[v].toString());
-                queueSettingsUpdate(slide_func, lut[v]);
+            if (typeof slide_func === 'string' || slide_func instanceof String)
+            {
+                if (block_auto_queuing == false) {
+                    console.log("auto sending \"" + slide_func + "\" = " + lut[v].toString());
+                    queueSettingsUpdate(slide_func, lut[v]);
+                }
             }
             else {
                 slide_func(lut[v]);
@@ -254,9 +260,12 @@ function makeCheckbox(id, initstate, click_func)
         var x = $("#" + id ).prop("checked");
         console.log("button \"" + id + "\" on_change: " + x);
         if (click_func) {
-            if (typeof click_func === 'string' || click_func instanceof String) {
-                console.log("auto sending \"" + click_func + "\" = " + x);
-                queueSettingsUpdate(click_func, x);
+            if (typeof click_func === 'string' || click_func instanceof String)
+            {
+                if (block_auto_queuing == false) {
+                    console.log("auto sending \"" + click_func + "\" = " + x);
+                    queueSettingsUpdate(click_func, x);
+                }
             }
             else {
                 click_func(x);
@@ -274,9 +283,9 @@ function makeCheckbox(id, initstate, click_func)
 
 function sliderSync(id, v)
 {
-    if (v != $("#" + id).slider( "value" )) {
+    if (parseInt(v) != parseInt($("#" + id).slider( "value" ))) {
         $("#" + id).slider( "value", v );
-        ui_list[id + "/func"](v);
+        //ui_list[id + "/func"](v);
     }
 }
 

@@ -63,7 +63,7 @@ def move_point_vector(xy, vect):
 def map_val(x, in_min, in_max, out_min, out_max):
     return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
 
-def try_parse_setting(self, v):
+def try_parse_setting(v):
     if "str" not in str(type(v)):
         return v
     try: # micropython doesn't have "is_numeric"
@@ -77,5 +77,7 @@ def try_parse_setting(self, v):
         else:
             v = int(v)
     except Exception as exc:
-        exclogger.log_exception(exc, to_print = False, to_file = False)
+        #exclogger.log_exception(exc, to_print = False, to_file = False)
+        print("weird settings value cannot be parsed: " + v)
+        pass
     return v

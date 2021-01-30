@@ -60,7 +60,7 @@ class GuideFilter(object):
         self.sum_i += x
         if self.sum_i > self.limit_i:
             self.sum_i = self.limit_i
-        elif self.sum_i < -self.limit_i
+        elif self.sum_i < -self.limit_i:
             self.sum_i = -self.limit_i
         i = self.sum_i * self.term_i
         i /= 100

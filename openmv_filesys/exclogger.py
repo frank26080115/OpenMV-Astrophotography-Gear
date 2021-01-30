@@ -1,6 +1,6 @@
 import micropython, sys, uos, uio, pyb, gc
 
-def log_exception(exc, time_str = "", to_print = True, to_file = True, fatal = False, reboot = False):
+def log_exception(exc, time_str = "", to_print = True, to_file = False, fatal = False, reboot = False):
 
     s = ""
     # use built-in exception formatter

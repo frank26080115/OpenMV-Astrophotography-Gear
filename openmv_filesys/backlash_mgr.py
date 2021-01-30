@@ -15,9 +15,17 @@ class BacklashManager(object):
         self.value = 0
         self.state = 0
 
-    def filter(self, x):
-        x = self._filter(x)
-        return int(round(x))
+    def filter(self, x, force_move = False):
+        if force_move == False:
+            x = self._filter(x)
+            return int(round(x))
+        else:
+            y = self._filter(x)
+            if y != 0:
+                return int(round(y))
+            self.neutralize()
+            y = x + (2 * self.hysteresis * (1 if x > 0 else -1))
+            return int(round(y))
 
     def _filter(self, x):
         if self.max_limit < 0:
