@@ -92,10 +92,7 @@ function websocket_init(page)
     };
 
     window.onbeforeunload = function() {
-        if (socket != null) {
-            socket.onclose = function () {}; // disable onclose handler first
-            socket.close();
-        }
+        websock_tryclose();
     };
 }
 
@@ -122,14 +119,37 @@ function websock_retransmit()
 }
 
 var websock_ping_timer = null;
-function websock_ping_send() {
+function websock_ping_send()
+{
     websock_ping_delay();
-    websock_send("ping");
+    try
+    {
+        websock_send("ping");
+    }
+    catch (e)
+    {
+        if (websock_ping_timer != null) {
+            clearTimeout(websock_ping_timer);
+        }
+        if (typeof websock_onerror === "function") { 
+            websock_onerror(e);
+        }
+    }
 }
 
-function websock_ping_delay() {
+function websock_ping_delay()
+{
     if (websock_ping_timer != null) {
         clearTimeout(websock_ping_timer);
     }
     websock_ping_timer = setTimeout(websock_ping_send, 5000);
+}
+
+function websock_tryclose()
+{
+    if (socket != null) {
+        socket.onclose = function () {}; // disable onclose handler first
+        socket.close();
+        socket = null;
+    }
 }

@@ -314,7 +314,7 @@ function show_toast_msg(s)
 function fetchAndFill(eleId, filename)
 {
     var obj = {"pkt_type": "fetch", "shortname": eleId, "filename": filename, "time": time_getNowEpoch()};
-    websock_ping_delay();
+    //websock_ping_delay();
     websock_send(obj);
 }
 

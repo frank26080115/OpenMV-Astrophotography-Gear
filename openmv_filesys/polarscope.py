@@ -113,13 +113,13 @@ class PolarScope(object):
             exclogger.log_exception(exc, to_print = False, to_file = False)
         return v
 
-    def save_settings(self, filename = "settings.json"):
+    def save_settings(self, filename = "settings_polarscope.json"):
         if self.debug:
             print("save_settings")
         with open(filename, mode="wb") as f:
             ujson.dump(self.settings, f)
 
-    def load_settings(self, filename = "settings.json"):
+    def load_settings(self, filename = "settings_polarscope.json"):
         obj = None
         try:
             with open(filename, mode="rb") as f:

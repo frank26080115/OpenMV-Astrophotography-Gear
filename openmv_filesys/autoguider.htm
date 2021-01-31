@@ -52,6 +52,8 @@ var settings = {};
 var queuedSettings = [];
 var last_status = null;
 var last_rx = null;
+var noStatUpdate_timer = null;
+var first_ever = true;
 
 var selected_star = null, tgt_coord = null, ori_coord = null;
 
@@ -80,8 +82,10 @@ function handleMsgLogs(obj)
         var itm = buff[i];
         if (itm["time"] > last_msg_time) {
             last_msg_time = itm["time"];
-            show_toast_msg(itm["str"]);
-            msglog_append("[" + fmtTime(epochToDate(itm["time"])) + "]: " + itm["str"].trim());
+            if (first_ever == false) {
+                show_toast_msg(itm["str"]);
+                msglog_append("[" + fmtTime(epochToDate(itm["time"])) + "]: " + itm["str"].trim());
+            }
         }
     }
 }
@@ -189,7 +193,7 @@ function sendNewSettings()
         }
     });
     queuedSettings = [];
-    websock_ping_delay();
+    //websock_ping_delay();
     websock_send(obj);
 }
 
@@ -224,8 +228,16 @@ var websock_total_err = 0;
 
 function websock_onerror(evt)
 {
-    show_toast_msg("ERR: web-socket error");
-    msglog_appendLocal("WEBSOCK ERR: " + evt.message);
+    if (websock_total_err == 0)
+    {
+        show_toast_msg("ERR: web-socket error");
+        if (evt.message !== undefined && typeof evt.message !== 'undefined') {
+            msglog_appendLocal("WEBSOCK ERR: " + evt.message);
+        }
+        else {
+            msglog_appendLocal("WEBSOCK ERR");
+        }
+    }
     document.getElementById("connection_lost").style.display = "block";
     websock_total_err += 1;
     if (websock_total_err > 3 && last_status == null) {
@@ -233,7 +245,7 @@ function websock_onerror(evt)
         document.getElementById("showme").style.display = "none";
     }
     else {
-        websocket_init("websocket");
+        setTimeout(function() { websocket_init("websocket"); }, 2000);
     }
 }
 
@@ -242,17 +254,22 @@ function websock_onopen(evt)
     websock_total_err = 0;
     document.getElementById("connection_lost").style.display = "none";
     msglog_appendLocal("websocket opened!");
+    document.getElementById("loading").style.display = "none";
+    document.getElementById("loading_connecting").style.display = "none";
     if (websock_retransmit() == false)
     {
         miscCmd("getsettings");
-        document.getElementById("loading").style.display = "none";
-        document.getElementById("loading_connecting").style.display = "none";
         document.getElementById("loading_settings").style.display = "block";
     }
     if (last_status != null)
     {
         show_toast_msg("SUCCESS: web-socket reconnected");
     }
+
+    if (noStatUpdate_timer != null) {
+        clearTimeout(noStatUpdate_timer);
+    }
+    noStatUpdate_timer = setTimeout(noStatUpdate, 6000);
 }
 
 function websock_onmessage_jsonobj(obj)
@@ -274,7 +291,7 @@ function websock_onmessage_jsonobj_inner()
     }
     else
     {
-        websock_ping_delay();
+        //websock_ping_delay();
     }
 
     document.getElementById("connection_lost").style.display = "none";
@@ -294,6 +311,11 @@ function websock_onmessage_jsonobj_inner()
         last_status = obj;
         handleStateObj();
     }
+    else if (obj["pkt_type"] == "logs")
+    {
+        handleMsgLogs(obj);
+        handlePulseLogs(obj);
+    }
     else
     {
         if ("pkt_type" in obj) {
@@ -311,8 +333,10 @@ function handleStateObj()
 
     handleCalibration(obj, "ra");
     handleCalibration(obj, "dec");
-    handleMsgLogs(obj);
-    handlePulseLogs(obj);
+    if (("logs" in obj) != false) {
+        handleMsgLogs(obj["logs"]);
+        handlePulseLogs(obj["logs"]);
+    }
 
     if (obj["stars"] != null && obj["stars"] != false) {
         star_list = parseStarsStr(obj["stars"]);
@@ -320,8 +344,29 @@ function handleStateObj()
     imageStatsUpdate(obj);
     hotpixelsInfoUpdate(obj);
 
-    if (("interval_state" in obj) && ("blub_remaining" in obj)) {
-        intervalometerUpdate(obj["interval_state"], obj["blub_remaining"]);
+    if (("interval_state" in obj) && ("blub_remaining" in obj))
+    {
+        var sts = obj["interval_state"];
+        if (intervalometer_pretend_status != sts && intervalometer_pretend_status >= 0)
+        {
+            if (intervalometer_pretend_status == INTERVALSTATE_HALT && sts == INTERVALSTATE_IDLE) {
+                intervalometer_pretend_status = INTERVALSTATE_IDLE;
+            }
+            if (intervalometer_status_mismatch < 3) {
+                intervalometerUpdate(intervalometer_pretend_status, obj["blub_remaining"]);
+                intervalometer_status_mismatch += 1;
+            }
+            else {
+                intervalometerUpdate(sts, obj["blub_remaining"]);
+                intervalometer_status_mismatch = 0;
+                intervalometer_pretend_status = -1;
+            }
+        }
+        else {
+            intervalometerUpdate(sts, obj["blub_remaining"]);
+            intervalometer_status_mismatch = 0;
+            intervalometer_pretend_status = -1;
+        }
     }
     else {
         console.log("intervalometer data missing from status");
@@ -393,7 +438,7 @@ function handleStateObj()
     guide_state = obj["guide_state"];
     if (guide_state == GUIDESTATE_IDLE)
     {
-        txt = "status: idle";
+        txt = "IDLE";
         ui_list["btn_guideend"       ].button("option", "disabled", true);
         ui_list["btn_guidestart"     ].button("option", "disabled", false);
         ui_list["btn_calib_ra"       ].button("option", "disabled", false);
@@ -410,7 +455,7 @@ function handleStateObj()
         ui_list["btn_guideend"  ].button("option", "disabled", false);
         if (guide_state == GUIDESTATE_PANIC)
         {
-            txt = "status: PANIC";
+            txt = "PANIC";
             ui_list["btn_guidestart"     ].button("option", "disabled", false);
             ui_list["btn_calib_ra"       ].button("option", "disabled", true);
             ui_list["btn_calib_dec"      ].button("option", "disabled", true);
@@ -433,13 +478,13 @@ function handleStateObj()
             //ui_list["btn_advfilt_update" ].button("option", "disabled", true);
             //ui_list["btn_advfilt_reset"  ].button("option", "disabled", true);
             if (guide_state == GUIDESTATE_GUIDING) {
-                txt = "status: auto-guiding";
+                txt = "auto-guiding";
             }
             else if (guide_state == GUIDESTATE_DITHER) {
-                txt = "status: auto-guiding (dithering)";
+                txt = "auto-guiding (dithering)";
             }
             else if (guide_state == GUIDESTATE_CALIBRATING_RA) {
-                txt = "status: calibrating R.A.";
+                txt = "calibrating R.A.";
                 if (viz_calib == 0) {
                     viz_calib = 1;
                 }
@@ -448,7 +493,7 @@ function handleStateObj()
                 }
             }
             else if (guide_state == GUIDESTATE_CALIBRATING_DEC) {
-                txt = "status: calibrating dec.";
+                txt = "calibrating dec.";
                 if (viz_calib == 0) {
                     viz_calib = 2;
                 }
@@ -461,8 +506,9 @@ function handleStateObj()
             }
         }
     }
+    txt = "<b>" + txt.toUpperCase() + "</b>";
     if (selected_star != null) {
-        txt += "<br />selected star: " + selected_star[0].toFixed(1) + " , " + selected_star[1].toFixed(1);
+        txt += "<br />selected star: x=" + selected_star[0].toFixed(1) + " , y=" + selected_star[1].toFixed(1);
     }
     txt += "<br />stars seen: " + (star_list.length).toString();
     if (guide_state == GUIDESTATE_GUIDING && intervalometer_status != INTERVALSTATE_IDLE) {
@@ -475,12 +521,18 @@ function handleStateObj()
     infoele.innerHTML = txt;
 
     draw_guidescope(obj);
+
+    if (noStatUpdate_timer != null) {
+        clearTimeout(noStatUpdate_timer);
+    }
+    noStatUpdate_timer = setTimeout(noStatUpdate, 6000);
+    first_ever = false;
 }
 
 function websock_onmessage_str(data)
 {
     websock_total_err = 0;
-    websock_ping_delay();
+    //websock_ping_delay();
 
     if (typeof data === 'string' || data instanceof String)
     {
@@ -495,6 +547,15 @@ function websock_onmessage_str(data)
             }
         }
     }
+}
+
+function noStatUpdate()
+{
+    if (websock_ping_timer != null) {
+        clearTimeout(websock_ping_timer);
+    }
+    var evt = {"message": "status update timed-out"};
+    websock_onerror(evt);
 }
 
 var block_auto_queuing = false;
@@ -516,7 +577,7 @@ function miscCmd(x)
     obj["pkt_type"] = "misc_cmd";
     obj["time"]     = time_getNowEpoch();
     obj["cmd"]      = x;
-    websock_ping_delay();
+    //websock_ping_delay();
     websock_send(obj);
 }
 
@@ -526,7 +587,7 @@ function guideCmd(x)
     obj["pkt_type"] = "guide_cmd";
     obj["time"]     = time_getNowEpoch();
     obj["cmd"]      = x;
-    websock_ping_delay();
+    //websock_ping_delay();
     websock_send(obj);
 }
 
@@ -537,7 +598,7 @@ function selectStar(x, y)
     obj["time"]     = time_getNowEpoch();
     obj["star_x"]   = x;
     obj["star_y"]   = y;
-    websock_ping_delay();
+    //websock_ping_delay();
     websock_send(obj);
 }
 
@@ -548,6 +609,10 @@ function star_onclick(x, y)
         pending_select = [x, y];
         draw_guidescope();
         selectStar(x, y);
+    }
+    else
+    {
+        show_toast_msg("WARN: you can only select a star while in idle mode");
     }
 }
 
@@ -672,6 +737,8 @@ function make_ui_intervalometer()
 }
 
 var intervalometer_status = 0;
+var intervalometer_pretend_status = -1;
+var intervalometer_status_mismatch = 0;
 var intervalometer_remaining = 0;
 var intervalometer_timer = null;
 var intervalometer_gotoidletimer = null;
@@ -785,11 +852,12 @@ function intervalometerCountDown()
 function intervalometerCmd(cmd)
 {
     intervalometerUpdate(cmd, settings["intervalometer_bulb_time"] * 1000);
+    intervalometer_pretend_status = cmd;
     var obj = {}
     obj["pkt_type"] = "intervalometer_cmd";
     obj["time"]     = time_getNowEpoch();
     obj["cmd"]      = cmd;
-    websock_ping_delay();
+    //websock_ping_delay();
     websock_send(obj);
 }
     </script>
@@ -1400,7 +1468,7 @@ function make_ui_hotpixels()
 function hotpixelsInfoUpdate(obj)
 {
     var ele = document.getElementById("hotpixel_info");
-    if (obj !== undefined && typeof obj !== 'undefined') {
+    if ((obj !== undefined && typeof obj !== 'undefined') == false) {
         ele.innerHTML = "no data available";
         ui_list["btn_hotpixels"]      .button("option", "disabled", false);
         ui_list["btn_forgethotpixels"].button("option", "disabled", true);
@@ -1433,7 +1501,7 @@ function hotpixelsInfoUpdate(obj)
     }
     else
     {
-        ele.innerHTML = cnt.toString() + " hot-pixels registered, but not being used.";
+        ele.innerHTML = cnt.toString() + " hot-pixels in the file, but not being used. Press \"load file\" to utilize.";
         ui_list["btn_hotpixels"]      .button("option", "disabled", false);
         ui_list["btn_forgethotpixels"].button("option", "disabled", true);
         ui_list["btn_loadhotpixels"]  .button("option", "disabled", false);

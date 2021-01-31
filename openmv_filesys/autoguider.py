@@ -415,7 +415,7 @@ class AutoGuider(object):
         else:
             guidepulser.disable_led()
 
-    def save_settings(self, filename = "settings.json"):
+    def save_settings(self, filename = "settings_autoguider.json"):
         if self.debug:
             print("save_settings")
         with open(filename, mode="wb") as f:
@@ -1002,7 +1002,7 @@ class AutoGuider(object):
     def intervalometer_cmd(self, cmd):
         if cmd == INTERVALSTATE_ACTIVE:
             self.intervalometer_state = cmd
-            self.shutter(self.settings["intervalometer_bulb_time"])
+            guidepulser.shutter(self.settings["intervalometer_bulb_time"])
             self.intervalometer_timestamp = 0
             self.pulse_sum = 0
             self.dither_interval = 0
@@ -1049,15 +1049,19 @@ class AutoGuider(object):
             self.clear_panic()
             self.log_msg("CMD: DEC calibration reset")
         elif cmd == "calib_load":
+            good = 0
+            bad  = 0
             try:
                 with open("calib_ra.json", mode="rb") as f:
                     obj = ujson.load(f)
                     if self.calibration[CALIIDX_RA] is None:
                         self.calibration[CALIIDX_RA] = guider_calibration.GuiderCalibration(0, 0, 0)
                     self.calibration[CALIIDX_RA].load_json_obj(obj)
-                    self.log_msg("SUCCESS: loaded RA calibration from file")
+                    good += 1
+                    #self.log_msg("SUCCESS: loaded RA calibration from file")
             except Exception as exc:
-                self.log_msg("FAILED: cannot load RA calibration from file")
+                bad += 1
+                #self.log_msg("FAILED: cannot load RA calibration from file")
                 exclogger.log_exception(exc)
             try:
                 with open("calib_dec.json", mode="rb") as f:
@@ -1065,31 +1069,56 @@ class AutoGuider(object):
                     if self.calibration[CALIIDX_DEC] is None:
                         self.calibration[CALIIDX_DEC] = guider_calibration.GuiderCalibration(0, 0, 0)
                     self.calibration[CALIIDX_RA].load_json_obj(obj)
-                    self.log_msg("SUCCESS: loaded DEC calibration from file")
+                    good += 2
+                    #self.log_msg("SUCCESS: loaded DEC calibration from file")
             except Exception as exc:
-                self.log_msg("FAILED: cannot load DEC calibration from file")
+                bad += 2
+                #self.log_msg("FAILED: cannot load DEC calibration from file")
                 exclogger.log_exception(exc)
-        elif cmd == "calib_save":
-            if self.calibration[CALIIDX_RA] is None:
-                self.log_msg("ERR: RA calibration not available for saving")
+            if good == 3 and bad == 0:
+                self.log_msg("SUCCESS: loaded calibration from file")
+            elif good == 1:
+                self.log_msg("SUCCESS: loaded calibration from file (for RA)")
+            elif bad != 0 and good == 0:
+                self.log_msg("FAILED: cannot load calibration from file")
             else:
+                self.log_msg("FAILED: cannot load some calibration from file")
+        elif cmd == "calib_save":
+            good = 0
+            bad  = 0
+            if self.calibration[CALIIDX_RA] is None and self.calibration[CALIIDX_DEC] is None:
+                self.log_msg("ERR: calibration data is not available for saving")
+                return
+            if self.calibration[CALIIDX_RA] is not None:
                 try:
                     with open("calib_ra.json", mode="wb") as f:
                         ujson.dump(self.calibration[CALIIDX_RA].get_json_obj(), f)
-                    self.log_msg("SUCCESS: saved RA calibration to file")
+                    good += 1
+                    #self.log_msg("SUCCESS: saved RA calibration to file")
                 except Exception as exc:
-                    self.log_msg("FAILED: cannot save RA calibration to file")
+                    bad += 1
+                    #self.log_msg("FAILED: cannot save RA calibration to file")
                     exclogger.log_exception(exc)
-            if self.calibration[CALIIDX_DEC] is None:
-                self.log_msg("ERR: DEC calibration not available for saving")
-            else:
+            if self.calibration[CALIIDX_DEC] is not None:
                 try:
                     with open("calib_dec.json", mode="wb") as f:
                         ujson.dump(self.calibration[CALIIDX_DEC].get_json_obj(), f)
-                    self.log_msg("SUCCESS: saved DEC calibration to file")
+                    good += 2
+                    #self.log_msg("SUCCESS: saved DEC calibration to file")
                 except Exception as exc:
-                    self.log_msg("FAILED: cannot save DEC calibration to file")
+                    bad += 2
+                    #self.log_msg("FAILED: cannot save DEC calibration to file")
                     exclogger.log_exception(exc)
+            if good == 3 and bad == 0:
+                self.log_msg("SUCCESS: saved all calibration to file")
+            elif good == 1:
+                self.log_msg("SUCCESS: saved calibration to file (for RA)")
+            elif good == 2:
+                self.log_msg("SUCCESS: saved calibration to file (for DEC)")
+            elif bad != 0 and good == 0:
+                self.log_msg("FAILED: cannot save any calibration to file")
+            else:
+                self.log_msg("FAILED: cannot save some calibration to file")
         elif cmd == "hotpixels_save":
             self.save_hotpixels(use_log = True)
         elif cmd == "hotpixels_load":
@@ -1211,6 +1240,8 @@ class AutoGuider(object):
             return
         encoded = star_finder.encode_hotpixels(self.stars)
         self.hotpixels = star_finder.decode_hotpixels(encoded)
+        self.settings["use_hotpixels"] = True
+        self.save_settings()
         try:
             with open("hotpixels.txt", mode="w") as f:
                 f.write(encoded)

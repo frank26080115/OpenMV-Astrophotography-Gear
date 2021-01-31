@@ -131,16 +131,18 @@ def decode_hotpixels(str):
                 continue
             # isnumeric doesn't exist so no checks available
             # if it can't be parsed, it will throw an exception
-            x = float(isplit[0])
-            y = float(isplit[1])
-            res.append([x, y])
+            x = int(round(float(isplit[0])))
+            y = int(round(float(isplit[1])))
+            # note: custom firmware expects integers, cannot handle floats
+            # note: custom firmware expects a tuple, not a list, use tuple notation
+            res.append((x, y))
         except Exception as exc:
             exclogger.log_exception(exc, to_file = False)
     return res
 
-def encode_hotpixels(star_list, r = 5):
+def encode_hotpixels(star_list, r = 8):
     str = ""
     for i in star_list:
-        if i.r <= r:
-            str += "%u,%u;" % (int(round(i.cx)), int(round(i.cy)))
+        if i.r() <= r:
+            str += "%u,%u;" % (int(round(i.cxf())), int(round(i.cyf())))
     return str
