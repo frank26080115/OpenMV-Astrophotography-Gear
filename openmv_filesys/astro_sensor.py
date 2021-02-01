@@ -35,8 +35,13 @@ class AstroCam(object):
 
     def init(self, gain_db = 0, shutter_us = 500000, framesize = sensor.WQXGA2, force_reset = True, flip = False):
         if self.simulate:
+            if force_reset or self.has_error or self.gain != gain_db or self.shutter != shutter_us or self.framesize != framesize or self.flip != flip:
+                self.wait_init = 2
             self.shutter = shutter_us
             self.gain = gain_db
+            self.framesize = framesize
+            self.flip = flip
+            self.has_error = False
             self.snap_started = False
             return
         if force_reset or self.has_error or self.gain != gain_db or self.shutter != shutter_us or self.framesize != framesize or self.flip != flip:

@@ -6,7 +6,7 @@ import blobstar, astro_sensor, time_location, captive_portal, star_finder, guide
 import guidepulser
 import guidestar
 import exclogger
-import pyb, uos, uio, gc, sys
+import pyb, uos, uio, gc, sys, machine
 import time, math, ujson, ubinascii
 import network
 import sensor, image
@@ -95,6 +95,7 @@ class AutoGuider(object):
         self.dbg_t2 = 0
         self.dbg_t3 = 0
         self.hotpixels_eff = 0
+        self.queue_imgsave = False
 
         self.settings = {}
         self.settings.update({"guidecam_gain"            : self.cam.gain})
@@ -144,6 +145,7 @@ class AutoGuider(object):
         self.load_hotpixels(use_log = False, set_usage = False)
 
         self.portal = captive_portal.CaptivePortal(debug = self.debug)
+        self.portal.allow_hw_kick = False
         if self.portal is not None:
             self.register_http_handlers()
 
@@ -463,10 +465,10 @@ class AutoGuider(object):
                     self.prev_stars = latest_stars
 
                 if self.selected_star is None and latest_stars is not None:
-                    if len(latest_stars) > 0:
+                    if len(latest_stars) > 0 and self.guide_state == GUIDESTATE_IDLE:
                         self.selected_star = guidestar.select_first(latest_stars)
                         if self.selected_star is not None:
-                            self.log_msg("MSG: auto selected star at %0.1f %0.1f" % (self.selected_star.cxf(), self.selected_star.cyf()))
+                            self.log_msg("MSG: auto selected star at [%u , %u]" % (int(round(self.selected_star.cxf())), int(round(self.selected_star.cyf()))))
 
                 res = guidestar.get_multi_star_motion(self.prev_stars, latest_stars, self.selected_star, self.settings["starmove_tolerance"], False, self.settings["multistar_ratings_thresh"], self.settings["multistar_cnt_min"], self.settings["multistar_cnt_max"])
                 real_star    = res[0]
@@ -475,9 +477,17 @@ class AutoGuider(object):
                 self.last_move_err = move_err
                 self.multistar_cnt = [res[4], res[5]]
 
+                lost = False
                 self.dbg_t3 = pyb.millis()
                 if self.selected_star is None and real_star is not None:
-                    self.log_msg("MSG: auto selected star at %0.1f %0.1f" % (real_star.cxf(), real_star.cyf()))
+                    self.log_msg("MSG: auto selected star at [%u , %u]" % (int(round(real_star.cxf())), int(round(real_star.cyf()))))
+                elif self.selected_star is not None and real_star is None:
+                    if self.guide_state != GUIDESTATE_IDLE:
+                        #self.log_msg("MSG: lost track of selected star")
+                        pass
+                    else:
+                        self.log_msg("MSG: lost track of selected star")
+                    lost = True
                 self.selected_star = real_star
                 self.virtual_star  = virtual_star
                 # virtual star only matters if multi-star mode is used, it accounts for atmospheric distortion
@@ -489,9 +499,11 @@ class AutoGuider(object):
                     else:
                         print("no star")
 
-                if move_err > self.settings["panicthresh_move_err"] or move_err < 0:
+                if move_err > self.settings["panicthresh_move_err"] or move_err < 0 or lost:
                     self.panic_move_cnt += 1
-                    if self.panic_move_cnt >= self.settings["panicthresh_move_cnt"]:
+                    if lost:
+                        self.panic(msg = "movement analysis lost track of the star")
+                    elif self.panic_move_cnt >= self.settings["panicthresh_move_cnt"]:
                         self.panic(msg = "movement analysis had too much error")
                 else:
                     self.panic_move_cnt = 0
@@ -512,13 +524,17 @@ class AutoGuider(object):
 
                 if self.guide_state == GUIDESTATE_GUIDING or self.passive_guiding:
                     if self.selected_star is None:
-                        self.log_msg("WARN: guidance requested without selected star")
-                        self.guide_state = GUIDESTATE_IDLE
-                        return
+                        if lost:
+                            self.panic(msg = "guidance has lost track of selected star")
+                            # note: previous panic should prevent this statement from being reached
+                        else:
+                            self.log_msg("WARN: guidance requested without selected star")
+                            self.guide_state = GUIDESTATE_IDLE
+                        return decided_pulse
                     if self.calibration[CALIIDX_RA] is None:
                         self.log_msg("WARN: guidance requested without RA calibration")
                         self.guide_state = GUIDESTATE_IDLE
-                        return
+                        return decided_pulse
                     if self.target_coord is None:
                         self.target_coord = self.selected_star.coord()
                         if self.debug:
@@ -545,6 +561,14 @@ class AutoGuider(object):
                     decided_pulse = self.pulse_to_target(force_move = (self.guide_state == GUIDESTATE_DITHER))
                     return decided_pulse
                 elif self.guide_state == GUIDESTATE_DITHER:
+                    if self.selected_star is None:
+                        if lost:
+                            self.panic(msg = "guidance has lost track of selected star during dithering")
+                            # note: previous panic should prevent this statement from being reached
+                        else:
+                            self.log_msg("WARN: dithering without selected star")
+                            self.guide_state = GUIDESTATE_IDLE
+                        return decided_pulse
                     self.dither_interval = 0
                     self.dither_frames += 1
                     self.advfilt_ra.pause(True)
@@ -582,20 +606,26 @@ class AutoGuider(object):
                     self.backlash_dec.neutralize()
                     self.advfilt_ra.pause(True)
                     self.advfilt_dec.pause(True)
+                    if self.guide_state == GUIDESTATE_CALIBRATING_RA:
+                        i = CALIIDX_RA
+                        axis = "RA"
+                    else:
+                        i = CALIIDX_DEC
+                        axis = "DEC"
                     if self.selected_star is None:
-                        self.log_msg("WARN: calibration requested without selected star")
+                        # note: previous panic should prevent this statement from being reached
+                        if lost:
+                            self.log_msg("ERR: calibration has lost track of selected star")
+                        else:
+                            self.log_msg("WARN: calibration without selected star")
+                        if self.calibration[i] is not None:
+                            self.calibration[i].success = "failed"
                         self.guide_state = GUIDESTATE_IDLE
                         return decided_pulse
                     if self.virtual_star is None:
                         self.virtual_star = self.selected_star.coord()
-                    if self.guide_state == GUIDESTATE_CALIBRATING_RA:
-                        i = CALIIDX_RA
-                        dir = "RA"
-                    else:
-                        i = CALIIDX_DEC
-                        dir = "DEC"
                     if self.calibration[i] is None:
-                        pulse_width = self.settings["calibration_pulse_" + dir.lower()]
+                        pulse_width = self.settings["calibration_pulse_" + axis.lower()]
                         if pulse_width <= 0:
                             # use automatic mode
                             pulse_width = int(round(self.settings["guidecam_shutter"] * 0.9))
@@ -607,10 +637,10 @@ class AutoGuider(object):
                         success = self.calibration[i].analyze()
                         if success:
                             self.calibration[i].timestamp = self.time_mgr.get_sec()
-                            msg = "calibration of %s done, angle = %0.1f , dist = %0.1f" % (dir, self.calibration[i].angle, self.calibration[i].farthest)
+                            msg = "calibration of %s done, angle = %0.1f , dist = %0.1f" % (axis, self.calibration[i].angle, self.calibration[i].farthest)
                             self.log_msg("SUCCESS: " + msg)
                         else:
-                            msg = "calibration of %s failed" % (dir)
+                            msg = "calibration of %s failed" % (axis)
                             self.log_msg("FAILED: " + msg)
                             self.calibration[i] = None
                     else:
@@ -816,7 +846,11 @@ class AutoGuider(object):
     def snap_start(self):
         try:
             self.cam.init(gain_db = self.settings["guidecam_gain"], shutter_us = self.settings["guidecam_shutter"] * 1000, force_reset = self.cam_err)
+            t = pyb.millis()
             while self.cam.check_init() == False:
+                if pyb.elapsed_millis(t) > 1000:
+                    self.send_state() # this is required to avoid timeout and to update with the camera-not-ready signal
+                    t = pyb.millis()
                 self.task_network()
                 self.task_pulser()
             self.cam.snapshot_start()
@@ -892,6 +926,8 @@ class AutoGuider(object):
             if img_time > self.stop_time and (img_time - (self.cam.get_timespan() + 100)) > self.stop_time:
                 # this image was taken while staying still
                 self.img = img
+                if self.queue_imgsave:
+                    self.save_image()
             else:
                 # did not stay still, do another one while staying still
                 if self.snap_start():
@@ -1006,12 +1042,12 @@ class AutoGuider(object):
             self.intervalometer_timestamp = 0
             self.pulse_sum = 0
             self.dither_interval = 0
-            self.log_msg("CMD: intervalometer activated")
+            self.log_msg("CMD: intervalometer looping")
         elif cmd == INTERVALSTATE_BULB_TEST:
             guidepulser.shutter(self.settings["intervalometer_bulb_time"])
             self.intervalometer_timestamp = 0
             self.pulse_sum = 0
-            self.log_msg("CMD: bulb test")
+            self.log_msg("CMD: single-shot photo")
             self.intervalometer_state = INTERVALSTATE_ENDING
         elif cmd == INTERVALSTATE_ENDING:
             self.intervalometer_state = cmd
@@ -1145,6 +1181,20 @@ class AutoGuider(object):
             self.settings["use_hotpixels"] = False
             self.log_msg("SUCCESS: hot-pixels list cleared")
             self.save_settings()
+        elif cmd == "disconnect":
+            print("forced websocket disconnect")
+            self.kill_websocket()
+        elif cmd == "snap":
+            self.queue_imgsave = True
+        elif cmd == "listdir":
+            self.log_msg("LIST-DIR: " + str(uos.listdir()))
+        elif cmd == "soft_reset":
+            self.log_msg("SUCCESS: soft-reset")
+            self.send_logs()
+            t = pyb.millis()
+            while pyb.elapsed_millis(t) < 2000:
+                self.task_network()
+            machine.soft_reset()
         elif cmd == "sim_messy":
             if self.simulator is not None:
                 self.simulator.messy = True
@@ -1181,6 +1231,16 @@ class AutoGuider(object):
             print("handle_memory")
         micropython.mem_info(True)
         return True
+
+    def save_image(self, filename = None):
+        try:
+            self.queue_imgsave = False
+            if filename is None:
+                filename = "snap-%s.jpg" % comutils.fmt_time_filename(self.time_mgr.get_time())
+            self.img.save(filename, quality = 100)
+            self.log_msg("SUCCESS: saved image to " + filename)
+        except:
+            self.log_msg("FAILED: cannot save image")
 
     def save_settings(self, filename = "settings_autoguider.json"):
         if self.debug:

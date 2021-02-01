@@ -147,7 +147,9 @@ function makeSlider(id, minval, maxval, defval, stepval, zero_val, unit, slide_f
 
         if (sync_with !== undefined && typeof sync_with !== 'undefined') {
             if (typeof sync_with === 'string' || sync_with instanceof String) {
-                sliderSync(sync_with, v);
+                if (fromSliderSync == false && block_auto_queuing == false) {
+                    sliderSync(sync_with, v);
+                }
             }
         }
     };
@@ -281,14 +283,18 @@ function makeCheckbox(id, initstate, click_func)
     }
 }
 
+var fromSliderSync = false;
 function sliderSync(id, v)
 {
     if (parseInt(v) != parseInt($("#" + id).slider( "value" ))) {
+        fromSliderSync = true;
         $("#" + id).slider( "value", v );
-        //ui_list[id + "/func"](v);
+        ui_list[id + "/func"](v);
+        fromSliderSync = false;
     }
 }
 
+var prev_toast = null;
 function show_toast_msg(s)
 {
     var toast = new iqwerty.toast.Toast();
@@ -307,8 +313,16 @@ function show_toast_msg(s)
     else if (slower.startsWith("info:") || slower.startsWith("msg:") || slower.startsWith("message:")) {
         toast = toast.stylize({background: "blue", color: "white",});
     }
+    else if (slower.startsWith("cmd:")) {
+        // do nothing
+        return;
+    }
 
     toast.show();
+    if (prev_toast != null) {
+        prev_toast.hide();
+    }
+    prev_toast = toast;
 }
 
 function fetchAndFill(eleId, filename)
@@ -316,6 +330,18 @@ function fetchAndFill(eleId, filename)
     var obj = {"pkt_type": "fetch", "shortname": eleId, "filename": filename, "time": time_getNowEpoch()};
     //websock_ping_delay();
     websock_send(obj);
+}
+
+function disconnectAndGo(x)
+{
+    if (noStatUpdate_timer != null) {
+        clearTimeout(noStatUpdate_timer);
+    }
+    miscCmd("disconnect");
+    setInterval(function() {
+        websock_tryclose();
+        window.location.href = x;
+    }, 1000);
 }
 
 function calc_idealDither(gcam_focallength_mm, phcam_focallength_mm, phcam_sensorwidth_mm, phcam_sensorwidth_pixels, dither_pixels)
@@ -329,4 +355,26 @@ function calc_idealDither(gcam_focallength_mm, phcam_focallength_mm, phcam_senso
     var gcam_dither_pix = gcam_sensorwidth_pix * (dither_angle / gcam_fov);
 
     return gcam_dither_pix;
+}
+
+function calc_idealCalibPulse(sidereal_rate, focal_length, calib_steps, calib_span, declination)
+{
+    var sensorwidth_mm = 4.8;
+    var sensorwidth_pix = sensor_width;
+    var fov = 2 * Math.atan(0.5 * sensorwidth_mm / focal_length);
+
+    var sidereal_deg_per_sec = 360.0 / 86164.1;
+    sidereal_deg_per_sec *= sidereal_rate;
+
+    var calib_pixels = calib_span * sensor_height / 100;
+    var step_pixels = calib_pixels / calib_steps;
+    var step_angle = fov * (step_pixels / sensorwidth_pix);
+
+    var step_time_sec = step_angle / sidereal_deg_per_sec;
+    var step_time_ms = step_time_sec * 1000;
+    var step_time_ms_ra = step_time_ms / Math.cos(declination * (Math.PI/180.0));
+    if (step_time_ms_ra > 10000) {
+        step_time_ms_ra = 10000;
+    }
+    return [step_time_ms, step_time_ms_ra];
 }

@@ -19,6 +19,7 @@ class CaptivePortal(object):
         self.wlan = None
         self.station_retries = 0
         self.hw_retries = 0
+        self.allow_hw_kick = True
 
         self.start_wifi()
 
@@ -467,9 +468,10 @@ class CaptivePortal(object):
             if self.last_http_time > 0 and pyb.elapsed_millis(self.last_http_time) > 10000:
                 self.kick()
                 return STS_KICKED
-            if self.last_http_time < 0 and self.full_reboot_timer > 0 and pyb.elapsed_millis(self.full_reboot_timer) > 12000:
-                self.reboot()
-                return STS_KICKED
+            if self.allow_hw_kick:
+                if self.last_http_time < 0 and self.full_reboot_timer > 0 and pyb.elapsed_millis(self.full_reboot_timer) > 12000:
+                    self.reboot()
+                    return STS_KICKED
         else:
             if self.last_http_time > 0:
                 self.last_http_time = pyb.millis()

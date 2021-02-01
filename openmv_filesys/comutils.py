@@ -36,6 +36,9 @@ def jdn(y, m, d):
 def fmt_time(t):
     return "%04u/%02u/%02u-%02u:%02u:%02u" % (t[0], t[1], t[2], t[3], t[4], t[5])
 
+def fmt_time_filename(t):
+    return "%04u%02u%02u-%02u%02u%02u" % (t[0], t[1], t[2], t[3], t[4], t[5])
+
 def vector_between(p1, p2, mag_only = False):
     dx = p2[0] - p1[0]
     dy = p2[1] - p1[1]
