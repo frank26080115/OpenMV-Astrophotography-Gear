@@ -17,7 +17,7 @@ this.stylized=true;return this;};return{Toast:Toast,style:{defaultStyle:""+
 "max-width: 40%;"+
 "word-break: keep-all;"+
 "margin: 0 auto;"+
-"font-size: 16pt;"+
+"font-size: 14pt;"+
 "text-align: center;"+
 "position: fixed;"+
 "left: 0;"+

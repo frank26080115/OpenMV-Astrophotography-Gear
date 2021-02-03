@@ -220,8 +220,7 @@ function sendNewSettings()
 function onLoadAll()
 {
     document.getElementById("loading").style.display = "none";
-
-    document.getElementById("showme").style.display = "block";
+    document.getElementById("showme").style.display = "none";
 
     $( "#accordion" ).accordion({heightStyle: "content"});
     $( "#accordion" ).on( "accordionactivate", function( event, ui ) { hideAllHelp(); } );
@@ -351,6 +350,9 @@ function websock_onmessage_jsonobj_inner()
 
 function handleStateObj()
 {
+    document.getElementById("loading").style.display = "none";
+    document.getElementById("showme").style.display = "block";
+
     var obj = last_status;
 
     var can_start = 
@@ -378,9 +380,12 @@ function handleStateObj()
             }
             if (intervalometer_pretend_status == INTERVALSTATE_BULB_TEST && sts == INTERVALSTATE_SINGLE_ENDING) {
                 intervalometer_pretend_status = INTERVALSTATE_SINGLE_ENDING;
+                if (obj["blub_remaining"] > 0) {
+                    intervalometer_remaining = obj["blub_remaining"];
+                }
             }
             if (intervalometer_status_mismatch < 3) {
-                intervalometerUpdate(intervalometer_pretend_status, obj["blub_remaining"]);
+                intervalometerUpdate(intervalometer_pretend_status, intervalometer_remaining);
                 intervalometer_status_mismatch += 1;
             }
             else {
@@ -797,7 +802,7 @@ function intervalometerShow()
 {
     var ele = document.getElementById("bulb_status");
 
-    var timetxt = (Math.round(intervalometer_remaining/100.0)/10.0).toFixed(1) + " sec Remaining";
+    var timetxt = time_formatShutterTime(intervalometer_remaining) + " left";
 
     if (intervalometer_status == INTERVALSTATE_IDLE)
     {
@@ -814,7 +819,7 @@ function intervalometerShow()
     else if (intervalometer_status == INTERVALSTATE_ACTIVE || intervalometer_status == INTERVALSTATE_ACTIVE_GAP)
     {
         if (guide_state != GUIDESTATE_DITHER) {
-            ele.innerHTML = "Looping: " + timetxt;
+            ele.innerHTML = "Looping:<br />" + timetxt;
         }
         else {
             ele.innerHTML = "Dithering...";
@@ -826,7 +831,7 @@ function intervalometerShow()
     }
     else if (intervalometer_status == INTERVALSTATE_BULB_TEST || intervalometer_status == INTERVALSTATE_SINGLE_ENDING)
     {
-        ele.innerHTML = "Single-Shot: " + timetxt;
+        ele.innerHTML = "Single-Shot:<br />" + timetxt;
         if (intervalometer_remaining > 0)
         {
             ui_list["btn_interval_stopnext"].button("option", "disabled", true);
@@ -862,7 +867,7 @@ function intervalometerShow()
     }
     else if (intervalometer_status == INTERVALSTATE_ENDING)
     {
-        ele.innerHTML = "Stopping On Next, " + timetxt;
+        ele.innerHTML = "Stopping On Next,<br />" + timetxt;
         ui_list["btn_interval_stopnext"].button("option", "disabled", true);
         ui_list["btn_interval_stopnow"] .button("option", "disabled", false);
         ui_list["btn_interval_single"]  .button("option", "disabled", true);
@@ -884,7 +889,9 @@ function intervalometerCountDown()
 
 function intervalometerCmd(cmd)
 {
-    intervalometerUpdate(cmd, settings["intervalometer_bulb_time"] * 1000);
+    var t = settings["intervalometer_bulb_time"] * 1000;
+    intervalometer_remaining = 0;
+    intervalometerUpdate(cmd, t);
     intervalometer_pretend_status = cmd;
     var obj = {}
     obj["pkt_type"] = "intervalometer_cmd";

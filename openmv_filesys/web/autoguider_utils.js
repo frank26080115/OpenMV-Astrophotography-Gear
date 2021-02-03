@@ -408,3 +408,19 @@ function calc_idealCalibPulse(sidereal_rate, focal_length, calib_steps, calib_sp
     }
     return [step_time_ms, step_time_ms_ra];
 }
+
+function time_formatShutterTime(x)
+{
+    var minutes = 0;
+    while (x > 60000) {
+        x -= 60000;
+        minutes += 1;
+    }
+    var ret = minutes.toString() + ":";
+    var y = (Math.round(x/100.0)/10.0);
+    if (y < 10.0) {
+        ret += "0";
+    }
+    ret += y.toFixed(1);
+    return ret;
+}
