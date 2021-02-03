@@ -239,6 +239,7 @@ function onLoadAll()
     $(window).on('resize', function(e) {
         errgraph_onresize();
         draw_guidescope(last_status);
+        msglog_appendLocal("screen size: " + window.innerWidth + " x " + window.innerHeight);
     });
 
     websocket_init("websocket");
@@ -1708,6 +1709,9 @@ function make_ui_console()
             }
             else if (txt.startsWith("websock:")) {
                 websock_send(txt.substring(8).trim());
+            }
+            else if (txt.startsWith("screensize")) {
+                msglog_appendLocal("screen size: " + window.innerWidth + " x " + window.innerHeight);
             }
             else
             {
