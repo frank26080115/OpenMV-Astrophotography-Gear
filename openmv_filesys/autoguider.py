@@ -33,6 +33,7 @@ INTERVALSTATE_ACTIVE_GAP     = micropython.const(2)
 INTERVALSTATE_BULB_TEST      = micropython.const(3)
 INTERVALSTATE_HALT           = micropython.const(4)
 INTERVALSTATE_ENDING         = micropython.const(5)
+INTERVALSTATE_SINGLE_ENDING  = micropython.const(6)
 
 CALIIDX_RA  = micropython.const(0)
 CALIIDX_DEC = micropython.const(1)
@@ -98,6 +99,41 @@ class AutoGuider(object):
         self.queue_imgsave = False
 
         self.settings = {}
+        self.default_settings()
+        self.load_settings()
+        self.load_hotpixels(use_log = False, set_usage = False)
+
+        self.portal = captive_portal.CaptivePortal(debug = self.debug)
+        self.portal.allow_hw_kick = False
+        if self.portal is not None:
+            self.register_http_handlers()
+
+        self.img = None
+        self.img_compressed = None
+        self.extra_fb = None
+        self.expo_code = 0
+        self.histogram = None
+        self.img_stats = None
+        self.stars = None
+        self.prev_stars = None
+        self.hotpixels = []
+        self.multistar_cnt = [0, 0]
+        self.zoom = 1
+        self.dither_interval = 0
+
+        self.imgstream_sock = None
+        self.websock = None
+        self.websock_millis = 0
+        self.websock_randid = 0
+        self.stream_sock_err = 0
+        self.need_send_stars = False
+
+        self.pulselog_buff = [[0, 0, 0, 0, 0]] * LOG_BUFF_LEN
+        self.msglog_buff   = [[0, 0, None]] * LOG_BUFF_LEN
+        self.pulselog_buff_idx = 0
+        self.msglog_buff_idx   = 0
+
+    def default_settings(self):
         self.settings.update({"guidecam_gain"            : self.cam.gain})
         self.settings.update({"guidecam_shutter"         : self.cam.shutter // 1000})
         self.settings.update({"guidecam_thresh"          : 0})
@@ -105,6 +141,7 @@ class AutoGuider(object):
         self.settings.update({"panicthresh_expoerr"      : 3})
         self.settings.update({"panicthresh_move_err"     : 50})
         self.settings.update({"panicthresh_move_cnt"     : 2})
+        self.settings.update({"starmove_correctrequired" : 50})
         self.settings.update({"dither_amount"            : 0})
         self.settings.update({"dither_amount"            : 0})
         self.settings.update({"dither_interval"          : 1})
@@ -141,38 +178,6 @@ class AutoGuider(object):
         self.settings.update({"use_led"                  : True})
         self.settings.update({"fast_mode"                : True})
         self.settings.update({"always_guiding"           : False})
-        self.load_settings()
-        self.load_hotpixels(use_log = False, set_usage = False)
-
-        self.portal = captive_portal.CaptivePortal(debug = self.debug)
-        self.portal.allow_hw_kick = False
-        if self.portal is not None:
-            self.register_http_handlers()
-
-        self.img = None
-        self.img_compressed = None
-        self.extra_fb = None
-        self.expo_code = 0
-        self.histogram = None
-        self.img_stats = None
-        self.stars = None
-        self.prev_stars = None
-        self.hotpixels = []
-        self.multistar_cnt = [0, 0]
-        self.zoom = 1
-        self.dither_interval = 0
-
-        self.imgstream_sock = None
-        self.websock = None
-        self.websock_millis = 0
-        self.websock_randid = 0
-        self.stream_sock_err = 0
-        self.need_send_stars = False
-
-        self.pulselog_buff = [[0, 0, 0, 0, 0]] * LOG_BUFF_LEN
-        self.msglog_buff   = [[0, 0, None]] * LOG_BUFF_LEN
-        self.pulselog_buff_idx = 0
-        self.msglog_buff_idx   = 0
 
     def send_settings(self):
         obj = {}
@@ -436,10 +441,13 @@ class AutoGuider(object):
             if self.simulator is not None:
                 latest_stars = self.simulator.get_stars(self, latest_stars)
                 pass
-            before_len = len(latest_stars)
+
             hotpixels = self.hotpixels if self.hotpixels is not None and self.settings["use_hotpixels"] else None
-            guidestar.process_list(latest_stars, self.settings["clustering_tolerance"], hotpixels, 2)
-            self.hotpixels_eff = before_len - len(latest_stars)
+            res = guidestar.process_list(latest_stars, self.settings["clustering_tolerance"], hotpixels, 2, self.settings["multistar_ratings_thresh"])
+            self.hotpixels_eff = res[1] - res[2] # internally returned before and after lengths
+            #self.prev_good_star_cnt = self.good_star_cnt
+            #self.good_star_cnt = res[3]
+
             self.dbg_t2 = pyb.millis()
 
             self.expo_code = code
@@ -454,9 +462,14 @@ class AutoGuider(object):
             else:
                 # exposure is just right
                 self.expo_err = 0
-                if self.prev_stars is not None and self.simulator is None:
-                    del self.prev_stars
-                    gc.collect()
+                min_stars_cnt = len(latest_stars)
+                if self.prev_stars is not None:
+                    prev_stars_cnt = len(self.prev_stars)
+                    if prev_stars_cnt < min_stars_cnt:
+                        min_stars_cnt = prev_stars_cnt
+                    if self.simulator is None:
+                        del self.prev_stars
+                        gc.collect()
                 self.stars = latest_stars
 
                 # motion can be detected if previous data is available
@@ -476,6 +489,9 @@ class AutoGuider(object):
                 move_err     = res[3]
                 self.last_move_err = move_err
                 self.multistar_cnt = [res[4], res[5]]
+
+                stars_required = int(round((min_stars_cnt * self.settings["starmove_correctrequired"]) / 100))
+                has_stars_required = (self.multistar_cnt[0] >= stars_required or stars_required < 8)
 
                 lost = False
                 self.dbg_t3 = pyb.millis()
@@ -499,12 +515,15 @@ class AutoGuider(object):
                     else:
                         print("no star")
 
-                if move_err > self.settings["panicthresh_move_err"] or move_err < 0 or lost:
+                if move_err > self.settings["panicthresh_move_err"] or move_err < 0 or has_stars_required == False or lost:
                     self.panic_move_cnt += 1
-                    if lost:
-                        self.panic(msg = "movement analysis lost track of the star")
-                    elif self.panic_move_cnt >= self.settings["panicthresh_move_cnt"]:
-                        self.panic(msg = "movement analysis had too much error")
+                    if self.panic_move_cnt >= self.settings["panicthresh_move_cnt"]:
+                        if lost:
+                            self.panic(msg = "lost track of the star")
+                        elif has_stars_required == False:
+                            self.panic(msg = "not enough correctly moved stars")
+                        else:
+                            self.panic(msg = "movement analysis had too much error")
                 else:
                     self.panic_move_cnt = 0
                     self.prev_stars     = self.stars
@@ -532,7 +551,10 @@ class AutoGuider(object):
                             self.guide_state = GUIDESTATE_IDLE
                         return decided_pulse
                     if self.calibration[CALIIDX_RA] is None:
-                        self.log_msg("WARN: guidance requested without RA calibration")
+                        if self.calibration[CALIIDX_DEC] is None:
+                            self.log_msg("WARN: guidance requested without calibration")
+                        else:
+                            self.log_msg("WARN: guidance requested without RA calibration")
                         self.guide_state = GUIDESTATE_IDLE
                         return decided_pulse
                     if self.target_coord is None:
@@ -659,10 +681,10 @@ class AutoGuider(object):
                     self.dither_interval = 0
                     if self.selected_star is None:
                         return decided_pulse
-                    if self.target_coord is None:
-                        self.target_coord = self.selected_star.coord()
-                    if self.origin_coord is None:
-                        self.origin_coord = self.target_coord
+                    #if self.target_coord is None:
+                    self.target_coord = self.selected_star.coord()
+                    #if self.origin_coord is None:
+                    self.origin_coord = self.target_coord
                 return decided_pulse
         else:
             # self.img is None
@@ -986,7 +1008,7 @@ class AutoGuider(object):
                         print("!SHUTTER!")
                     elif self.debug:
                         print("shutter opened")
-            elif self.intervalometer_state == INTERVALSTATE_ENDING:
+            elif self.intervalometer_state == INTERVALSTATE_ENDING or self.intervalometer_state == INTERVALSTATE_SINGLE_ENDING:
                 self.intervalometer_state = INTERVALSTATE_IDLE
                 self.log_msg("MSG: intervalometer ended")
             elif dither and self.guide_state != GUIDESTATE_GUIDING and self.guide_state != GUIDESTATE_DITHER:
@@ -1008,6 +1030,12 @@ class AutoGuider(object):
             self.prev_panic = ""
             if self.selected_star is None:
                 self.log_msg("ERR: no selected star to start autoguiding")
+                return
+            if self.calibration[CALIIDX_RA] is None:
+                if self.calibration[CALIIDX_DEC] is None:
+                    self.log_msg("ERR: auto-guidance can't start without calibration")
+                else:
+                    self.log_msg("ERR: auto-guidance can't start without RA calibration")
                 return
             self.guide_state = GUIDESTATE_GUIDING
             self.log_msg("CMD: auto-guidance starting")
@@ -1048,7 +1076,7 @@ class AutoGuider(object):
             self.intervalometer_timestamp = 0
             self.pulse_sum = 0
             self.log_msg("CMD: single-shot photo")
-            self.intervalometer_state = INTERVALSTATE_ENDING
+            self.intervalometer_state = INTERVALSTATE_SINGLE_ENDING
         elif cmd == INTERVALSTATE_ENDING:
             self.intervalometer_state = cmd
             self.log_msg("CMD: intervalometer ending on next shutter close")
@@ -1195,6 +1223,13 @@ class AutoGuider(object):
             while pyb.elapsed_millis(t) < 2000:
                 self.task_network()
             machine.soft_reset()
+        elif cmd == "default_settings":
+            self.guide_state = GUIDESTATE_IDLE
+            self.clear_panic()
+            self.default_settings()
+            self.save_settings()
+            self.log_msg("SUCCESS: default settings")
+            self.send_logs()
         elif cmd == "sim_messy":
             if self.simulator is not None:
                 self.simulator.messy = True
@@ -1268,6 +1303,14 @@ class AutoGuider(object):
         except Exception as exc:
             exclogger.log_exception(exc)
         self.apply_settings()
+
+    def delete_settings(self, filename = "settings_autoguider.json"):
+        if self.debug:
+            print("delete settings")
+        try:
+            uos.remove(filename)
+        except:
+            pass
 
     def load_hotpixels(self, use_log = False, set_usage = False):
         if "hotpixels.txt" not in uos.listdir():

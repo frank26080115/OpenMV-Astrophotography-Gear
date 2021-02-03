@@ -15,6 +15,7 @@ const INTERVALSTATE_ACTIVE_GAP     = 2;
 const INTERVALSTATE_BULB_TEST      = 3;
 const INTERVALSTATE_HALT           = 4;
 const INTERVALSTATE_ENDING         = 5;
+const INTERVALSTATE_SINGLE_ENDING  = 6;
 
 function getExposureCode(exposure_code) {
     if (exposure_code == 0) {
@@ -283,6 +284,30 @@ function makeCheckbox(id, initstate, click_func)
     }
 }
 
+var help_id_list = [];
+function makeHelp(id)
+{
+    var btn_id = "helpbtn_" + id;
+    var div_id = "help_" + id;
+    $("#" + btn_id ).html("&#10010;&nbsp;Help");
+    var btn = $("#" + btn_id ).button().click(function() {
+        $("#" + btn_id ).hide();
+        $("#" + div_id ).show();
+    });
+    $("#" + btn_id ).show();
+    $("#" + div_id ).hide();
+
+    help_id_list.push(id);
+}
+
+function hideAllHelp()
+{
+    help_id_list.forEach(function (ele, idx) {
+        $("#helpbtn_" + ele ).show();
+        $("#help_" + ele ).hide();
+    });
+}
+
 var fromSliderSync = false;
 function sliderSync(id, v)
 {
@@ -332,7 +357,7 @@ function fetchAndFill(eleId, filename)
     websock_send(obj);
 }
 
-function disconnectAndGo(x)
+function disconnectAndGo(x, t)
 {
     if (noStatUpdate_timer != null) {
         clearTimeout(noStatUpdate_timer);
@@ -340,8 +365,13 @@ function disconnectAndGo(x)
     miscCmd("disconnect");
     setInterval(function() {
         websock_tryclose();
-        window.location.href = x;
-    }, 1000);
+        if (x.length > 0) {
+            window.location.href = x;
+        }
+        else {
+            location.reload();
+        }
+    }, t);
 }
 
 function calc_idealDither(gcam_focallength_mm, phcam_focallength_mm, phcam_sensorwidth_mm, phcam_sensorwidth_pixels, dither_pixels)
