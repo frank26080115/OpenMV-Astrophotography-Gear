@@ -59,6 +59,8 @@ var first_ever = true;
 
 var selected_star = null, tgt_coord = null, ori_coord = null;
 
+var screen_size_rpt_timer = null;
+
 var last_msg_time = 0;
 function handleMsgLogs(obj)
 {
@@ -220,7 +222,7 @@ function sendNewSettings()
 function onLoadAll()
 {
     document.getElementById("loading").style.display = "none";
-    document.getElementById("showme").style.display = "none";
+    document.getElementById("showme") .style.display = "none";
 
     $( "#accordion" ).accordion({heightStyle: "content"});
     $( "#accordion" ).on( "accordionactivate", function( event, ui ) { hideAllHelp(); } );
@@ -238,7 +240,17 @@ function onLoadAll()
     $(window).on('resize', function(e) {
         errgraph_onresize();
         draw_guidescope(last_status);
-        msglog_appendLocal("screen size: " + window.innerWidth + " x " + window.innerHeight);
+
+        // use a timer to prevent spamming window resize events
+        if (screen_size_rpt_timer != null) {
+            clearTimeout(screen_size_rpt_timer);
+            screen_size_rpt_timer = null;
+        }
+        screen_size_rpt_timer = setTimeout(function() {
+            msglog_appendLocal("screen size: " + window.innerWidth + " x " + window.innerHeight);
+            clearTimeout(screen_size_rpt_timer);
+            screen_size_rpt_timer = null;
+        }, 2000);
     });
 
     websocket_init("websocket");
@@ -675,6 +687,19 @@ function star_onclick(x, y)
 
 <div id="connection_lost" class="ui-widget" style="display: none;"><div id="connection_lost_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p><b>&#128245; Connection LOST!</b> Attempting to re-establish &#128246; &#9203;</p></div></div>
 
+<style type="text/css">
+.div_statusinfo { font-size:16pt; }
+@media only screen and (max-width: 600px) {
+    .div_statusinfo { font-size:14pt; }
+}
+@media only screen and (max-width: 500px) {
+    .div_statusinfo { font-size:12pt; }
+}
+@media only screen and (max-width: 400px) {
+    .div_statusinfo { font-size:10pt; }
+}
+</style>
+
 <fieldset><legend>Status</legend>
 <div class="divTable">
     <div class="divTableBody">
@@ -683,7 +708,7 @@ function star_onclick(x, y)
                 <div id="div_starprofile" style="display:inline;"><fieldset><legend>Star Profile</legend><div id="starprofile_div">no data</div></fieldset></div>
             </div>
             <div class="divTableCell divTableCellFill" style="width: 100%; vertical-align: top;">
-                <div id="div_statusinfo" style="vertical-align: top; font-size:10pt;">no data</div>
+                <div id="div_statusinfo" class="div_statusinfo" style="vertical-align: top;">no data</div>
             </div>
         </div>
     </div>
@@ -802,7 +827,7 @@ function intervalometerShow()
 {
     var ele = document.getElementById("bulb_status");
 
-    var timetxt = time_formatShutterTime(intervalometer_remaining) + " left";
+    var timetxt = time_formatShutterTime(intervalometer_remaining); // + " left";
 
     if (intervalometer_status == INTERVALSTATE_IDLE)
     {
@@ -975,10 +1000,19 @@ function dithcalc(utilize_me)
         </script>
         <style type="text/css">
         #tbl_dithcalc .divTableCell { border: 1px solid #999999; padding-left: 10px; padding-right: 10px; padding-bottom: 5px; }
-        #tbl_dithcalc input { width: 100%; }
+        #tbl_dithcalc input { width: 80px; }
+        #tbl_dithcalc { font-size: 10pt; }
+        @media only screen and (max-width: 700px) {
+            #tbl_dithcalc { font-size: 10pt; }
+            #tbl_dithcalc input { width: 60px; }
+        }
+        @media only screen and (max-width: 550px) {
+            #tbl_dithcalc { font-size: 8pt; }
+            #tbl_dithcalc input { width: 60px; }
+        }
         </style>
         <p>Use this calculator to determine the best dithering distance for your camera</p>
-        <div id="tbl_dithcalc" class="divTable" style="font-size:8pt;">
+        <div id="tbl_dithcalc" class="divTable">
             <div class="divTableBody">
                 <div class="divTableRow">
                     <div class="divTableCell" style="text-align:right;">Guide-Cam<br />Sensor Width (mm):</div>
@@ -998,7 +1032,7 @@ function dithcalc(utilize_me)
                 <div class="divTableRow">
                     <div class="divTableCell" style="text-align:right;">Photo-Cam<br />Sensor Width (mm)</div>
                     <div class="divTableCell"><input type="number" id="num_dithcalc_phcamsensormm" name="num_dithcalc_phcamsensormm" min="1" max="100" value="24" /></div>
-                    <div class="divTableCell">35 mm = full&#8209;frame<br />24 mm = APS&#8209;C<br />17.3 mm = MFT</div>
+                    <div class="divTableCell">35&nbsp;mm&nbsp;= full&#8209;frame<br />24&nbsp;mm&nbsp;= APS&#8209;C<br />17.3&nbsp;mm&nbsp;= MFT</div>
                 </div>
                 <div class="divTableRow">
                     <div class="divTableCell" style="text-align:right;">Photo-Cam<br />Sensor Width (pix)</div>
@@ -1011,7 +1045,7 @@ function dithcalc(utilize_me)
                     <div class="divTableCell">&nbsp;</div>
                 </div>
                 <div class="divTableRow">
-                    <div class="divTableCell" style="text-align:right;">Desired Photo&#8209;Cam Dither (pix)</div>
+                    <div class="divTableCell" style="text-align:right;">Desired<br />Photo&#8209;Cam Dither (pix)</div>
                     <div class="divTableCell"><input type="number" id="num_dithcalc_phcamdither" name="num_dithcalc_phcamdither" min="1" max="1000" value="12" /></div>
                     <div class="divTableCell">&GreaterEqual;12 recommended</div>
                 </div>
@@ -1347,11 +1381,20 @@ function calc_calpulse(utilize)
         </script>
         <style type="text/css">
         #tbl_calpulsecalc .divTableCell { border: 1px solid #999999; padding-left: 10px; padding-right: 10px; padding-bottom: 5px; }
-        #tbl_calpulsecalc input { width: 120px; }
+        #tbl_calpulsecalc input { width: 100px; }
+        #tbl_calpulsecalc { font-size: 10pt; }
+        @media only screen and (max-width: 700px) {
+            #tbl_calpulsecalc { font-size: 10pt; }
+            #tbl_calpulsecalc input { width: 60px; }
+        }
+        @media only screen and (max-width: 550px) {
+            #tbl_calpulsecalc { font-size: 8pt; }
+            #tbl_calpulsecalc input { width: 60px; }
+        }
         </style>
 
         <p>Calibration is ideal when the calibration points span a large region of the screen. The pulse required to achieve the spacing of those points depends on how fast the tracking mount rotates when given that pulse. The setting for the R.A. axis depends on where in the sky you are pointing at. Use the calculator below to calculate the ideal pulse width for use during calibration, based on the specification of the tracking mount and where you are pointing.</p>
-        <div id="tbl_calpulsecalc" class="divTable" style="font-size:8pt;">
+        <div id="tbl_calpulsecalc" class="divTable">
             <div class="divTableBody">
                 <div class="divTableRow">
                     <div class="divTableCell" style="text-align:right;">Guiding Rate</div>
@@ -1369,12 +1412,12 @@ function calc_calpulse(utilize)
                             <option value="2">2x</option>
                         </select>&nbsp;sidereal
                     </div>
-                    <div class="divTableCell">please use 0.5x</div>
+                    <div class="divTableCell">please&nbsp;use 0.5x</div>
                 </div>
                 <div class="divTableRow">
-                    <div class="divTableCell" style="text-align:right;">Guide&#8209;Scope Focal Length (mm)</div>
+                    <div class="divTableCell" style="text-align:right;">Guide&#8209;Scope<br />Focal&nbsp;Length (mm)</div>
                     <div class="divTableCell"><input type="number" id="num_calpulse_gcamfocallength" name="num_calpulse_gcamfocallength" min="1" max="10000" value="183" /></div>
-                    <div class="divTableCell">183 mm default</div>
+                    <div class="divTableCell">183&nbsp;mm default</div>
                 </div>
                 <!--
                 <div class="divTableRow">
@@ -1384,7 +1427,7 @@ function calc_calpulse(utilize)
                 </div>
                 -->
                 <div class="divTableRow">
-                    <div class="divTableCell" style="text-align:right;">Pointing Declination (deg)</div>
+                    <div class="divTableCell" style="text-align:right;">Pointing Declination&nbsp;(deg)</div>
                     <div class="divTableCell"><input type="number" id="num_calpulse_declination" name="num_calpulse_declination" min="0" max="90" value="45" /></div>
                     <div class="divTableCell">&nbsp;</div>
                 </div>
@@ -1562,8 +1605,16 @@ function resetAdvFilterSettings()
     <div style="font-family:monospace;">
         <style type="text/css">
 .advfilt_num { width:100px; }
+@media only screen and (max-width: 600px) {
+    .advfilt_num { width:80px; }
+    .advfilt_tbl { font-size:10pt; }
+}
+@media only screen and (max-width: 460px) {
+    .advfilt_num { width:60px; }
+    .advfilt_tbl { font-size:8pt; }
+}
         </style>
-        <div class="divTable" style="width:80%;">
+        <div class="divTable advfilt_tbl" style="width:80%;">
             <div class="divTableBody">
                 <div class="divTableRow">
                     <div class="divTableCell">&nbsp;</div>
@@ -1571,34 +1622,34 @@ function resetAdvFilterSettings()
                     <div class="divTableCell">&nbsp;&nbsp;Dec.</div>
                 </div>
                 <div class="divTableRow">
-                    <div class="divTableCell" style="text-align:right;">I-term&nbsp;&nbsp;</div>
+                    <div class="divTableCell" style="text-align:right;">I&#8209;term&nbsp;&nbsp;</div>
                     <div class="divTableCell"><input class="advfilt_num" type="number" id="num_advfilt_ra_iterm" name="num_advfilt_ra_iterm" min="-99999" max="99999" step="1" /></div>
-                    <div class="divTableCell"><input class="advfilt_num" type="number" id="num_advfilt_dec_iterm" name="num_advfilt_dec_iterm" min="-99999" max="99999" step="1" />&nbsp; %</div>
+                    <div class="divTableCell"><input class="advfilt_num" type="number" id="num_advfilt_dec_iterm" name="num_advfilt_dec_iterm" min="-99999" max="99999" step="1" />&nbsp;%</div>
                 </div>
                 <div class="divTableRow">
                     <div class="divTableCell" style="text-align:right;">I&nbsp;limiter&nbsp;&nbsp;</div>
                     <div class="divTableCell"><input class="advfilt_num" type="number" id="num_advfilt_ra_ilimit" name="num_advfilt_ra_ilimit" min="0" max="9999999" step="1" /></div>
-                    <div class="divTableCell"><input class="advfilt_num" type="number" id="num_advfilt_dec_ilimit" name="num_advfilt_dec_ilimit" min="0" max="9999999" step="1" />&nbsp; ms</div>
+                    <div class="divTableCell"><input class="advfilt_num" type="number" id="num_advfilt_dec_ilimit" name="num_advfilt_dec_ilimit" min="0" max="9999999" step="1" />&nbsp;ms</div>
                 </div>
                 <div class="divTableRow">
                     <div class="divTableCell" style="text-align:right;">I&nbsp;decay&nbsp;&nbsp;</div>
                     <div class="divTableCell"><input class="advfilt_num" type="number" id="num_advfilt_ra_idecay" name="num_advfilt_ra_idecay" min="0" max="9999999" step="1" /></div>
-                    <div class="divTableCell"><input class="advfilt_num" type="number" id="num_advfilt_dec_idecay" name="num_advfilt_dec_idecay" min="0" max="9999999" step="1" />&nbsp; ms</div>
+                    <div class="divTableCell"><input class="advfilt_num" type="number" id="num_advfilt_dec_idecay" name="num_advfilt_dec_idecay" min="0" max="9999999" step="1" />&nbsp;ms</div>
                 </div>
                 <div class="divTableRow">
-                    <div class="divTableCell" style="text-align:right;">D-term&nbsp;&nbsp;</div>
+                    <div class="divTableCell" style="text-align:right;">D&#8209;term&nbsp;&nbsp;</div>
                     <div class="divTableCell"><input class="advfilt_num" type="number" id="num_advfilt_ra_dterm" name="num_advfilt_ra_dterm" min="-99999" max="99999" step="1" /></div>
-                    <div class="divTableCell"><input class="advfilt_num" type="number" id="num_advfilt_dec_dterm" name="num_advfilt_dec_dterm" min="-99999" max="99999" step="1" />&nbsp; %</div>
+                    <div class="divTableCell"><input class="advfilt_num" type="number" id="num_advfilt_dec_dterm" name="num_advfilt_dec_dterm" min="-99999" max="99999" step="1" />&nbsp;%</div>
                 </div>
                 <div class="divTableRow">
                     <div class="divTableCell" style="text-align:right;">LPF const&nbsp;&nbsp;</div>
                     <div class="divTableCell"><input class="advfilt_num" type="number" id="num_advfilt_ra_lpfconst" name="num_advfilt_ra_lpfconst" min="0" max="100" step="1" /></div>
-                    <div class="divTableCell"><input class="advfilt_num" type="number" id="num_advfilt_dec_lpfconst" name="num_advfilt_dec_lpfconst" min="0" max="100" step="1" />&nbsp; %</div>
+                    <div class="divTableCell"><input class="advfilt_num" type="number" id="num_advfilt_dec_lpfconst" name="num_advfilt_dec_lpfconst" min="0" max="100" step="1" />&nbsp;%</div>
                 </div>
                 <div class="divTableRow">
                     <div class="divTableCell" style="text-align:right;">LPF mix&nbsp;&nbsp;</div>
                     <div class="divTableCell"><input class="advfilt_num" type="number" id="num_advfilt_ra_lpfmix" name="num_advfilt_ra_lpfmix" min="0" max="100" step="1" /></div>
-                    <div class="divTableCell"><input class="advfilt_num" type="number" id="num_advfilt_dec_lpfmix" name="num_advfilt_dec_lpfmix" min="0" max="100" step="1" />&nbsp; %</div>
+                    <div class="divTableCell"><input class="advfilt_num" type="number" id="num_advfilt_dec_lpfmix" name="num_advfilt_dec_lpfmix" min="0" max="100" step="1" />&nbsp;%</div>
                 </div>
             </div>
         </div>
@@ -1787,6 +1838,13 @@ function msglog_appendLocal(txt)
     </style>
     <fieldset><legend>Input</legend><div><input type="text" id="txt_consoleinput" name="txt_consoleinput" class="consoleinput-textfield" autocapitalize="off" autocomplete="off" /><br /><br /><button id="btn_consoleinput_send">Send</button></div></fieldset>
     <br />
+
+<style type="text/css">
+@media only screen and (max-width: 550px) {
+    #div_msglog { font-size:8pt; }
+}
+</style>
+
     <fieldset><legend>Messages</legend><div id="div_msglog" style="font-family: monospace; color: #8F8;">no messages yet</div><br /><button id="btn_consoleclear">Clear</button></div></fieldset>
   </div>
 </div><!-- accordion -->
