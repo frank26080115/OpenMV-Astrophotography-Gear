@@ -374,6 +374,17 @@ function disconnectAndGo(x, t)
     }, t);
 }
 
+function disconnectAndFreeze()
+{
+    if (noStatUpdate_timer != null) {
+        clearTimeout(noStatUpdate_timer);
+    }
+    miscCmd("disconnect");
+    setInterval(function() {
+        websock_tryclose();
+    }, 1000);
+}
+
 function calc_idealDither(gcam_focallength_mm, phcam_focallength_mm, phcam_sensorwidth_mm, phcam_sensorwidth_pixels, dither_pixels)
 {
     var gcam_sensorwidth_mm = 4.8;

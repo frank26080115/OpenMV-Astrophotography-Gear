@@ -655,25 +655,25 @@ function star_onclick(x, y)
 
 </head>
 <body onload="onLoadAll();">
-<div id="loading"><h2>OpenMV AutoGuider</h2><div class="ui-widget hideable-msg ui-state-error ui-corner-all .ui-state-error-text"><h4>Loading, Please Wait!</h4></div></div>
-<div id="loading_failed" style="display:none;" class="ui-widget"><div class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text"><h1>Loading FAILED! Please refresh the page.</h1></div></div>
-<div id="loading_connecting" style="display:none;"><h2>OpenMV AutoGuider</h2><div class="ui-widget hideable-msg ui-state-error ui-corner-all .ui-state-error-text"><h4>Connecting to guide-cam...</h4></div></div>
-<div id="loading_settings" style="display:none;"><h2>OpenMV AutoGuider</h2><div class="ui-widget hideable-msg ui-state-error ui-corner-all .ui-state-error-text"><h4>Fetching settings...</h4></div></div>
-<div id="loading_almost" style="display:none;"><h2>OpenMV AutoGuider</h2><div class="ui-widget hideable-msg ui-state-error ui-corner-all .ui-state-error-text"><h4>Connected and settings loaded! Waiting for status data...</h4></div></div>
+<div id="loading"><h2>OpenMV AutoGuider</h2><div class="ui-widget hideable-msg ui-state-error ui-corner-all .ui-state-error-text"><h4>Loading, Please Wait! &#9203;</h4></div></div>
+<div id="loading_failed" style="display:none;" class="ui-widget"><div class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text"><h1>&#128293; Loading FAILED! Please refresh the page.</h1></div></div>
+<div id="loading_connecting" style="display:none;"><h2>OpenMV AutoGuider</h2><div class="ui-widget hideable-msg ui-state-error ui-corner-all .ui-state-error-text"><h4>&#9203; Connecting &#128246; guide-cam... </h4></div></div>
+<div id="loading_settings" style="display:none;"><h2>OpenMV AutoGuider</h2><div class="ui-widget hideable-msg ui-state-error ui-corner-all .ui-state-error-text"><h4>&#9203; Fetching settings...</h4></div></div>
+<div id="loading_almost" style="display:none;"><h2>OpenMV AutoGuider</h2><div class="ui-widget hideable-msg ui-state-error ui-corner-all .ui-state-error-text"><h4>Connected and settings loaded!<br />&#9203; Waiting for status data...</h4></div></div>
 <div id="showme" style="display:none;">
 
 <div style="width:100%"><fieldset style="padding-top: 1em;"><legend style="font-size: 14pt;">OpenMV AutoGuider Camera</legend><div id="viewme" style="display: inline-block; width:100%; padding: 0 0 0 0; margin: 0 0 0 0;"><div id="viewmesvg" style="top: 0; left: 0; display: block;">&nbsp;&nbsp;Please wait for image...</div>
 </div></fieldset></div>
 
-<div id="memory_error" class="ui-widget" style="display: none;"><div id="memory_error_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p>INTERNAL MEMORY ERROR! Please check the camera exposure settings!</p></div></div>
-<div id="camera_hardware_error" class="ui-widget" style="display: none;"><div id="camera_hardware_error_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p>CAMERA HARDWARE ERROR! Please check the camera exposure settings.<br />Lower the shutter time.<br />Do a full power-off-power-on reset if the problem is not solved.</p></div></div>
-<div id="mount_hardware_error" class="ui-widget" style="display: none;"><div id="mount_hardware_error_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p>MOUNT HARDWARE ERROR!<br />Do a full power-off-power-on reset if the problem is not solved.</p></div></div>
-<div id="guide_panic_error" class="ui-widget" style="display: none;"><div id="guide_panic_error_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p>Guiding Panic! Please check everything and re-start auto-guiding.</p></div></div>
-<div id="camera_hardware_wait" class="ui-widget" style="display: none;"><div id="camera_hardware_wait_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p>WAITING for camera to load new exposure settings...</p></div></div>
+<div id="memory_error" class="ui-widget" style="display: none;"><div id="memory_error_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p><b>&#128293; INTERNAL MEMORY ERROR!</b><br />Please check the camera exposure settings!</p></div></div>
+<div id="camera_hardware_error" class="ui-widget" style="display: none;"><div id="camera_hardware_error_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p><b>&#128293; CAMERA HARDWARE ERROR!</b><br />Please check the camera exposure settings.<br />Lower the shutter time.<br />Do a full power-off-power-on reset if the problem is not solved.</p></div></div>
+<div id="mount_hardware_error" class="ui-widget" style="display: none;"><div id="mount_hardware_error_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p><b>&#128293; MOUNT HARDWARE ERROR!</b><br />Do a full power-off-power-on reset if the problem is not solved.</p></div></div>
+<div id="guide_panic_error" class="ui-widget" style="display: none;"><div id="guide_panic_error_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p><b>&#128680; Guiding Panic!</b><br />Please check everything and re-start auto-guiding.</p></div></div>
+<div id="camera_hardware_wait" class="ui-widget" style="display: none;"><div id="camera_hardware_wait_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p>&#9203; WAITING for camera to load new exposure settings...</p></div></div>
 
 <div id="div_errgraph"><fieldset><legend>Error Graph</legend><div id="errgraph-chart" class="ct-graph ct-major-eleventh"><div style="text-align:right;position:relative;top:-3px;"><span style="color:#FF4444"><b>&mdash;</b>&nbsp;RA&nbsp;<span>&nbsp;&nbsp;<span style="color:#4488FF">&nbsp;<b>&mdash;</b>&nbsp;DEC<span></div></fieldset></div>
 
-<div id="connection_lost" class="ui-widget" style="display: none;"><div id="connection_lost_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p>Connection LOST! Attempting to re-establish...</p></div></div>
+<div id="connection_lost" class="ui-widget" style="display: none;"><div id="connection_lost_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p><b>&#128245; Connection LOST!</b> Attempting to re-establish &#128246; &#9203;</p></div></div>
 
 <fieldset><legend>Status</legend>
 <div class="divTable">
@@ -1719,6 +1719,20 @@ function make_ui_console()
             }
             else if (txt.startsWith("screensize")) {
                 msglog_appendLocal("screen size: " + window.innerWidth + " x " + window.innerHeight);
+            }
+            else if (txt.startsWith("fakeerrors")) {
+                disconnectAndFreeze();
+                document.getElementById("loading")                .style.display = "block";
+                document.getElementById("loading_failed")         .style.display = "block";
+                document.getElementById("loading_connecting")     .style.display = "block";
+                document.getElementById("loading_settings")       .style.display = "block";
+                document.getElementById("loading_almost")         .style.display = "block";
+                document.getElementById("memory_error")           .style.display = "block";
+                document.getElementById("camera_hardware_error")  .style.display = "block";
+                document.getElementById("mount_hardware_error")   .style.display = "block";
+                document.getElementById("guide_panic_error")      .style.display = "block";
+                document.getElementById("camera_hardware_wait")   .style.display = "block";
+                document.getElementById("connection_lost")        .style.display = "block";
             }
             else
             {
