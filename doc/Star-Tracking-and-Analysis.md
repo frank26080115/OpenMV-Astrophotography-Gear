@@ -17,7 +17,13 @@ The image above illustrates how it calculates the precise Y coordinate of this s
 
 (for the X coordinate, it will do the same steps but with columns)
 
-The above algorithm is a bit expensive and requires care when allocating memory. It is implemented in C instead of MicroPython for speedy execution.
+The algorithm works well in real world testing:
+
+![](img/star_center_find/star_tracking_real.png)
+
+For reference, with a sub-$100 guide-scope of 190mm focal length, the periodic error observed from a Orion Sirius EQ-G (also equivalent to a Sky-Watcher HEQ5) tracking mount results in stars moving about 24 pixels. With default settings, 24 pixels corresponds to corrective ST-4 pulses that are 120 ms long. These numbers are very achieveable and easy to work with.
+
+This algorithm is a bit expensive and requires care when allocating memory. It is implemented in C instead of MicroPython for speedy execution.
 
 Ideal Stars
 ===========
