@@ -51,6 +51,7 @@ span.ct-label.ct-vertical.ct-start { position: relative; top: 4px; }
 
 var guide_state = 0;
 var settings = {};
+var has_settings = false;
 var queuedSettings = [];
 var last_status = null;
 var last_rx = null;
@@ -335,6 +336,7 @@ function websock_onmessage_jsonobj_inner()
         autoFillSettingsUi(obj);
         fillAdvFilterSettings(obj);
         settings = obj;
+        has_settings = true;
     }
     else if (obj["pkt_type"] == "status" || obj["pkt_type"] == "state")
     {
@@ -343,6 +345,10 @@ function websock_onmessage_jsonobj_inner()
 
         last_status = obj;
         handleStateObj();
+
+        if (has_settings == false) {
+            miscCmd("getsettings");
+        }
     }
     else if (obj["pkt_type"] == "logs")
     {
@@ -493,10 +499,12 @@ function handleStateObj()
         ui_list["btn_hotpixels"      ].button("option", "disabled", false);
         //ui_list["btn_advfilt_update" ].button("option", "disabled", false);
         //ui_list["btn_advfilt_reset"  ].button("option", "disabled", false);
+        enable_testpulsebtns();
     }
     else
     {
         ui_list["btn_guideend"  ].button("option", "disabled", false);
+        disable_testpulsebtns();
         if (guide_state == GUIDESTATE_PANIC)
         {
             txt = "PANIC";
@@ -1298,6 +1306,48 @@ function make_ui_calibration()
         }
     });
     makeHelp("calibration");
+
+    makeButton("btn_testpulse_n", function () {
+        disable_testpulsebtns();
+        miscCmd("testpulse_n");
+        enable_testpulsebtns_later();
+    });
+    makeButton("btn_testpulse_s", function () {
+        disable_testpulsebtns();
+        miscCmd("testpulse_s");
+        enable_testpulsebtns_later();
+    });
+    makeButton("btn_testpulse_e", function () {
+        disable_testpulsebtns();
+        miscCmd("testpulse_e");
+        enable_testpulsebtns_later();
+    });
+    makeButton("btn_testpulse_w", function () {
+        disable_testpulsebtns();
+        miscCmd("testpulse_w");
+        enable_testpulsebtns_later();
+    });
+}
+
+function disable_testpulsebtns()
+{
+    ui_list["btn_testpulse_n"].button("option", "disabled", true);
+    ui_list["btn_testpulse_s"].button("option", "disabled", true);
+    ui_list["btn_testpulse_e"].button("option", "disabled", true);
+    ui_list["btn_testpulse_w"].button("option", "disabled", true);
+}
+
+function enable_testpulsebtns()
+{
+    ui_list["btn_testpulse_n"].button("option", "disabled", false);
+    ui_list["btn_testpulse_s"].button("option", "disabled", false);
+    ui_list["btn_testpulse_e"].button("option", "disabled", false);
+    ui_list["btn_testpulse_w"].button("option", "disabled", false);
+}
+
+function enable_testpulsebtns_later()
+{
+    setTimeout(enable_testpulsebtns, 1000);
 }
     </script>
     <p>Calibration is required before auto-guiding. It correlates how much a star mas moved in the guide-cam image, to how long of a movement command pulse needs to be. It also determines the angular orientation of the guide-camera.</p>
@@ -1334,6 +1384,29 @@ function make_ui_calibration()
         <div><fieldset><legend>Correction Scale Dec.&nbsp;&nbsp;: <span id="slider_correctionscale_dec_handle"></span></legend>
         <div id="slider_correctionscale_dec"></div>
     </fieldset></div>
+
+    <br />
+    <div><fieldset><legend>Issue Single Pulse</legend><div>
+        <div class="divTable" style="width:inherit;">
+        <div class="divTableBody">
+        <div class="divTableRow">
+        <div class="divTableCell">&nbsp;</div>
+        <div class="divTableCell"><button id="btn_testpulse_n">N</button></div>
+        <div class="divTableCell">&nbsp;</div>
+        </div>
+        <div class="divTableRow">
+        <div class="divTableCell"><button id="btn_testpulse_w">W</button></div>
+        <div class="divTableCell">&nbsp;</div>
+        <div class="divTableCell"><button id="btn_testpulse_e">E</button></div>
+        </div>
+        <div class="divTableRow">
+        <div class="divTableCell">&nbsp;</div>
+        <div class="divTableCell"><button id="btn_testpulse_s">S</button></div>
+        <div class="divTableCell">&nbsp;</div>
+        </div>
+        </div>
+        </div>
+    </div></fieldset></div>
 
     <br />
     <button id="helpbtn_calibration"></button><div id="help_calibration">

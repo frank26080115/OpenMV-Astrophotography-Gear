@@ -144,14 +144,26 @@ function draw_guidescope(obj)
     star_list.forEach(function(ele, idx) {
         cx = ele["cx"];
         cy = ele["cy"];
+        var cpt = [cx / imgscale, cy / imgscale];
 
         var drawn_rad = math_mapStarRadius(ele["r"], minr, maxr, imgh);
-        cirele = document.createElementNS(svgNS, "circle");
-        cirele.setAttribute("cx", ((cx / imgscale) - offset_x).toFixed(8));
-        cirele.setAttribute("cy", ((cy / imgscale) - offset_y).toFixed(8));
-        cirele.setAttribute("r", drawn_rad);
+        //cirele = document.createElementNS(svgNS, "circle");
+        //cirele.setAttribute("cx", ((cx / imgscale) - offset_x).toFixed(8));
+        //cirele.setAttribute("cy", ((cy / imgscale) - offset_y).toFixed(8));
+        //cirele.setAttribute("r", drawn_rad);
+        //cirele.setAttribute("style", "fill:rgb(" + get_star_color(ele) + ");stroke:none;");
+        //svgele.appendChild(cirele);
+        cirele = document.createElementNS(svgNS, "path");
+        var pp1 = math_movePointTowards(cpt, [drawn_rad, 0]);
+        var pp2 = math_movePointTowards(cpt, [drawn_rad, 0 + 180]);
+        var pathstr = "M" + pp1[0] +  "," + pp1[1] + " " + "A" + drawn_rad + "," + drawn_rad + " 0 0 1 " + pp2[0] +  "," + pp2[1];
+        cirele.setAttribute("d", pathstr);
         cirele.setAttribute("style", "fill:rgb(" + get_star_color(ele) + ");stroke:none;");
-        //cirele.setAttribute("onclick", "star_onclick(" + cx + ", " + cy + ");");
+        svgele.appendChild(cirele);
+        cirele = document.createElementNS(svgNS, "path");
+        pathstr = "M" + pp1[0] +  "," + pp1[1] + " " + "A" + drawn_rad + "," + drawn_rad + " 0 0 0 " + pp2[0] +  "," + pp2[1];
+        cirele.setAttribute("d", pathstr);
+        cirele.setAttribute("style", "fill:rgb(" + get_star_brightness(ele) + ");stroke:none;");
         svgele.appendChild(cirele);
 
         // draw one that's bigger so that it's easier to click
@@ -288,6 +300,15 @@ function get_star_color(star)
     var s = 1;
     var v = star["max_brite"] / 255.0;
     if (v < 0.5) { v = 0.5; }
+    var h = star["rating"] * 120 / 100 / 360;
+    var rgb = hsv_2_rgb(h, s, v);
+    return rgb.r.toString() + "," + rgb.g.toString() + "," + rgb.b.toString();
+}
+
+function get_star_brightness(star)
+{
+    var s = star["max_brite"] / 255.0;
+    var v = star["max_brite"] / 255.0;
     var h = star["rating"] * 120 / 100 / 360;
     var rgb = hsv_2_rgb(h, s, v);
     return rgb.r.toString() + "," + rgb.g.toString() + "," + rgb.b.toString();

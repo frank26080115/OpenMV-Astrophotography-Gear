@@ -141,8 +141,6 @@ class AstroCam(object):
     def snapshot_finish(self):
         if self.snap_started == False:
             return None
-        if self.snap_started == False:
-            return False
         if self.simulate:
             while self.snapshot_check() == False:
                 gc.collect()
@@ -188,7 +186,7 @@ class AstroCam(object):
                         return
 
     def test_view(self):
-        self.init(gain_db = 30, shutter_us = 1000000, framesize = sensor.WQXGA2, force_reset = True, flip = False)
+        self.init(gain_db = 50, shutter_us = 1000000, framesize = sensor.WQXGA2, force_reset = True, flip = False)
         clock = time.clock()
         told = pyb.millis()
         while True:
@@ -228,6 +226,6 @@ class AstroCam(object):
 
 if __name__ == "__main__":
     cam = AstroCam()
-    cam.test_time()
-    #cam.test_view()
+    #cam.test_time()
+    cam.test_view()
     #cam.test_gather()

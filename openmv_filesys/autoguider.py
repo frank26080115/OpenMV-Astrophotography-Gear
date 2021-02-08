@@ -46,7 +46,7 @@ class AutoGuider(object):
         guidepulser.init()
         self.cam = astro_sensor.AstroCam(simulate = simulate_file)
         try:
-            self.cam.init(gain_db = 32, shutter_us = 1000000)
+            self.cam.init(gain_db = 48, shutter_us = 1000000)
         except OSError as exc:
             exclogger.log_exception(exc)
             guidepulser.panic(True)
@@ -96,7 +96,10 @@ class AutoGuider(object):
         self.dbg_t2 = 0
         self.dbg_t3 = 0
         self.hotpixels_eff = 0
-        self.queue_imgsave = False
+        self.queue_imgsave = 0
+        self.save_image_name = None
+        self.save_image_dir  = None
+        self.testpulse_dir = None
 
         self.settings = {}
         self.default_settings()
@@ -468,7 +471,7 @@ class AutoGuider(object):
                     if prev_stars_cnt < min_stars_cnt:
                         min_stars_cnt = prev_stars_cnt
                     if self.simulator is None:
-                        del self.prev_stars
+                        self.prev_stars = None
                         gc.collect()
                 self.stars = latest_stars
 
@@ -489,6 +492,9 @@ class AutoGuider(object):
                 move_err     = res[3]
                 self.last_move_err = move_err
                 self.multistar_cnt = [res[4], res[5]]
+
+                if self.queue_imgsave == 2:
+                    self.save_image_meta(res)
 
                 stars_required = int(round((min_stars_cnt * self.settings["starmove_correctrequired"]) / 100))
                 has_stars_required = (self.multistar_cnt[0] >= stars_required or stars_required < 8)
@@ -540,6 +546,27 @@ class AutoGuider(object):
                 elif self.passive_guiding == False and passive_guiding:
                     self.log_msg("MSG: passive guiding started")
                 self.passive_guiding = passive_guiding
+
+                if self.testpulse_dir is not None:
+                    if self.testpulse_dir == "n":
+                        t = self.settings["calibration_pulse_dec"]
+                        guidepulser.move(0, t, self.settings["move_grace"])
+                        decided_pulse = t
+                    elif self.testpulse_dir == "s":
+                        t = self.settings["calibration_pulse_dec"]
+                        guidepulser.move(0, -t, self.settings["move_grace"])
+                        decided_pulse = t
+                    elif self.testpulse_dir == "e":
+                        t = self.settings["calibration_pulse_ra"]
+                        guidepulser.move(t, 0, self.settings["move_grace"])
+                        decided_pulse = t
+                    elif self.testpulse_dir == "w":
+                        t = self.settings["calibration_pulse_ra"]
+                        guidepulser.move(-t, 0, self.settings["move_grace"])
+                        decided_pulse = t
+                    self.log_msg("MSG: test pulse \"%s\" %u" % (self.testpulse_dir, decided_pulse))
+                    self.testpulse_dir = None
+                    return decided_pulse
 
                 if self.guide_state == GUIDESTATE_GUIDING or self.passive_guiding:
                     if self.selected_star is None:
@@ -801,6 +828,10 @@ class AutoGuider(object):
     def log_msg(self, msg, to_print=True):
         self.time_mgr.tick()
         timestamp = self.time_mgr.latest_millis
+        for i in self.msglog_buff:
+            if i[0] == timestamp:
+                timestamp += 1
+                break
         self.msglog_buff[self.msglog_buff_idx][0] = timestamp
         self.msglog_buff[self.msglog_buff_idx][1] = self.time_mgr.get_sec()
         self.msglog_buff[self.msglog_buff_idx][2] = msg
@@ -948,7 +979,7 @@ class AutoGuider(object):
             if img_time > self.stop_time and (img_time - (self.cam.get_timespan() + 100)) > self.stop_time:
                 # this image was taken while staying still
                 self.img = img
-                if self.queue_imgsave:
+                if self.queue_imgsave > 0:
                     self.save_image()
             else:
                 # did not stay still, do another one while staying still
@@ -957,6 +988,7 @@ class AutoGuider(object):
                         self.img = self.cam.snapshot_finish()
                     else:
                         self.log_msg("ERR: guidecam failed to read image during wait")
+                        self.cam.snapshot_finish()
             if self.imgstream_sock is not None and self.img_is_compressed == False:
                 if self.guide_state != GUIDESTATE_IDLE:
                     print("warning: compressing JPG while autoguiding")
@@ -965,6 +997,7 @@ class AutoGuider(object):
                 self.update_imgstream()
         else:
             self.log_msg("ERR: guidecam failed to read image")
+            self.cam.snapshot_finish()
 
     # note: check py_guidepulser.c and qstrdefsomv.h for available function calls
     def task_pulser(self):
@@ -1209,11 +1242,29 @@ class AutoGuider(object):
             self.settings["use_hotpixels"] = False
             self.log_msg("SUCCESS: hot-pixels list cleared")
             self.save_settings()
+        elif cmd.startswith("testpulse_"):
+            self.testpulse_dir = cmd[10:]
         elif cmd == "disconnect":
             print("forced websocket disconnect")
             self.kill_websocket()
         elif cmd == "snap":
-            self.queue_imgsave = True
+            self.queue_imgsave = 1
+        elif cmd == "record":
+            if self.queue_imgsave != 2:
+                self.log_msg("CMD: recording images")
+            else:
+                self.log_msg("CMD: already recording images")
+            self.queue_imgsave = 2
+        elif cmd == "record_stop":
+            if self.queue_imgsave != 0:
+                self.log_msg("CMD: stopped recording images")
+            else:
+                self.log_msg("CMD: already stopped recording images")
+            self.queue_imgsave = 0
+            self.save_image_name = None
+            if self.save_image_dir is not None:
+                self.log_msg("LIST-DIR[%s]: %s" % (self.save_image_dir, str(uos.listdir(self.save_image_dir))))
+            self.save_image_dir = None
         elif cmd == "listdir":
             self.log_msg("LIST-DIR: " + str(uos.listdir()))
         elif cmd == "soft_reset":
@@ -1269,13 +1320,47 @@ class AutoGuider(object):
 
     def save_image(self, filename = None):
         try:
-            self.queue_imgsave = False
+            tstr = comutils.fmt_time_filename(self.time_mgr.get_time())
+            if self.queue_imgsave == 1:
+                self.queue_imgsave = 0
+            elif self.queue_imgsave == 2 and self.save_image_dir is None:
+                self.save_image_dir = "snap-%s" % tstr
+                uos.mkdir(self.save_image_dir)
             if filename is None:
-                filename = "snap-%s.jpg" % comutils.fmt_time_filename(self.time_mgr.get_time())
-            self.img.save(filename, quality = 100)
+                filename = "snap-%s.jpg" % tstr
+            fpath = filename
+            self.save_image_name = filename
+            if self.save_image_dir is not None:
+                fpath = self.save_image_dir + "/" + filename
+            self.img.save(fpath, quality = 100)
             self.log_msg("SUCCESS: saved image to " + filename)
         except:
             self.log_msg("FAILED: cannot save image")
+            self.queue_imgsave = 0
+            self.save_image_dir = None
+
+    def save_image_meta(self, res):
+        try:
+            fpath = self.save_image_name
+            if self.save_image_dir is not None:
+                fpath = self.save_image_dir + "/" + self.save_image_name
+            with open(fpath + ".txt", "w+") as f:
+                f.write("img mean: %u\r\n" % (self.img_stats.mean()))
+                for i in self.stars:
+                    f.write("\t" + guidestar_to_str(i) + "\r\n")
+                infostr = "res: %u, cnt: %u, multistar_cnt: %u,\r\n" % (int(round(res[3])), res[4], res[5])
+                f.write(infostr)
+                if self.selected_star is not None:
+                    infostr = "sel [%0.1f , %0.1f],\r\n" % (self.selected_star.cxf(), self.selected_star.cyf())
+                    f.write(infostr)
+                if res[0] is not None:
+                    infostr = "res [%0.1f , %0.1f],\r\n" % (res[0].cxf(), res[0].cyf())
+                    f.write(infostr)
+                f.flush()
+        except:
+            self.log_msg("ERR: unable to write recording metadata")
+            self.queue_imgsave = 0
+            self.save_image_dir = None
 
     def save_settings(self, filename = "settings_autoguider.json"):
         if self.debug:
