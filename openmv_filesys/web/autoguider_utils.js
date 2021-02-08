@@ -400,6 +400,18 @@ function calc_idealDither(gcam_focallength_mm, phcam_focallength_mm, phcam_senso
 
 function calc_idealCalibPulse(sidereal_rate, focal_length, calib_steps, calib_span, declination)
 {
+    var calib_pixels = calib_span * sensor_height / 100;
+    var step_pixels = calib_pixels / calib_steps;
+    var step_time_ms = calc_pixelsPulse(sidereal_rate, focal_length, step_pixels);
+    var step_time_ms_ra = step_time_ms / Math.cos(declination * (Math.PI/180.0));
+    if (step_time_ms_ra > 10000) {
+        step_time_ms_ra = 10000;
+    }
+    return [step_time_ms, step_time_ms_ra];
+}
+
+function calc_pixelsPulse(sidereal_rate, focal_length, step_pixels)
+{
     var sensorwidth_mm = 4.8;
     var sensorwidth_pix = sensor_width;
     var fov = 2 * Math.atan(0.5 * sensorwidth_mm / focal_length);
@@ -407,17 +419,12 @@ function calc_idealCalibPulse(sidereal_rate, focal_length, calib_steps, calib_sp
     var sidereal_deg_per_sec = 360.0 / 86164.1;
     sidereal_deg_per_sec *= sidereal_rate;
 
-    var calib_pixels = calib_span * sensor_height / 100;
-    var step_pixels = calib_pixels / calib_steps;
     var step_angle = fov * (step_pixels / sensorwidth_pix);
 
     var step_time_sec = step_angle / sidereal_deg_per_sec;
     var step_time_ms = step_time_sec * 1000;
-    var step_time_ms_ra = step_time_ms / Math.cos(declination * (Math.PI/180.0));
-    if (step_time_ms_ra > 10000) {
-        step_time_ms_ra = 10000;
-    }
-    return [step_time_ms, step_time_ms_ra];
+
+    return step_time_ms;
 }
 
 function time_formatShutterTime(x)

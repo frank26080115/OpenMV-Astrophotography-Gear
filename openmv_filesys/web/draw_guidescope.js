@@ -161,6 +161,8 @@ function draw_guidescope(obj)
         cirele.setAttribute("style", "fill:rgb(" + get_star_color(ele) + ");stroke:none;");
         svgele.appendChild(cirele);
         cirele = document.createElementNS(svgNS, "path");
+        pp1[1] += 0.5;
+        pp2[1] += 0.5;
         pathstr = "M" + pp1[0] +  "," + pp1[1] + " " + "A" + drawn_rad + "," + drawn_rad + " 0 0 0 " + pp2[0] +  "," + pp2[1];
         cirele.setAttribute("d", pathstr);
         cirele.setAttribute("style", "fill:rgb(" + get_star_brightness(ele) + ");stroke:none;");
@@ -307,7 +309,7 @@ function get_star_color(star)
 
 function get_star_brightness(star)
 {
-    var s = star["max_brite"] / 255.0;
+    var s = 0;
     var v = star["max_brite"] / 255.0;
     var h = star["rating"] * 120 / 100 / 360;
     var rgb = hsv_2_rgb(h, s, v);

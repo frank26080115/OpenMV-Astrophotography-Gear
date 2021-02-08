@@ -1451,6 +1451,23 @@ function calc_calpulse(utilize)
         document.getElementById("span_calpulse_result").innerHTML = "error";
     }
 }
+
+function calc_pixpulse()
+{
+    var x = calc_pixelsPulse(
+          document.getElementById("sel_calpulse_guiderate").value
+        , document.getElementById("num_calpulse_gcamfocallength").value
+        , 1
+        );
+    if (isNaN(x) == false)
+    {
+        document.getElementById("span_pixpulse_result").innerHTML = Math.round(x) + "&nbsp;ms";
+    }
+    else
+    {
+        document.getElementById("span_calpulse_result").innerHTML = "error";
+    }
+}
         </script>
         <style type="text/css">
         #tbl_calpulsecalc .divTableCell { border: 1px solid #999999; padding-left: 10px; padding-right: 10px; padding-bottom: 5px; }
@@ -1508,6 +1525,11 @@ function calc_calpulse(utilize)
                     <div class="divTableCell" style="text-align:right;"><button id="btn_calpulse" onclick="calc_calpulse(false);">Calculate</button>&nbsp;&nbsp;&nbsp;Result:</div>
                     <div class="divTableCell" style="text-align:right;"><span id="span_calpulse_result">&nbsp;</span></div>
                     <div class="divTableCell"><button id="btn_calpulse2" onclick="calc_calpulse(true);">Utilize Value</button></div>
+                </div>
+                <div class="divTableRow">
+                    <div class="divTableCell" style="text-align:right;"><button id="btn_pixpulse" onclick="calc_pixpulse();">Calc for 1 pixel</button></div>
+                    <div class="divTableCell" style="text-align:right;"><span id="span_pixpulse_result">&nbsp;</span></div>
+                    <div class="divTableCell">&nbsp;</div>
                 </div>
             </div>
         </div>
