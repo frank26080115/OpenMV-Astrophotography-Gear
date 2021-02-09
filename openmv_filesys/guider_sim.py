@@ -61,11 +61,17 @@ class GuiderSimulator(object):
         elif self.guider.guide_state == autoguider.GUIDESTATE_CALIBRATING_RA or self.guider.guide_state == autoguider.GUIDESTATE_CALIBRATING_DEC:
             if self.prev_state != self.guider.guide_state:
                 if self.guider.guide_state == autoguider.GUIDESTATE_CALIBRATING_RA:
-                    self.rand_angle_ra = get_rand_move(360, 10)
+                    if self.rand_angle_dec is None:
+                        self.rand_angle_ra = get_rand_move(360, 10)
+                    else:
+                        self.rand_angle_ra = self.rand_angle_dec + 90 + get_rand_move(4, 10)
                     self.rand_scale_ra = (pyb.rng() % 20) + 5
                     print("sim calib RA ang %0.1f scale %0.1f" % (self.rand_angle_ra, self.rand_scale_ra))
                 elif self.guider.guide_state == autoguider.GUIDESTATE_CALIBRATING_DEC:
-                    self.rand_angle_dec = get_rand_move(360, 10)
+                    if self.rand_angle_ra is None:
+                        self.rand_angle_dec = get_rand_move(360, 10)
+                    else:
+                        self.rand_angle_dec = self.rand_angle_ra + 90 + get_rand_move(4, 10)
                     self.rand_scale_dec = (pyb.rng() % 20) + 5
                     print("sim calib DEC ang %0.1f scale %0.1f" % (self.rand_angle_dec, self.rand_scale_dec))
                 dx = self.guider.target_coord[0] - self.guider.selected_star.cxf()
@@ -89,13 +95,14 @@ class GuiderSimulator(object):
                 ang_rad = math.radians(ang)
                 dx = mag * math.cos(ang_rad)
                 dy = mag * math.sin(ang_rad)
+                print("sim cali move %0.1f %0.1f" % (dx, dy))
                 i = 0
                 while i < star_cnt:
                     ocx = self.new_stars[i].cxf()
                     ocy = self.new_stars[i].cyf()
                     self._remake_star(i)
                     cx = ocx + dx
-                    cy = ocx + dy
+                    cy = ocy + dy
                     self.new_stars[i].move_coord(cx, cy)
                     i += 1
         self.prev_state = self.guider.guide_state

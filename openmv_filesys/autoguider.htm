@@ -177,7 +177,8 @@ function handleCalibration(obj, axis)
     if (("points_cnt" in inner) != false) {
         txt += "Points Used: " + inner["points_cnt"].toString() + "<br />";
     }
-    txt += "Starting Coordinates: ( " + inner["start_coord"][0].toFixed(1) + " , " + inner["start_coord"][1].toFixed(1) + " )";
+    //txt += "Starting Coordinates: ( " + inner["start_coord"][0].toFixed(1) + " , " + inner["start_coord"][1].toFixed(1) + " )";
+    txt += "Starting Coordinates: ( " + inner["start_x"].toFixed(1) + " , " + inner["start_y"].toFixed(1) + " )";
 
     if (calibration["ra"] != null && calibration["dec"] != null)
     {
@@ -342,6 +343,7 @@ function websock_onmessage_jsonobj_inner()
     {
         console.log("obtained status obj");
         document.getElementById("loading_almost").style.display = "none";
+        document.getElementById("loading_settings").style.display = "none";
 
         last_status = obj;
         handleStateObj();
@@ -540,7 +542,7 @@ function handleStateObj()
                 if (viz_calib == 0) {
                     viz_calib = 1;
                 }
-                else if (vis_calib == 2) {
+                else if (viz_calib == 2) {
                     viz_calib = 3;
                 }
             }
@@ -549,7 +551,7 @@ function handleStateObj()
                 if (viz_calib == 0) {
                     viz_calib = 2;
                 }
-                else if (vis_calib == 1) {
+                else if (viz_calib == 1) {
                     viz_calib = 3;
                 }
             }
@@ -1034,13 +1036,13 @@ function dithcalc(utilize_me)
                 </div>
                 <div class="divTableRow">
                     <div class="divTableCell" style="text-align:right;">Guide-Scope<br />Focal Length (mm)</div>
-                    <div class="divTableCell"><input type="number" id="num_dithcalc_gcamfocallength" name="num_dithcalc_gcamfocallength" min="1" max="10000" value="183" /></div>
-                    <div class="divTableCell">183 mm default</div>
+                    <div class="divTableCell"><input type="number" id="num_dithcalc_gcamfocallength" name="num_dithcalc_gcamfocallength" min="1" max="10000" value="190" /></div>
+                    <div class="divTableCell">190 mm default</div>
                 </div>
                 <div class="divTableRow">
                     <div class="divTableCell" style="text-align:right;">Photo-Cam<br />Sensor Width (mm)</div>
                     <div class="divTableCell"><input type="number" id="num_dithcalc_phcamsensormm" name="num_dithcalc_phcamsensormm" min="1" max="100" value="24" /></div>
-                    <div class="divTableCell">35&nbsp;mm&nbsp;= full&#8209;frame<br />24&nbsp;mm&nbsp;= APS&#8209;C<br />17.3&nbsp;mm&nbsp;= MFT</div>
+                    <div class="divTableCell">35&nbsp;mm&nbsp;= full&#8209;frame<br />24&nbsp;mm&nbsp;= APS&#8209;C<br />17&nbsp;mm&nbsp;= MFT</div>
                 </div>
                 <div class="divTableRow">
                     <div class="divTableCell" style="text-align:right;">Photo-Cam<br />Sensor Width (pix)</div>
@@ -1271,7 +1273,7 @@ function make_ui_calibration()
 {
     makeSlider("slider_pulse_calistep_ra_2" , 100, 5000, 900, 100, "0 ms", " ms", "calibration_pulse_ra" , "slider_pulse_calistep_ra");
     makeSlider("slider_pulse_calistep_dec_2", 100, 5000, 900, 100, "0 ms", " ms", "calibration_pulse_dec", "slider_pulse_calistep_dec");
-    makeSlider("slider_calistepcnt"         , 1  , 50  , 10 , 1  , "0"   , ""   , "calib_points_cnt"    );
+    makeSlider("slider_calistepcnt"         , 5  , 50  , 10 , 1  , "0"   , ""   , "calib_points_cnt"    );
     makeSlider("slider_correctionscale_ra"  , 75 , 133 , 100, 1  , "0 %" , " %" , "correction_scale_ra" );
     makeSlider("slider_correctionscale_dec" , 75 , 133 , 100, 1  , "0 %" , " %" , "correction_scale_dec");
     makeButton("btn_calib_ra", function() {
@@ -1506,8 +1508,8 @@ function calc_pixpulse()
                 </div>
                 <div class="divTableRow">
                     <div class="divTableCell" style="text-align:right;">Guide&#8209;Scope<br />Focal&nbsp;Length (mm)</div>
-                    <div class="divTableCell"><input type="number" id="num_calpulse_gcamfocallength" name="num_calpulse_gcamfocallength" min="1" max="10000" value="183" /></div>
-                    <div class="divTableCell">183&nbsp;mm default</div>
+                    <div class="divTableCell"><input type="number" id="num_calpulse_gcamfocallength" name="num_calpulse_gcamfocallength" min="1" max="10000" value="190" /></div>
+                    <div class="divTableCell">190&nbsp;mm default</div>
                 </div>
                 <!--
                 <div class="divTableRow">

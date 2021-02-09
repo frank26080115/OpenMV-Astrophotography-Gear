@@ -1,13 +1,14 @@
 import micropython
 micropython.opt_level(2)
 
+import pyb
 import math
 import ujson
 import comutils
 import exclogger
 
 RECOMMENDED_POINTS       = micropython.const(10)
-MINIMUM_REQUIRED_POINTS  = micropython.const(5)
+MINIMUM_REQUIRED_POINTS  = micropython.const(3)
 
 class GuiderCalibration(object):
     def __init__(self, x, y, pulse_width):
@@ -17,11 +18,13 @@ class GuiderCalibration(object):
         self.time = 0
 
         self.accepted_points = []
+        self.points_cnt = 0
         self.farthest = 0
         self.angle = 0
         self.pix_per_ms = 0
         self.ms_per_pix = 0
 
+        self.timestamp = pyb.millis()
         self.success = "init"
 
     def set_origin(self, x, y):
@@ -154,17 +157,19 @@ class GuiderCalibration(object):
         if self.success == "done":
             if short == False:
                 obj.update({"points" : self.accepted_points})
-            obj.update({"points_cnt" : len(self.accepted_points)})
+            obj.update({"points_cnt" : self.points_cnt if self.points_cnt > 0 else len(self.accepted_points)})
         else:
             if short == False:
                 obj.update({"points" : self.points})
-            obj.update({"points_cnt" : len(self.points)})
-        obj.update({"start_coord"    : self.points[0]})
-        obj.update({"pix_per_ms"   : self.pix_per_ms})
-        obj.update({"ms_per_pix"   : self.ms_per_pix})
-        obj.update({"farthest"     : self.farthest})
-        obj.update({"angle"        : self.angle})
-        obj.update({"time"         : self.timestamp})
+            obj.update({"points_cnt" : self.points_cnt if self.points_cnt > 0 else len(self.points)})
+        #obj.update({"start_coord"    : self.points[0]})
+        obj.update({"start_x"        : self.points[0][0]})
+        obj.update({"start_y"        : self.points[0][1]})
+        obj.update({"pix_per_ms"     : self.pix_per_ms})
+        obj.update({"ms_per_pix"     : self.ms_per_pix})
+        obj.update({"farthest"       : self.farthest})
+        obj.update({"angle"          : self.angle})
+        obj.update({"time"           : self.timestamp})
         return obj
 
     def load_json_obj(self, obj):
@@ -174,6 +179,7 @@ class GuiderCalibration(object):
         self.pulse_width = comutils.try_parse_setting(obj["pulse_width"])
         self.accepted_points = []
         self.points = [[comutils.try_parse_setting(obj["start_x"]),  comutils.try_parse_setting(obj["start_y"])]]
+        self.points_cnt = comutils.try_parse_setting(obj["points_cnt"])
         pix_per_ms = comutils.try_parse_setting(obj["pix_per_ms"])
         ms_per_pix = comutils.try_parse_setting(obj["ms_per_pix"])
         if pix_per_ms != 0 and ms_per_pix != 0:

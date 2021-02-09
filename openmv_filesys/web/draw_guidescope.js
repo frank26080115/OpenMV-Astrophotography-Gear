@@ -377,7 +377,8 @@ function draw_calibration(svgele, drawscale, obj, axis)
     svgele.appendChild(txtele);
 
     var coord, cirele, lineele;
-    coord = calibobj["start_coord"];
+    //coord = calibobj["start_coord"];
+    coord = [calibobj["start_x"], calibobj["start_y"]];
     cirele = document.createElementNS(svgNS, "circle");
     cirele.setAttribute("cx", ((coord[0] / imgscale)).toFixed(8));
     cirele.setAttribute("cy", ((coord[1] / imgscale)).toFixed(8));
@@ -397,6 +398,7 @@ function draw_calibration(svgele, drawscale, obj, axis)
         var linelength_2 = calibobj["pulse_width"] * calibobj["points_cnt"] * calibobj["pix_per_ms"];
         var end_coord_1 = math_movePointTowards(coord, [linelength_1, calibobj["angle"]]);
         var end_coord_2 = math_movePointTowards(coord, [linelength_2, calibobj["angle"]]);
+        var end_coord_3 = math_movePointTowards(coord, [sensor_width * 2, calibobj["angle"]]);
         lineele = document.createElementNS(svgNS, "line");
         lineele.setAttribute("x1", ((coord[0]       / imgscale)).toFixed(8));
         lineele.setAttribute("y1", ((coord[1]       / imgscale)).toFixed(8));
@@ -410,6 +412,13 @@ function draw_calibration(svgele, drawscale, obj, axis)
         lineele.setAttribute("x2", ((end_coord_2[0] / imgscale)).toFixed(8));
         lineele.setAttribute("y2", ((end_coord_2[1] / imgscale)).toFixed(8));
         lineele.setAttribute("style", "stroke:rgb(" + color + ",0.8);stroke-width:1");
+        svgele.appendChild(lineele);
+        lineele = document.createElementNS(svgNS, "line");
+        lineele.setAttribute("x1", ((end_coord_1[0] / imgscale)).toFixed(8));
+        lineele.setAttribute("y1", ((end_coord_1[1] / imgscale)).toFixed(8));
+        lineele.setAttribute("x2", ((end_coord_3[0] / imgscale)).toFixed(8));
+        lineele.setAttribute("y2", ((end_coord_3[1] / imgscale)).toFixed(8));
+        lineele.setAttribute("style", "stroke:rgb(" + color + ",0.2);stroke-width:1");
         svgele.appendChild(lineele);
     }
 
