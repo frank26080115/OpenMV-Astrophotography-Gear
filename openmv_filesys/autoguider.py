@@ -305,18 +305,18 @@ class AutoGuider(object):
 
         try:
             self.portal.websocket_send_start(self.websock, remaining, 0x81)
-            self.websock.sock.send(headstr)
+            self.websock.send(headstr)
             remaining -= len(headstr)
 
             for i in self.stars:
                 x = guidestar_to_str(i)
-                self.websock.sock.send(x)
+                self.websock.send(x)
                 remaining -= len(x)
-            self.websock.sock.send(endstr)
+            self.websock.send(endstr)
             remaining -= len(endstr)
             # pad the remaining with blank space
             x = " " * remaining
-            self.websock.sock.send(x)
+            self.websock.send(x)
             self.portal.tickle()
         except Exception as exc:
             self.stream_sock_err += 1

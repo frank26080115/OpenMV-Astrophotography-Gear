@@ -378,6 +378,11 @@ function websock_onmessage_jsonobj_inner()
             miscCmd("getsettings");
         }
     }
+    else if (obj["pkt_type"] == "stars")
+    {
+        star_list = parseStarsStr(obj["stars"]);
+        draw_guidescope();
+    }
     else if (obj["pkt_type"] == "logs")
     {
         handleMsgLogs(obj);
