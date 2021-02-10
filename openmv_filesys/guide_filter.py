@@ -74,7 +74,7 @@ class GuideFilter(object):
         d *= self.term_d
         d /= 100
         self.last_val = x
-        total = i + d
+        total += i + d
         if self.lpf_val is None:
             self.lpf_val = x
         if self.lpf_k >= 100:

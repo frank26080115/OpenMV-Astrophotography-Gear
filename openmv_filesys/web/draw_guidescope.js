@@ -94,6 +94,8 @@ function draw_guidescope(obj)
 
     var maxr = 0; // find the biggest star, used for other things later
     var minr = 9999;
+    var maxscore = 0;
+    var minscore = 9999;
     //var max_rating = 0;
     star_list.forEach(function(ele, idx) {
         if (ele["r"] > maxr) {
@@ -101,6 +103,12 @@ function draw_guidescope(obj)
         }
         if (ele["r"] < minr) {
             minr = ele["r"];
+        }
+        if (ele["r"] > maxscore) {
+            maxscore = ele["rating"];
+        }
+        if (ele["r"] < minscore) {
+            minscore = ele["rating"];
         }
         //if (ele["r"] > max_rating) {
         //    max_rating = ele["rating"];
@@ -158,7 +166,8 @@ function draw_guidescope(obj)
         var pp2 = math_movePointTowards(cpt, [drawn_rad, 0 + 180]);
         var pathstr = "M" + pp1[0] +  "," + pp1[1] + " " + "A" + drawn_rad + "," + drawn_rad + " 0 0 1 " + pp2[0] +  "," + pp2[1];
         cirele.setAttribute("d", pathstr);
-        cirele.setAttribute("style", "fill:rgb(" + get_star_color(ele) + ");stroke:none;");
+        var rating_color = get_star_color(ele, math_mapVal(ele["rating"], minscore, maxscore, 0, 100));
+        cirele.setAttribute("style", "fill:rgb(" + rating_color + ");stroke:none;");
         svgele.appendChild(cirele);
         cirele = document.createElementNS(svgNS, "path");
         pp1[1] += 0.5;
@@ -297,12 +306,12 @@ function draw_guidescope(obj)
     imgdiv.appendChild(svgele);
 }
 
-function get_star_color(star)
+function get_star_color(star, rating)
 {
     var s = 1;
     var v = star["max_brite"] / 255.0;
     if (v < 0.5) { v = 0.5; }
-    var h = star["rating"] * 120 / 100 / 360;
+    var h = rating * 120 / 100 / 360;
     var rgb = hsv_2_rgb(h, s, v);
     return rgb.r.toString() + "," + rgb.g.toString() + "," + rgb.b.toString();
 }

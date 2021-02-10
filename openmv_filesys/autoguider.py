@@ -56,6 +56,7 @@ class AutoGuider(object):
         self.cam_initing = 0
         self.time_mgr = time_location.TimeLocationManager()
         self.has_time = False
+
         self.debug = debug
 
         self.guide_state = GUIDESTATE_IDLE
@@ -129,6 +130,7 @@ class AutoGuider(object):
         self.websock_millis = 0
         self.websock_randid = 0
         self.stream_sock_err = 0
+        self.session_randid = 0
         self.need_send_stars = False
 
         self.pulselog_buff = [[0, 0, 0, 0, 0]] * LOG_BUFF_LEN
@@ -193,7 +195,8 @@ class AutoGuider(object):
         state = {}
         state.update({"pkt_type"            : "state"})
         state.update({"time"                : self.time_mgr.get_sec()})
-        state.update({"rand_id"             : self.websock_randid})
+        state.update({"session_rand_id"     : self.session_randid})
+        state.update({"ws_rand_id"          : self.websock_randid})
         state.update({"guide_state"         : self.guide_state})
         state.update({"interval_state"      : self.intervalometer_state})
         state.update({"blub_remaining"      : guidepulser.shutter_remaining()})
@@ -389,6 +392,8 @@ class AutoGuider(object):
         elif pkt_type == "settings":
             need_save = False
             for k in obj.keys():
+                if k == "pkt_type":
+                    continue
                 v = obj[k]
                 vv = comutils.try_parse_setting(v)
                 if k in self.settings:
@@ -430,6 +435,9 @@ class AutoGuider(object):
             print("save_settings")
         with open(filename, mode="wb") as f:
             ujson.dump(self.settings, f)
+            f.flush()
+        uos.sync()
+        uos.listdir()
 
     def decide(self):
         decided_pulse = 0
@@ -618,7 +626,6 @@ class AutoGuider(object):
                             self.log_msg("WARN: dithering without selected star")
                             self.guide_state = GUIDESTATE_IDLE
                         return decided_pulse
-                    self.dither_interval = 0
                     self.dither_frames += 1
                     self.advfilt_ra.pause(True)
                     self.advfilt_dec.pause(True)
@@ -636,10 +643,11 @@ class AutoGuider(object):
                             print("dither finished due to calm")
                     elif self.dither_frames >= self.settings["dither_frames_cnt"]:
                         done_dither = True
-                        self.target_coord = self.selected_star # retarget to prevent additional moves
+                        self.target_coord = self.selected_star.coord() # retarget to prevent additional moves
                         if self.debug:
                             print("dither finished due to timeout")
                     if done_dither:
+                        self.dither_interval = 0
                         self.guide_state = GUIDESTATE_GUIDING
                         self.backlash_ra.neutralize()
                         self.backlash_dec.neutralize()
@@ -721,7 +729,7 @@ class AutoGuider(object):
         amt = int(round(self.settings["dither_amount"] * 10.0))
         nx = ((pyb.rng() % (amt * 2)) - amt) / 10.0
         ny = ((pyb.rng() % (amt * 2)) - amt) / 10.0
-        self.target_coord = [self.origin_coord[0] + nx, self.origin_coord[1] + ny]
+        self.target_coord = (self.origin_coord[0] + nx, self.origin_coord[1] + ny)
 
     def get_pulse_to_target(self):
         if self.calibration[CALIIDX_RA] is None:
@@ -741,9 +749,10 @@ class AutoGuider(object):
         if self.calibration[CALIIDX_DEC] is not None:
             ang_dec = comutils.ang_normalize(ang - self.calibration[CALIIDX_DEC].angle)
             ny = mag * math.cos(math.radians(ang_dec))
+            pulse_dec = ny * self.calibration[CALIIDX_DEC].ms_per_pix
         else:
             # declination not calibrated
-            pulse_dec = 0
+            ang_dec = 0
             ny = mag * math.sin(math.radians(ang_ra))
             pulse_dec = ny * self.calibration[CALIIDX_RA].ms_per_pix
 
@@ -771,7 +780,7 @@ class AutoGuider(object):
                 pulse = pul_max
             else:
                 pulse = -pul_max
-        return pulse, pulse_abs
+        return pulse, pul_abs
 
     def pulse_to_target(self, pulse_data = None, force_move = False):
         if pulse_data is None:
@@ -788,6 +797,7 @@ class AutoGuider(object):
         pulse_ra_abs  = abs(pulse_ra)
         pulse_dec_abs = abs(pulse_dec)
         self.pulse_sum += pulse_ra_abs + pulse_dec_abs
+        print("pulse %u %u %u" % (pulse_ra, pulse_dec, self.pulse_sum))
         self.log_pulse(nx, ny)
         min_pulse_wid = self.settings["min_pulse_wid"]
         max_pulse_wid = self.settings["max_pulse_wid"]
@@ -947,6 +957,9 @@ class AutoGuider(object):
     def task(self):
         self.time_mgr.tick()
 
+        if self.session_randid == 0:
+            self.session_randid = pyb.rng() % 0x10000
+
         if self.cam is None:
             guidepulser.panic(True)
             self.task_pulser()
@@ -1020,7 +1033,7 @@ class AutoGuider(object):
         if guidepulser.is_shutter_open() == False:
             self.pulse_sum = 0
             self.queue_shutter_closed = True
-            dither = self.settings["dither_amount"] > 0
+            dither = (self.settings["dither_amount"] > 0 and (self.dither_interval + 1) >= self.settings["dither_interval"]) or self.guide_state == GUIDESTATE_DITHER
             # queue_shutter_closed is used to guarantee at least a small gap in the graph
             if self.intervalometer_timestamp <= 0:
                 self.intervalometer_timestamp = pyb.millis()
@@ -1044,7 +1057,7 @@ class AutoGuider(object):
             elif self.intervalometer_state == INTERVALSTATE_ENDING or self.intervalometer_state == INTERVALSTATE_SINGLE_ENDING:
                 self.intervalometer_state = INTERVALSTATE_IDLE
                 self.log_msg("MSG: intervalometer ended")
-            elif dither and self.guide_state != GUIDESTATE_GUIDING and self.guide_state != GUIDESTATE_DITHER:
+            elif dither and self.guide_state != GUIDESTATE_GUIDING and self.guide_state != GUIDESTATE_DITHER and self.intervalometer_state != INTERVALSTATE_IDLE:
                 self.intervalometer_state = INTERVALSTATE_IDLE
                 self.log_msg("MSG: intervalometer interrupted")
 
@@ -1165,7 +1178,7 @@ class AutoGuider(object):
                     obj = ujson.load(f)
                     if self.calibration[CALIIDX_DEC] is None:
                         self.calibration[CALIIDX_DEC] = guider_calibration.GuiderCalibration(0, 0, 0)
-                    self.calibration[CALIIDX_RA].load_json_obj(obj)
+                    self.calibration[CALIIDX_DEC].load_json_obj(obj)
                     good += 2
                     #self.log_msg("SUCCESS: loaded DEC calibration from file")
             except Exception as exc:
@@ -1190,6 +1203,9 @@ class AutoGuider(object):
                 try:
                     with open("calib_ra.json", mode="wb") as f:
                         ujson.dump(self.calibration[CALIIDX_RA].get_json_obj(), f)
+                        f.flush()
+                    uos.sync()
+                    uos.listdir()
                     good += 1
                     #self.log_msg("SUCCESS: saved RA calibration to file")
                 except Exception as exc:
@@ -1200,6 +1216,9 @@ class AutoGuider(object):
                 try:
                     with open("calib_dec.json", mode="wb") as f:
                         ujson.dump(self.calibration[CALIIDX_DEC].get_json_obj(), f)
+                        f.flush()
+                    uos.sync()
+                    uos.listdir()
                     good += 2
                     #self.log_msg("SUCCESS: saved DEC calibration to file")
                 except Exception as exc:
@@ -1357,6 +1376,8 @@ class AutoGuider(object):
                     infostr = "res [%0.1f , %0.1f],\r\n" % (res[0].cxf(), res[0].cyf())
                     f.write(infostr)
                 f.flush()
+            uos.sync()
+            uos.listdir()
         except:
             self.log_msg("ERR: unable to write recording metadata")
             self.queue_imgsave = 0
@@ -1367,6 +1388,9 @@ class AutoGuider(object):
             print("save_settings")
         with open(filename, mode="wb") as f:
             ujson.dump(self.settings, f)
+            f.flush()
+        uos.sync()
+        uos.listdir()
 
     def load_settings(self, filename = "settings_autoguider.json"):
         obj = {}
@@ -1433,6 +1457,9 @@ class AutoGuider(object):
         try:
             with open("hotpixels.txt", mode="w") as f:
                 f.write(encoded)
+                f.flush()
+            uos.sync()
+            uos.listdir()
             if use_log:
                 self.log_msg("SUCCESS: saved hot-pixels to file")
         except Exception as exc:

@@ -227,6 +227,11 @@ function math_roundPlaces(x, places)
     return Math.round(x * f) / f;
 }
 
+function math_mapVal(x, in_min, in_max, out_min, out_max)
+{
+    return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
+
 function time_getNowEpoch()
 {
     var date = new Date();

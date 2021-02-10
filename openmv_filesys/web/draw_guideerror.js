@@ -95,7 +95,7 @@ function errgraph_draw()
         err_dec_data .push(pkt[2]);
         pul_sum_data .push((pkt[3] * max_graph_limit) / max_possible_time);
         shutter_data1.push(pkt[4] == 0 ? 0 : max_graph_limit);
-        shutter_data2.push(pkt[5] == 0 ? 0 : -max_graph_limit);
+        shutter_data2.push(pkt[4] == 0 ? 0 : -max_graph_limit);
         zero_data    .push(0);
     }
 

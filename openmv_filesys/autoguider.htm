@@ -50,6 +50,7 @@ span.ct-label.ct-vertical.ct-start { position: relative; top: 4px; }
 <script type="text/javascript">
 
 var guide_state = 0;
+var interval_state = 0;
 var settings = {};
 var has_settings = false;
 var queuedSettings = [];
@@ -57,6 +58,7 @@ var last_status = null;
 var last_rx = null;
 var noStatUpdate_timer = null;
 var first_ever = true;
+var session_rand_id = 0;
 
 var selected_star = null, tgt_coord = null, ori_coord = null;
 
@@ -126,7 +128,8 @@ function handlePulseLogs(obj)
         if (itm["time"] > last_pulselog_time) {
             last_pulselog_time = itm["time"];
             errgraph_push(itm["time"], itm["ra"], itm["dec"], itm["sum"], itm["shutter"]);
-            if (itm["sum"] < last_pulse_sum) {
+            if (itm["sum"] < last_pulse_sum)
+            {
                 pulse_maxsum_cache = pulse_maxsum;
                 pulse_maxsum = 0;
             }
@@ -379,6 +382,16 @@ function handleStateObj()
     handleCalibration(obj, "ra");
     handleCalibration(obj, "dec");
 
+    if (("session_rand_id" in obj) != false) {
+        var nid = obj["session_rand_id"];
+        if (nid != session_rand_id) {
+            errgraph_clear();
+            last_pulselog_time = 0;
+            last_msg_time = 0;
+            session_rand_id = nid;
+        }
+    }
+
     if (("logs" in obj) != false) {
         handleMsgLogs(obj["logs"]);
         handlePulseLogs(obj["logs"]);
@@ -392,13 +405,13 @@ function handleStateObj()
 
     if (("interval_state" in obj) && ("blub_remaining" in obj))
     {
-        var sts = obj["interval_state"];
-        if (intervalometer_pretend_status != sts && intervalometer_pretend_status >= 0)
+        interval_state = obj["interval_state"];
+        if (intervalometer_pretend_status != interval_state && intervalometer_pretend_status >= 0)
         {
-            if (intervalometer_pretend_status == INTERVALSTATE_HALT && sts == INTERVALSTATE_IDLE) {
+            if (intervalometer_pretend_status == INTERVALSTATE_HALT && interval_state == INTERVALSTATE_IDLE) {
                 intervalometer_pretend_status = INTERVALSTATE_IDLE;
             }
-            if (intervalometer_pretend_status == INTERVALSTATE_BULB_TEST && sts == INTERVALSTATE_SINGLE_ENDING) {
+            if (intervalometer_pretend_status == INTERVALSTATE_BULB_TEST && interval_state == INTERVALSTATE_SINGLE_ENDING) {
                 intervalometer_pretend_status = INTERVALSTATE_SINGLE_ENDING;
                 if (obj["blub_remaining"] > 0) {
                     intervalometer_remaining = obj["blub_remaining"];
@@ -409,13 +422,13 @@ function handleStateObj()
                 intervalometer_status_mismatch += 1;
             }
             else {
-                intervalometerUpdate(sts, obj["blub_remaining"]);
+                intervalometerUpdate(interval_state, obj["blub_remaining"]);
                 intervalometer_status_mismatch = 0;
                 intervalometer_pretend_status = -1;
             }
         }
         else {
-            intervalometerUpdate(sts, obj["blub_remaining"]);
+            intervalometerUpdate(interval_state, obj["blub_remaining"]);
             intervalometer_status_mismatch = 0;
             intervalometer_pretend_status = -1;
         }
@@ -476,7 +489,14 @@ function handleStateObj()
             var total = settings["dither_interval"];
             if (total < 1) { total = 1; };
             var i = obj["dither_interval"] + 1;
-            var txt = i.toString() + " / " + total.toString() + " in dithering group";
+            var txt = "";
+            if (guide_state != GUIDESTATE_DITHER) {
+                txt += i.toString() + " / ";
+            }
+            else {
+                txt += total.toString() + " / ";
+            }
+            txt += total.toString() + " in dithering group";
             document.getElementById("dither_status").style.display = "block";
             document.getElementById("dither_status").innerHTML = txt;
         }
@@ -566,7 +586,7 @@ function handleStateObj()
     }
     txt += "<br />stars seen: " + (star_list.length).toString();
     if (guide_state == GUIDESTATE_GUIDING && intervalometer_status != INTERVALSTATE_IDLE) {
-        txt += "<br />drift sum: " + pulse_maxsum.toString() + "<br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(prev=" + pulse_maxsum_cache.toString() + ")";
+        txt += "<br />drift sum: " + pulse_maxsum.toString();// + "<br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(prev=" + pulse_maxsum_cache.toString() + ")";
     }
     txt += "<br />analysis quality:<br />&nbsp;&nbsp;&nbsp;&nbsp;error=" + obj["last_move_err"] + "&nbsp;<br />&nbsp;&nbsp;&nbsp;&nbsp;matches=" + obj["multistar_cnt"][0] + " (" + Math.round(obj["multistar_cnt"][0] * 100 / star_list.length) + "%)";
     if (settings["multistar_cnt_max"] > 1 || obj["multistar_cnt"][1] > 1) {
@@ -1113,8 +1133,8 @@ function imageStatsUpdate(obj)
     else
     {
         stats_str = "num of stars: " + star_list.length.toString() + "&nbsp;&nbsp;&nbsp;&nbsp;";
-        stats_str += "image mean: "  + math_roundPlaces(obj["img_mean"], 1).toString()  + "/255    \t";
-        stats_str += "image stdev: " + math_roundPlaces(obj["img_stdev"], 1).toString() + "/255    \t";
+        stats_str += "image mean: "  + obj["img_mean"].toFixed(1)  + "/255    \t";
+        stats_str += "image stdev: " + obj["img_stdev"].toFixed(1) + "/255    \t";
         stats_str += "image max: "   + Math.round(obj["img_max"]).toString() +            "/255    \t";
         stats_str += "image min: "   + Math.round(obj["img_min"]).toString() +            "/255    \t";
     }
