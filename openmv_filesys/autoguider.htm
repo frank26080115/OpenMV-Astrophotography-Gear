@@ -64,6 +64,10 @@ var selected_star = null, tgt_coord = null, ori_coord = null;
 
 var screen_size_rpt_timer = null;
 
+var guide_state_pretend = 0;
+var guide_state_pretend_cnt = 0;
+var ignore_next = false;
+
 var last_msg_time = 0;
 function handleMsgLogs(obj)
 {
@@ -348,8 +352,11 @@ function websock_onmessage_jsonobj_inner()
         document.getElementById("loading_almost").style.display = "none";
         document.getElementById("loading_settings").style.display = "none";
 
-        last_status = obj;
-        handleStateObj();
+        if (ignore_next == false) {
+            last_status = obj;
+            handleStateObj();
+        }
+        ignore_next = false;
 
         if (has_settings == false) {
             miscCmd("getsettings");
@@ -378,7 +385,7 @@ function handleStateObj()
 
     var obj = last_status;
 
-    var can_start = 
+    var can_start =
     handleCalibration(obj, "ra");
     handleCalibration(obj, "dec");
 
@@ -508,7 +515,22 @@ function handleStateObj()
     var infoele = document.getElementById("div_statusinfo");
     var txt = "";
     guide_state = obj["guide_state"];
-    if (guide_state == GUIDESTATE_IDLE)
+    var ui_guide_state = guide_state;
+    if (guide_state_pretend != guide_state) {
+        guide_state_pretend_cnt += 1;
+        if (guide_state_pretend < 3) {
+            ui_guide_state = guide_state_pretend;
+        }
+        else {
+            guide_state_pretend = guide_state;
+            guide_state_pretend_cnt = 0;
+        }
+    }
+    else {
+        guide_state_pretend_cnt = 0;
+    }
+
+    if (ui_guide_state == GUIDESTATE_IDLE)
     {
         txt = "IDLE";
         ui_list["btn_guideend"       ].button("option", "disabled", true);
@@ -527,7 +549,7 @@ function handleStateObj()
     {
         ui_list["btn_guideend"  ].button("option", "disabled", false);
         disable_testpulsebtns();
-        if (guide_state == GUIDESTATE_PANIC)
+        if (ui_guide_state == GUIDESTATE_PANIC)
         {
             txt = "PANIC";
             ui_list["btn_guidestart"     ].button("option", "disabled", can_start == false);
@@ -551,13 +573,13 @@ function handleStateObj()
             ui_list["btn_hotpixels"      ].button("option", "disabled", true);
             //ui_list["btn_advfilt_update" ].button("option", "disabled", true);
             //ui_list["btn_advfilt_reset"  ].button("option", "disabled", true);
-            if (guide_state == GUIDESTATE_GUIDING) {
+            if (ui_guide_state == GUIDESTATE_GUIDING) {
                 txt = "auto-guiding";
             }
-            else if (guide_state == GUIDESTATE_DITHER) {
+            else if (ui_guide_state == GUIDESTATE_DITHER) {
                 txt = "auto-guiding (dithering)";
             }
-            else if (guide_state == GUIDESTATE_CALIBRATING_RA) {
+            else if (ui_guide_state == GUIDESTATE_CALIBRATING_RA) {
                 txt = "calibrating R.A.";
                 if (viz_calib == 0) {
                     viz_calib = 1;
@@ -566,7 +588,7 @@ function handleStateObj()
                     viz_calib = 3;
                 }
             }
-            else if (guide_state == GUIDESTATE_CALIBRATING_DEC) {
+            else if (ui_guide_state == GUIDESTATE_CALIBRATING_DEC) {
                 txt = "calibrating dec.";
                 if (viz_calib == 0) {
                     viz_calib = 2;
@@ -752,6 +774,8 @@ function make_ui_mainctrl()
         ui_list["btn_guideend"  ].button("option", "disabled", false);
         ui_list["btn_guidestart"].button("option", "disabled", true);
         guideCmd(GUIDESTATE_GUIDING);
+        guide_state_pretend = GUIDESTATE_GUIDING;
+        guide_state_pretend_cnt = 0;
         if (viz_calib > 0) {
             viz_calib = 0;
             draw_guidescope();
@@ -761,6 +785,8 @@ function make_ui_mainctrl()
         ui_list["btn_guideend"  ].button("option", "disabled", true);
         ui_list["btn_guidestart"].button("option", "disabled", false);
         guideCmd(GUIDESTATE_IDLE);
+        guide_state_pretend = GUIDESTATE_IDLE;
+        guide_state_pretend_cnt = 0;
     });
     makeButton("btn_gotocalibration", function( event ) {
         $("#accordion").accordion('option', 'active' , 3);
@@ -1298,10 +1324,12 @@ function make_ui_calibration()
     makeSlider("slider_correctionscale_dec" , 75 , 133 , 100, 1  , "0 %" , " %" , "correction_scale_dec");
     makeButton("btn_calib_ra", function() {
         guideCmd(GUIDESTATE_CALIBRATING_RA);
+        ignore_next = true;
         document.getElementById("calibinfo_ra").innerHTML = "Running Calibration...";
     });
     makeButton("btn_calib_dec", function() {
         guideCmd(GUIDESTATE_CALIBRATING_DEC);
+        ignore_next = true;
         document.getElementById("calibinfo_dec").innerHTML = "Running Calibration...";
     });
     makeButton("btn_calib_save", function() {
@@ -1309,15 +1337,18 @@ function make_ui_calibration()
     });
     makeButton("btn_calib_load", function() {
         miscCmd("calib_load");
+        ignore_next = true;
         document.getElementById("calibinfo_ra") .innerHTML = "Loading...";
         document.getElementById("calibinfo_dec").innerHTML = "Loading...";
     });
     makeButton("btn_calib_remove_ra", function() {
         miscCmd("calib_reset_ra");
+        ignore_next = true;
         document.getElementById("calibinfo_ra").innerHTML = "None";
     });
     makeButton("btn_calib_remove_dec", function() {
         miscCmd("calib_reset_dec");
+        ignore_next = true;
         document.getElementById("calibinfo_dec").innerHTML = "None";
     });
     makeCheckbox("chk_visualize_cali", false, function (x) {
