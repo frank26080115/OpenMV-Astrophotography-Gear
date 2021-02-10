@@ -45,6 +45,22 @@ body
 .ct-series-f .ct-line { stroke:#FFFFFF; }
 span.ct-label.ct-vertical.ct-start { position: relative; top: 4px; }
 
+a:link {
+  color: green;
+}
+
+a:visited {
+  color: green;
+}
+
+a:hover {
+  color: red;
+}
+
+a:active {
+  color: yellow;
+}
+
 </style>
 
 <script type="text/javascript">
@@ -518,7 +534,7 @@ function handleStateObj()
     var ui_guide_state = guide_state;
     if (guide_state_pretend != guide_state) {
         guide_state_pretend_cnt += 1;
-        if (guide_state_pretend < 3) {
+        if (guide_state_pretend_cnt < 3) {
             ui_guide_state = guide_state_pretend;
         }
         else {
@@ -527,6 +543,7 @@ function handleStateObj()
         }
     }
     else {
+        guide_state_pretend = guide_state;
         guide_state_pretend_cnt = 0;
     }
 
@@ -735,7 +752,7 @@ function star_onclick(x, y)
 <div id="guide_panic_error" class="ui-widget" style="display: none;"><div id="guide_panic_error_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p><b>&#128680; Guiding Panic!</b><br />Please check everything and re-start auto-guiding.</p></div></div>
 <div id="camera_hardware_wait" class="ui-widget" style="display: none;"><div id="camera_hardware_wait_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p>&#9203; WAITING for camera to load new exposure settings...</p></div></div>
 
-<div id="div_errgraph"><fieldset><legend>Error Graph</legend><div id="errgraph-chart" class="ct-graph ct-major-eleventh"><div style="text-align:right;position:relative;top:-3px;"><span style="color:#FF4444"><b>&mdash;</b>&nbsp;RA&nbsp;<span>&nbsp;&nbsp;<span style="color:#4488FF">&nbsp;<b>&mdash;</b>&nbsp;DEC<span></div></fieldset></div>
+<div id="div_errgraph"><fieldset><legend>Error Graph</legend><div id="errgraph-chart" class="ct-graph ct-major-eleventh" style="z-index:0;"><div style="text-align:right;position:relative;top:-3px;z-index:1;"><span style="font-size:8pt;" onclick="errgraph_clear();"><a href="javascript:errgraph_clear();" onclick="errgraph_clear();">click here to clear</a></span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#FF4444"><b>&mdash;</b>&nbsp;RA&nbsp;<span>&nbsp;&nbsp;<span style="color:#4488FF">&nbsp;<b>&mdash;</b>&nbsp;DEC<span></div></fieldset></div>
 
 <div id="connection_lost" class="ui-widget" style="display: none;"><div id="connection_lost_inner" class="hideable-msg ui-state-error ui-corner-all .ui-state-error-text" ><p><b>&#128245; Connection LOST!</b> Attempting to re-establish &#128246; &#9203;</p></div></div>
 
@@ -1135,6 +1152,7 @@ function make_ui_guidecamconfig()
     makeSlider("slider_shutter"           , 100, 3000, 1000, 100, "0"   , " ms" , "guidecam_shutter"   );
     makeSlider("slider_starthresh"        , 0  , 255 , 0   , 1  , "auto", "/255", "guidecam_thresh"    );
     makeSlider("slider_imgerrpanicthresh" , 1  , 100 , 3   , 1  , "0"   , ""    , "panicthresh_expoerr");
+    makeSlider("slider_allowedmotionwhilecapture" , 0, 100, 25, 1, "0 %", " %",    "motionwhilecapture");
     makeHelp("guidecam");
 }
 
@@ -1234,6 +1252,9 @@ function imageStatsUpdate(obj)
     <div><fieldset><legend>Image Error Panic Threshold: <span id="slider_imgerrpanicthresh_handle"></span></legend>
         <div id="slider_imgerrpanicthresh"></div>
     </fieldset></div>
+    <div><fieldset><legend>Allowed Motion While Capture: <span id="slider_allowedmotionwhilecapture_handle"></span></legend>
+        <div id="slider_allowedmotionwhilecapture"></div>
+    </fieldset></div>
     <br />
     <button id="btn_saveimgcard"      >&#128190; Save Image to microSD Card</button>
     <br />
@@ -1244,6 +1265,7 @@ function imageStatsUpdate(obj)
             <p>The <b>shutter</b> time of the guide-cam can be adjusted. The a longer value will allow in more light, causing a brighter image and making dark stars easier to detect. But don't make the shutter time too long, because corrective movements should only be made while the guide-cam is not taking a picture, otherwise the stars will trail and cannot be analyzed.</p>
             <p>The "<b>Star Threshold</b>" is the brightness value of a pixel for it to be considered a star. If this value is left at zero, then the threshold will be automatically determined by the overall brightness of the image. A very high threshold value will cause darker stars to be ignored.</p>
             <p>The "<b>Image Error Panic Threshold</b>" is the number of frames with a bad image (some form of camera malfunction, or a search helicopter is putting a spotlight on your telescope) before the auto-guider gives up and quits guiding. The red LED light will blink to notify you.</p>
+            <p>The "<b>Allowed Motion While Capture</b>" is the allowed motion that the mount is allowed to make during a guide-cam frame. If the motion is too much, then the image is considered at risk for having star-trails, and the firmware will take another frame to analyze. For example, if the setting is 25% and the shutter is set to 1000ms, then if the mount is given a 300ms pulse, then the guide-cam will take an additional frame. Set this high if the star-trailing is low, and set it low if the star-trailing is causing missed detection. Pre-emptive pulses are only generated when the guide-cam is taking the additional frame.</p>
             <p>The image from the guide-cam can be streamed. Use this stream to adjust the focus of your guide-scope. Since the file transfer speed is slow, guiding is not possible during the stream.</p>
         </p></fieldset></div>
     </div>
@@ -1650,6 +1672,13 @@ const advfilter_table = [
     ["advfilt_xxx_limit_i", "num_advfilt_xxx_ilimit"],
     ["advfilt_xxx_lpf_k"  , "num_advfilt_xxx_lpfconst"],
     ["advfilt_xxx_lpf_mix", "num_advfilt_xxx_lpfmix"],
+    ["preempfilt_xxx_term_i" , "num_preempfilt_xxx_iterm"],
+    ["preempfilt_xxx_term_d" , "num_preempfilt_xxx_dterm"],
+    ["preempfilt_xxx_decay_i", "num_preempfilt_xxx_idecay"],
+    ["preempfilt_xxx_limit_i", "num_preempfilt_xxx_ilimit"],
+    ["preempfilt_xxx_lpf_k"  , "num_preempfilt_xxx_lpfconst"],
+    ["preempfilt_xxx_lpf_mix", "num_preempfilt_xxx_lpfmix"],
+    ["preempfilt_xxx_scale"  , "num_preempfilt_xxx_scale"],
 ];
 
 function get_num_input(id) {
@@ -1735,8 +1764,24 @@ function resetAdvFilterSettings()
         var pair = advfilter_table[i];
         var input_key_ra    = pair[1].replace("xxx", "ra");
         var input_key_dec   = pair[1].replace("xxx", "dec");
-        document.getElementById(input_key_ra) .value = 0;
-        document.getElementById(input_key_dec).value = 0;
+        if (input_key_ra.includes("scale"))
+        {
+            if (input_key_ra.includes("preemp"))
+            {
+                document.getElementById(input_key_ra) .value = 25;
+                document.getElementById(input_key_dec).value = 25;
+            }
+            else
+            {
+                document.getElementById(input_key_ra) .value = 100;
+                document.getElementById(input_key_dec).value = 100;
+            }
+        }
+        else
+        {
+            document.getElementById(input_key_ra) .value = 0;
+            document.getElementById(input_key_dec).value = 0;
+        }
     }
 }
 </script>
@@ -1748,6 +1793,7 @@ function resetAdvFilterSettings()
         <p>The P-term of the PID is always unity, as it is actually determined by the calibration and the calibration scaling. The Integral term and Derivative term can be set as a percentage (100 means 1, 0 means disable). The accumulator for the integral term has a limiter and a decay value to prevent it from getting stuck. Setting the I-term and D-term to 0 would disable this PID.</p>
         <p>The LPF filter constant is expressed also as a percentage, a filter constant of 100% would cause the filter to be a unity pass-through, a filter constant of 0% would disable the LPF.</p>
         <p>The mixture between the PID and the LPF can be mixed, the mixture value is a percentage between 0% and 100%. 0% would mean the LPF is disabled, and the result from the PID is used. 100% means the PID is disabled, and the result from the LPF is used. Any value in between would mix the results from the PID and the LPF together.</p>
+        <p>There's also a separate P.I.D. controller and L.P.F. that's used for a pre-emptive move, that is, a <b>move made before a guide-cam image is analyzed</b>. The parameters are similar, but with an additional scaling factor applied to the end. This pre-emptive move is not made if the guide-cam image analysis does not skip frames.</p>
         </fieldset><br /></div>
     </div>
     <div style="font-family:monospace;">
@@ -1762,6 +1808,7 @@ function resetAdvFilterSettings()
     .advfilt_tbl { font-size:8pt; }
 }
         </style>
+        <div><fieldset><legend>Corrective Controller</legend>
         <div class="divTable advfilt_tbl" style="width:80%;">
             <div class="divTableBody">
                 <div class="divTableRow">
@@ -1801,7 +1848,55 @@ function resetAdvFilterSettings()
                 </div>
             </div>
         </div>
-    </div>
+      </fieldset></div>
+
+      <div><fieldset><legend>Pre-emptive Controller</legend>
+        <div class="divTable advfilt_tbl" style="width:80%;">
+            <div class="divTableBody">
+                <div class="divTableRow">
+                    <div class="divTableCell">&nbsp;</div>
+                    <div class="divTableCell">&nbsp;&nbsp;R.A.</div>
+                    <div class="divTableCell">&nbsp;&nbsp;Dec.</div>
+                </div>
+                <div class="divTableRow">
+                    <div class="divTableCell" style="text-align:right;">I&#8209;term&nbsp;&nbsp;</div>
+                    <div class="divTableCell"><input class="advfilt_num" type="number" id="num_preempfilt_ra_iterm" name="num_preempfilt_ra_iterm" min="-99999" max="99999" step="1" /></div>
+                    <div class="divTableCell"><input class="advfilt_num" type="number" id="num_preempfilt_dec_iterm" name="num_preempfilt_dec_iterm" min="-99999" max="99999" step="1" />&nbsp;%</div>
+                </div>
+                <div class="divTableRow">
+                    <div class="divTableCell" style="text-align:right;">I&nbsp;limiter&nbsp;&nbsp;</div>
+                    <div class="divTableCell"><input class="advfilt_num" type="number" id="num_preempfilt_ra_ilimit" name="num_preempfilt_ra_ilimit" min="0" max="9999999" step="1" /></div>
+                    <div class="divTableCell"><input class="advfilt_num" type="number" id="num_preempfilt_dec_ilimit" name="num_preempfilt_dec_ilimit" min="0" max="9999999" step="1" />&nbsp;ms</div>
+                </div>
+                <div class="divTableRow">
+                    <div class="divTableCell" style="text-align:right;">I&nbsp;decay&nbsp;&nbsp;</div>
+                    <div class="divTableCell"><input class="advfilt_num" type="number" id="num_preempfilt_ra_idecay" name="num_preempfilt_ra_idecay" min="0" max="9999999" step="1" /></div>
+                    <div class="divTableCell"><input class="advfilt_num" type="number" id="num_preempfilt_dec_idecay" name="num_preempfilt_dec_idecay" min="0" max="9999999" step="1" />&nbsp;ms</div>
+                </div>
+                <div class="divTableRow">
+                    <div class="divTableCell" style="text-align:right;">D&#8209;term&nbsp;&nbsp;</div>
+                    <div class="divTableCell"><input class="advfilt_num" type="number" id="num_preempfilt_ra_dterm" name="num_preempfilt_ra_dterm" min="-99999" max="99999" step="1" /></div>
+                    <div class="divTableCell"><input class="advfilt_num" type="number" id="num_preempfilt_dec_dterm" name="num_preempfilt_dec_dterm" min="-99999" max="99999" step="1" />&nbsp;%</div>
+                </div>
+                <div class="divTableRow">
+                    <div class="divTableCell" style="text-align:right;">LPF const&nbsp;&nbsp;</div>
+                    <div class="divTableCell"><input class="advfilt_num" type="number" id="num_preempfilt_ra_lpfconst" name="num_preempfilt_ra_lpfconst" min="0" max="100" step="1" /></div>
+                    <div class="divTableCell"><input class="advfilt_num" type="number" id="num_preempfilt_dec_lpfconst" name="num_preempfilt_dec_lpfconst" min="0" max="100" step="1" />&nbsp;%</div>
+                </div>
+                <div class="divTableRow">
+                    <div class="divTableCell" style="text-align:right;">LPF mix&nbsp;&nbsp;</div>
+                    <div class="divTableCell"><input class="advfilt_num" type="number" id="num_preempfilt_ra_lpfmix" name="num_preempfilt_ra_lpfmix" min="0" max="100" step="1" /></div>
+                    <div class="divTableCell"><input class="advfilt_num" type="number" id="num_preempfilt_dec_lpfmix" name="num_preempfilt_dec_lpfmix" min="0" max="100" step="1" />&nbsp;%</div>
+                </div>
+                <div class="divTableRow">
+                    <div class="divTableCell" style="text-align:right;">Scale&nbsp;&nbsp;</div>
+                    <div class="divTableCell"><input class="advfilt_num" type="number" id="num_preempfilt_ra_scale" name="num_preempfilt_ra_scale" min="0" max="200" step="1" /></div>
+                    <div class="divTableCell"><input class="advfilt_num" type="number" id="num_preempfilt_dec_scale" name="num_preempfilt_dec_scale" min="0" max="200" step="1" />&nbsp;%</div>
+                </div>
+            </div>
+        </div>
+      </fieldset></div>
+
     <br />
     <div class="divTable" style="width:80%;">
         <div class="divTableBody">
@@ -1813,6 +1908,8 @@ function resetAdvFilterSettings()
                 <div class="divTableCell"><button id="btn_advfilt_reset">Reset Values</button></div>
             </div>
         </div>
+      </div>
+
     </div>
   </div>
   <h3>Hot Pixels</h3>

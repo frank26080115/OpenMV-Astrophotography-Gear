@@ -3,7 +3,7 @@ var errgraph_stepwidth = 15;
 var errgraph_totallimit = 4096 * 2;
 var errgraph_data = [];
 var errgraph_lasttime = 0;
-var errgraph_timeout = Math.round(1333.0 * 1.5);
+var errgraph_timeout = Math.round(1333.0 * 2.5);
 var errgraph_timeoutEvent = null;
 var errgraph_lasthoricnt = 0;
 
@@ -217,7 +217,9 @@ function errgraph_setNextTimeout()
     if (errgraph_timeoutEvent != null) {
         clearTimeout(errgraph_timeoutEvent);
     }
+    errgraph_settimeout();
     errgraph_timeoutEvent = setTimeout(function(){
+        errgraph_settimeout();
         errgraph_push(errgraph_lasttime + errgraph_timeout, 0, 0, 0, 0);
     }, errgraph_timeout);
 }
@@ -228,7 +230,8 @@ function errgraph_clear()
         clearTimeout(errgraph_timeoutEvent);
     }
     errgraph_data = [];
-    errgraph_lasttime = 0;
+    errgraph_draw();
+    //errgraph_lasttime = 0;
 }
 
 function errgraph_save()
@@ -269,5 +272,19 @@ function errgraph_save()
         var errstr = "ERROR while saving graph data: " + err.toString();
         alert(errstr);
         console.log(errstr);
+    }
+}
+
+function errgraph_settimeout()
+{
+    try
+    {
+        var x = settings["guidecam_shutter"];
+        x /= 0.75;
+        x *= 2.5;
+        errgraph_timeout = x;
+    }
+    catch (e)
+    {
     }
 }

@@ -78,11 +78,13 @@ class AutoGuider(object):
         if guidepulser.get_hw_err() > 0:
             print("ERROR: I2C hardware failure")
 
-        self.calibration  = [None, None]
-        self.backlash_ra  = backlash_mgr.BacklashManager()
-        self.backlash_dec = backlash_mgr.BacklashManager()
-        self.advfilt_ra   = guide_filter.GuideFilter("ra")
-        self.advfilt_dec  = guide_filter.GuideFilter("dec")
+        self.calibration    = [None, None]
+        self.backlash_ra    = backlash_mgr.BacklashManager()
+        self.backlash_dec   = backlash_mgr.BacklashManager()
+        self.advfilt_ra     = guide_filter.GuideFilter("ra" , "advfilt")
+        self.advfilt_dec    = guide_filter.GuideFilter("dec", "advfilt")
+        self.preempfilt_ra  = guide_filter.GuideFilter("ra" , "preempfilt")
+        self.preempfilt_dec = guide_filter.GuideFilter("dec", "preempfilt")
 
         self.cam_err = 0
         self.expo_err = 0
@@ -96,6 +98,7 @@ class AutoGuider(object):
         self.dbg_t1 = 0
         self.dbg_t2 = 0
         self.dbg_t3 = 0
+        self.dbg_t4 = 0
         self.hotpixels_eff = 0
         self.queue_imgsave = 0
         self.save_image_name = None
@@ -142,6 +145,7 @@ class AutoGuider(object):
         self.settings.update({"guidecam_gain"            : self.cam.gain})
         self.settings.update({"guidecam_shutter"         : self.cam.shutter // 1000})
         self.settings.update({"guidecam_thresh"          : 0})
+        self.settings.update({"motionwhilecapture"       : 25})
         self.settings.update({"use_hotpixels"            : False})
         self.settings.update({"panicthresh_expoerr"      : 3})
         self.settings.update({"panicthresh_move_err"     : 50})
@@ -183,6 +187,10 @@ class AutoGuider(object):
         self.settings.update({"use_led"                  : True})
         self.settings.update({"fast_mode"                : True})
         self.settings.update({"always_guiding"           : False})
+        self.advfilt_ra    .fill_settings(self.settings)
+        self.advfilt_dec   .fill_settings(self.settings)
+        self.preempfilt_ra .fill_settings(self.settings)
+        self.preempfilt_dec.fill_settings(self.settings)
 
     def send_settings(self):
         obj = {}
@@ -425,6 +433,10 @@ class AutoGuider(object):
         self.backlash_dec.hard_lock   = self.settings["backlash_lock_dec"]
         guidepulser.set_flip_ra (self.settings["flip_ra" ])
         guidepulser.set_flip_dec(self.settings["flip_dec"])
+        self.advfilt_ra    .load_settings(self.settings)
+        self.advfilt_dec   .load_settings(self.settings)
+        self.preempfilt_ra .load_settings(self.settings)
+        self.preempfilt_dec.load_settings(self.settings)
         if self.settings["use_led"]:
             guidepulser.enable_led()
         else:
@@ -612,9 +624,13 @@ class AutoGuider(object):
                             self.dither_frames = 0
                             self.advfilt_ra.pause(True)
                             self.advfilt_dec.pause(True)
+                            self.preempfilt_ra.pause(True)
+                            self.preempfilt_dec.pause(True)
                     if self.guide_state == GUIDESTATE_GUIDING:
                         self.advfilt_ra.pause(False)
                         self.advfilt_dec.pause(False)
+                        self.preempfilt_ra.pause(False)
+                        self.preempfilt_dec.pause(False)
                     decided_pulse = self.pulse_to_target(force_move = (self.guide_state == GUIDESTATE_DITHER))
                     return decided_pulse
                 elif self.guide_state == GUIDESTATE_DITHER:
@@ -629,6 +645,8 @@ class AutoGuider(object):
                     self.dither_frames += 1
                     self.advfilt_ra.pause(True)
                     self.advfilt_dec.pause(True)
+                    self.preempfilt_ra.pause(True)
+                    self.preempfilt_dec.pause(True)
                     decided_pulse = self.pulse_to_target(force_move = True)
                     if decided_pulse <= self.settings["dither_calmness"]:
                         self.dither_calm += 1
@@ -653,6 +671,8 @@ class AutoGuider(object):
                         self.backlash_dec.neutralize()
                         self.advfilt_ra.pause(False)
                         self.advfilt_dec.pause(False)
+                        self.preempfilt_ra.pause(False)
+                        self.preempfilt_dec.pause(False)
                         guidepulser.shutter(self.settings["intervalometer_bulb_time"])
                         self.intervalometer_timestamp = 0
                         if self.settings["intervalometer_digital"]:
@@ -663,6 +683,8 @@ class AutoGuider(object):
                     self.backlash_dec.neutralize()
                     self.advfilt_ra.pause(True)
                     self.advfilt_dec.pause(True)
+                    self.preempfilt_ra.pause(True)
+                    self.preempfilt_dec.pause(True)
                     if self.guide_state == GUIDESTATE_CALIBRATING_RA:
                         i = CALIIDX_RA
                         axis = "RA"
@@ -703,16 +725,17 @@ class AutoGuider(object):
                     else:
                         decided_pulse = self.calibration[i].pulse_width
                         if self.guide_state == GUIDESTATE_CALIBRATING_RA:
-                            guidepulser.move(decided_pulse, 0, self.settings["move_grace"])
+                            self.stop_time = guidepulser.move(decided_pulse, 0, self.settings["move_grace"])
                         else:
-                            guidepulser.move(0, decided_pulse, self.settings["move_grace"])
-                        self.stop_time = guidepulser.get_stop_time()
+                            self.stop_time = guidepulser.move(0, decided_pulse, self.settings["move_grace"])
                     return decided_pulse
                 elif self.guide_state == GUIDESTATE_IDLE:
                     self.backlash_ra.neutralize()
                     self.backlash_dec.neutralize()
                     self.advfilt_ra.neutralize()
                     self.advfilt_dec.neutralize()
+                    self.preempfilt_ra.neutralize()
+                    self.preempfilt_dec.neutralize()
                     self.dither_interval = 0
                     if self.selected_star is None:
                         return decided_pulse
@@ -760,6 +783,8 @@ class AutoGuider(object):
         pulse_dec *= self.settings["correction_scale_dec"]
         pulse_ra  /= 100
         pulse_dec /= 100
+        self.preempfilt_ra.filter(pulse_ra)
+        self.preempfilt_dec.filter(pulse_dec)
         pulse_ra  = self.advfilt_ra.filter(pulse_ra)
         pulse_dec = self.advfilt_dec.filter(pulse_dec)
         return [pulse_ra, pulse_dec, nx, ny]
@@ -791,14 +816,23 @@ class AutoGuider(object):
             res = pulse_data
         pulse_ra = res[0]
         pulse_dec = res[1]
-        nx = res[2]
-        ny = res[3]
+        if len(res) >= 4:
+            nx = res[2]
+            ny = res[3]
+            print("corrective ", end="")
+        else:
+            nx = None
+            ny = None
+            print("preemptive ", end="")
 
         pulse_ra_abs  = abs(pulse_ra)
         pulse_dec_abs = abs(pulse_dec)
         self.pulse_sum += pulse_ra_abs + pulse_dec_abs
-        print("pulse %u %u %u" % (pulse_ra, pulse_dec, self.pulse_sum))
-        self.log_pulse(nx, ny)
+        t = pyb.millis()
+        print("pulse %u %u %u %u" % (pyb.elapsed_millis(self.dbg_t4), pulse_ra, pulse_dec, self.pulse_sum))
+        self.dbg_t4 = t
+        if nx is not None and ny is not None:
+            self.log_pulse(nx, ny)
         min_pulse_wid = self.settings["min_pulse_wid"]
         max_pulse_wid = self.settings["max_pulse_wid"]
         if min_pulse_wid < 5:
@@ -815,10 +849,21 @@ class AutoGuider(object):
             pulse_dec = 0
         pulse_dec_fin = self.backlash_dec.filter(pulse_dec, force_move = force_move)
         if pulse_ra_fin != 0 or pulse_dec_fin != 0:
-            guidepulser.move(pulse_ra_fin, pulse_dec_fin, self.settings["move_grace"])
-            self.stop_time = guidepulser.get_stop_time()
+            self.stop_time = guidepulser.move(pulse_ra_fin, pulse_dec_fin, self.settings["move_grace"])
             return ret
         return 0
+
+    def preemp_pulse(self):
+        if self.guide_state != GUIDESTATE_GUIDING:
+            return 0
+        if guidepulser.is_moving():
+            return 0
+        pulse_ra  = self.preempfilt_ra.get_preemp()
+        pulse_dec = self.preempfilt_dec.get_preemp()
+        x = 0
+        if pulse_ra != 0 or pulse_dec != 0:
+            x = self.pulse_to_target(pulse_data = [pulse_ra, pulse_dec])
+        return x
 
     def log_pulse(self, nx, ny):
         timestamp = self.img.timestamp()
@@ -859,6 +904,8 @@ class AutoGuider(object):
         self.backlash_dec.neutralize()
         self.advfilt_ra.neutralize()
         self.advfilt_dec.neutralize()
+        self.preempfilt_ra.neutralize()
+        self.preempfilt_dec.neutralize()
         self.selected_star   = None
         self.prev_stars      = None
         self.target_origin   = None
@@ -989,7 +1036,16 @@ class AutoGuider(object):
         if self.snap_wait():
             img = self.cam.snapshot_finish()
             img_time = img.timestamp()
-            if img_time > self.stop_time and (img_time - (self.cam.get_timespan() + 100)) > self.stop_time:
+            tspan = self.cam.get_timespan()
+            img_start_time = img_time - tspan
+            dt = ((self.stop_time - img_start_time) * 100) / tspan
+            motionwhilecapture = self.settings["motionwhilecapture"]
+            still_enough = (dt <= motionwhilecapture or motionwhilecapture >= 100)
+            if still_enough == False:
+                preemp = self.preemp_pulse()
+                if preemp != 0:
+                    still_enough = True
+            if still_enough:
                 # this image was taken while staying still
                 self.img = img
                 if self.queue_imgsave > 0:
@@ -998,6 +1054,7 @@ class AutoGuider(object):
                 # did not stay still, do another one while staying still
                 if self.snap_start():
                     if self.snap_wait():
+                        self.preemp_pulse()
                         self.img = self.cam.snapshot_finish()
                     else:
                         self.log_msg("ERR: guidecam failed to read image during wait")

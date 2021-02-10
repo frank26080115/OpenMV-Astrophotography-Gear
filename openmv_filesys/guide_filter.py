@@ -3,8 +3,9 @@ micropython.opt_level(2)
 
 class GuideFilter(object):
 
-    def __init__(self, axis):
+    def __init__(self, axis, flttype):
         self.axis = axis.lower()
+        self.filttype  = flttype.lower()
         self.term_i    = 0
         self.sum_i     = 0
         self.limit_i   = 0
@@ -14,7 +15,11 @@ class GuideFilter(object):
         self.lpf_val   = None
         self.lpf_k     = 0
         self.lpf_mix   = 0
+        self.scale     = 100
         self.paused    = True
+        self.last_out  = 0
+        if flttype == "preempfilt":
+            self.scale = 25
         pass
 
     def pause(self, x):
@@ -22,14 +27,18 @@ class GuideFilter(object):
         if x:
             self.neutralize()
 
+    def _get_setting_prefix(self):
+        return self.filttype + "_" + self.axis + "_"
+
     def load_settings(self, settings):
-        n = "advfilt_" + self.axis + "_"
+        n = self._get_setting_prefix()
         self.term_i   = settings[n + "term_i" ]
         self.limit_i  = settings[n + "limit_i"]
         self.decay_i  = settings[n + "decay_i"]
         self.term_d   = settings[n + "term_d" ]
         self.lpf_k    = settings[n + "lpf_k"  ]
         self.lpf_mix  = settings[n + "lpf_mix"]
+        self.scale    = settings[n + "scale"  ]
         self.limit_i  = abs(self.limit_i)
         self.decay_i  = abs(self.decay_i)
         self.lpf_k    = abs(self.lpf_k)
@@ -40,18 +49,20 @@ class GuideFilter(object):
             self.lpf_mix = 100
 
     def fill_settings(self, settings):
-        n = "advfilt_" + self.axis + "_"
+        n = self._get_setting_prefix()
         settings.update({(n + "term_i" ): self.term_i })
         settings.update({(n + "limit_i"): self.limit_i})
         settings.update({(n + "decay_i"): self.decay_i})
         settings.update({(n + "term_d" ): self.term_d })
         settings.update({(n + "lpf_k"  ): self.lpf_k  })
         settings.update({(n + "lpf_mix"): self.lpf_mix})
+        settings.update({(n + "scale"  ): self.scale  })
 
     def neutralize(self):
         self.sum_i    = 0
         self.last_val = None
         self.lpf_val  = None
+        self.last_out = 0
 
     def filter(self, x):
         if self.paused:
@@ -92,4 +103,12 @@ class GuideFilter(object):
             final_mix /= 100
         else:
             final_mix = total
+        final_mix *= self.scale
+        final_mix /= 100
+        self.last_out = final_mix
         return final_mix
+
+    def get_preemp(self):
+        ret = self.last_out
+        self.last_out = 0
+        return ret
