@@ -30,9 +30,13 @@ The intervalometer also has basic capabilities, such as taking repeated long exp
 Circuitry
 =========
 
+![](img/guide_shield.png)
+
 The special shield I designed uses a I2C port expander chip to add GPIOs to the OpenMV (which didn't have enough GPIOs for the job). The expander adds enough signals for the ST-4 signals, the intervalometer, and a RGB LED indicator. As the ST-4 signals require a bit of timing accuracy, the firmware to drive the I2C bus is written in the C back-end firmware to avoid function call overhead and the garbage collector of MicroPython.
 
-All of these outputs are opto-isolated. This is a nice feature as all the equipment involved are very expensive.
+![](img/guide_shield_2.png)
+
+All of these outputs are opto-isolated. This is a nice feature as all the equipment involved are very expensive, and it prevents massive ground-loops from being formed.
 
 Web Interface
 =============
