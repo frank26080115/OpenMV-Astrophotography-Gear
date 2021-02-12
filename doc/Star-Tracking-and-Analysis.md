@@ -40,6 +40,8 @@ A pointy star is a star that is bright in the middle, but the brightness drops o
 
 The drop-off in brightness from the center is visualized as a star profile graph, which is sort of a cross-sectional representation of a 2D star image. This is shown to the user as a way to verify the automatically selected star, and to aid in manually overriding the star selection.
 
+![](img/star_center_find/real_star_profile.png)
+
 The ranking also penalizes the rank for these metrics:
  * too dim, to ensure the star won't disappear
  * too close to other stars, to avoid the movement analysis algorithm getting confused

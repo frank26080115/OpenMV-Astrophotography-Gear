@@ -3,3 +3,7 @@ ignore/*
 */otherweb/*
 *.bmp
 */outputs/*
+copy_mpy.cmd
+scripts/*.png
+scripts/*.bmp
+scripts/*.jpg
