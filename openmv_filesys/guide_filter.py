@@ -109,6 +109,9 @@ class GuideFilter(object):
         return final_mix
 
     def get_preemp(self):
+        if self.paused:
+            self.last_out = 0
+            return 0
         ret = self.last_out
         self.last_out = 0
         return ret

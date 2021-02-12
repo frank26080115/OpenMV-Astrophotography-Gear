@@ -35,12 +35,14 @@ def find_stars(img, hist = None, stats = None, thresh = 0, max_dia = 100, region
         # force_solve is to test performance
         # check the quality
         # this prevents the later steps from running out of memory due to false blobs
-        if stats.mean() > 60:
+        if stats.mean() >= 20:
             return [], EXPO_TOO_HIGH
         if stats.stdev() >= 7:
             return [], EXPO_TOO_NOISY
-        if stats.max() < (64 * 3):
-            return [], EXPO_TOO_LOW
+        #if stats.max() < (64 * 3):
+        #    return [], EXPO_TOO_LOW
+        if stats.mean() >= thresh * 0.75 and thresh != 0:
+            return [], EXPO_TOO_MANY
 
     # this threshold was tested in a photo editor first
     thresh_a = stats.mean() * 3

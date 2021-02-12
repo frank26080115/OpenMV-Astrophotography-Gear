@@ -139,7 +139,7 @@ class GuiderCalibration(object):
         self.angle = comutils.ang_normalize(self.angle)
         self.farthest = farthest
 
-        if len(self.accepted_points) < MINIMUM_REQUIRED_POINTS:
+        if len(self.accepted_points) < MINIMUM_REQUIRED_POINTS or farthest < 100:
             self.success = "failed"
             return False
         else:

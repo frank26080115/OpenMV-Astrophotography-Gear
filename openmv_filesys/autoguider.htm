@@ -570,6 +570,10 @@ function handleStateObj()
     else
     {
         ui_list["btn_guideend"  ].button("option", "disabled", false);
+        if (vis_slew) {
+            $("#chk_visualize_slew").checkboxradio().prop("checked", false).checkboxradio("refresh");
+            vis_slew = false;
+        }
         disable_testpulsebtns();
         if (ui_guide_state == GUIDESTATE_PANIC)
         {
@@ -798,8 +802,9 @@ function make_ui_mainctrl()
         guideCmd(GUIDESTATE_GUIDING);
         guide_state_pretend = GUIDESTATE_GUIDING;
         guide_state_pretend_cnt = 0;
-        if (viz_calib > 0) {
+        if (viz_calib > 0 || vis_slew != false) {
             viz_calib = 0;
+            vis_slew = false;
             draw_guidescope();
         }
     });
@@ -1269,7 +1274,7 @@ function imageStatsUpdate(obj)
             <p>The "<b>Camera Gain</b>" is basically the ISO of the camera sensor. Increasing the gain will increase the overall brightness of the image, with stars easier to see. But a higher gain will mean more noise as well. Very high gain levels may cause hot-pixels to appear.</p>
             <p>The <b>shutter</b> time of the guide-cam can be adjusted. The a longer value will allow in more light, causing a brighter image and making dark stars easier to detect. But don't make the shutter time too long, because corrective movements should only be made while the guide-cam is not taking a picture, otherwise the stars will trail and cannot be analyzed.</p>
             <p>The "<b>Star Threshold</b>" is the brightness value of a pixel for it to be considered a star. If this value is left at zero, then the threshold will be automatically determined by the overall brightness of the image. A very high threshold value will cause darker stars to be ignored.</p>
-            <p>The "<b>Image Error Panic Threshold</b>" is the number of frames with a bad image (some form of camera malfunction, or a search helicopter is putting a spotlight on your telescope) before the auto-guider gives up and quits guiding. The red LED light will blink to notify you.</p>
+            <p>The "<b>Image Error Panic Threshold</b>" is the number of frames with a bad image (some form of camera malfunction, or a search helicopter is putting a spotlight on your telescope) before the auto-guider gives up and quits guiding. The red LED light will blink rapidly to notify you.</p>
             <p>The "<b>Allowed Motion While Capture</b>" is the allowed motion that the mount is allowed to make during a guide-cam frame. If the motion is too much, then the image is considered at risk for having star-trails, and the firmware will take another frame to analyze. For example, if the setting is 25% and the shutter is set to 1000ms, then if the mount is given a 300ms pulse, then the guide-cam will take an additional frame. Set this high if the star-trailing is low, and set it low if the star-trailing is causing missed detection. Pre-emptive pulses are only generated when the guide-cam is taking the additional frame.</p>
             <p>The image from the guide-cam can be streamed. Use this stream to adjust the focus of your guide-scope. Since the file transfer speed is slow, guiding is not possible during the stream.</p>
         </p></fieldset></div>
@@ -1380,49 +1385,46 @@ function make_ui_calibration()
     });
     makeCheckbox("chk_visualize_cali", false, function (x) {
         viz_calib = x ? 3 : 0;
+        viz_slew = x ? false : viz_slew;
         draw_guidescope();
         if (x) {
+            $("#chk_visualize_slew").checkboxradio().prop("checked", false).checkboxradio("refresh");
+            $("html, body").animate({ scrollTop: $('html, body').offset().top }, 1000);
+        }
+    });
+    makeCheckbox("chk_visualize_slew", false, function (x) {
+        viz_calib = x ? 0 : viz_calib;
+        viz_slew = x;
+        slew_enabled = true;
+        draw_guidescope();
+        if (x) {
+            $("#chk_visualize_cali").checkboxradio().prop("checked", false).checkboxradio("refresh");
             $("html, body").animate({ scrollTop: $('html, body').offset().top }, 1000);
         }
     });
     makeHelp("calibration");
+}
 
-    makeButton("btn_testpulse_n", function () {
+function slew_onclick(dir)
+{
+    if (slew_enabled)
+    {
         disable_testpulsebtns();
-        miscCmd("testpulse_n");
+        miscCmd("testpulse_" + dir);
         enable_testpulsebtns_later();
-    });
-    makeButton("btn_testpulse_s", function () {
-        disable_testpulsebtns();
-        miscCmd("testpulse_s");
-        enable_testpulsebtns_later();
-    });
-    makeButton("btn_testpulse_e", function () {
-        disable_testpulsebtns();
-        miscCmd("testpulse_e");
-        enable_testpulsebtns_later();
-    });
-    makeButton("btn_testpulse_w", function () {
-        disable_testpulsebtns();
-        miscCmd("testpulse_w");
-        enable_testpulsebtns_later();
-    });
+    }
 }
 
 function disable_testpulsebtns()
 {
-    ui_list["btn_testpulse_n"].button("option", "disabled", true);
-    ui_list["btn_testpulse_s"].button("option", "disabled", true);
-    ui_list["btn_testpulse_e"].button("option", "disabled", true);
-    ui_list["btn_testpulse_w"].button("option", "disabled", true);
+    slew_enabled = false;
+    draw_guidescope();
 }
 
 function enable_testpulsebtns()
 {
-    ui_list["btn_testpulse_n"].button("option", "disabled", false);
-    ui_list["btn_testpulse_s"].button("option", "disabled", false);
-    ui_list["btn_testpulse_e"].button("option", "disabled", false);
-    ui_list["btn_testpulse_w"].button("option", "disabled", false);
+    slew_enabled = true;
+    draw_guidescope();
 }
 
 function enable_testpulsebtns_later()
@@ -1446,7 +1448,7 @@ function enable_testpulsebtns_later()
 
     <div style="line-spacing: 4;"><button id="btn_calib_save">&#128190; Save File</button>&nbsp;&nbsp;&nbsp;&nbsp;<button id="btn_calib_load">&#128209; Load File</button></div>
     <br />
-    <label for="chk_visualize_cali">Visualize?</label><input type="checkbox" name="chk_visualize_cali" id="chk_visualize_cali" />
+    <label for="chk_visualize_cali">Visualize?</label><input type="checkbox" name="chk_visualize_cali" id="chk_visualize_cali" />&nbsp;&nbsp;&nbsp;<label for="chk_visualize_slew">Enable Slew?</label><input type="checkbox" name="chk_visualize_slew" id="chk_visualize_slew" />
     <br /><br />
 
     <div><fieldset><legend>Calibration Step Pulse (R.A.): <span id="slider_pulse_calistep_ra_2_handle"></span></legend>
@@ -1466,29 +1468,6 @@ function enable_testpulsebtns_later()
     </fieldset></div>
 
     <br />
-    <div><fieldset><legend>Issue Single Pulse</legend><div>
-        <div class="divTable" style="width:inherit;">
-        <div class="divTableBody">
-        <div class="divTableRow">
-        <div class="divTableCell">&nbsp;</div>
-        <div class="divTableCell"><button id="btn_testpulse_n">N</button></div>
-        <div class="divTableCell">&nbsp;</div>
-        </div>
-        <div class="divTableRow">
-        <div class="divTableCell"><button id="btn_testpulse_w">W</button></div>
-        <div class="divTableCell">&nbsp;</div>
-        <div class="divTableCell"><button id="btn_testpulse_e">E</button></div>
-        </div>
-        <div class="divTableRow">
-        <div class="divTableCell">&nbsp;</div>
-        <div class="divTableCell"><button id="btn_testpulse_s">S</button></div>
-        <div class="divTableCell">&nbsp;</div>
-        </div>
-        </div>
-        </div>
-    </div></fieldset></div>
-
-    <br />
     <button id="helpbtn_calibration"></button><div id="help_calibration">
         <div><fieldset><legend>Help</legend><p>
             <p>During calibration, a star will be tracked and movement command pulses will be given to the tracking telescope mount. If the pulse given is 1000 ms long, and the star moved 10 pixels in the guide-cam image, then the scaling is remembered as 100 ms-per-pixel, or as 0.01 pixels-per-ms. The direction of the movement is also remembed.</p>
@@ -1498,6 +1477,7 @@ function enable_testpulsebtns_later()
             <p>Calibration can be saved, with a timestamp, so they can be reloaded. This is useful in the event of a brief power failure.</p>
             <p>The "<b>Correction Scale</b>" value will scale the ms-per-pixel that is actually used to make corrective movements. Lower this value below 100% to combat cronic over-correction.</p>
             <p>NOTE: This auto-guider firmware does not care about things such as focal length of the lens or the speed of the tracking mount motors when given a pulse. Everything is simply based on the number of pixels that a star moves on the guide-cam, and the duration of the pulses. The units cannot be correlated directly to angular units (aka degrees).</p>
+            <p>The slew controls can be enabled while the autoguider is idle. Buttons that moves the mount N/S/E/W will appear on the image at the top for you to press. Pressing the button will issue one single calibration pulse in the desired direction. This is extremely slow so please use the hand-set for faster slewing.</p>
         </p>
         </fieldset></div>
     </div>
@@ -1662,7 +1642,7 @@ function make_ui_analysisparameters()
             <p>"<b>Motion Error Tolerance</b>" is the amount of motion error tolerated by the analysis code, it will simply not analyze stars that moved more than this amount in the wrong direction.</p>
             <p>"<b>Motion Error Amount Thresh</b>" is the average amount of motion error in the motion analysis that will trigger one frame to be considered a panic-inducing frame.</p>
             <p>"<b>Correctly Moved Stars Required</b>" is the number of stars (as a percentage of the total number of stars) that appears to have moved in the correct way. If too many stars moved the wrong way, it counts as a bad analysis and counts as a panic-inducing frame.</p>
-            <p>"<b>Panic Count Thresh</b>" is the number of consecutive panic-inducing frames that needs to happen before the hardware actually gives up and starts to blink the red LED light. This setting can be 1, or it can be more, so that maybe a single bat flying over your camera doesn't cause the hardware to throw in the towel. Long periods of cloudy sky, or knocking over the telescope, will cause many panic-inducing frames and you will see the blinking red LED light.</p>
+            <p>"<b>Panic Count Thresh</b>" is the number of consecutive panic-inducing frames that needs to happen before the hardware actually gives up and starts to quickly blink the red LED light. This setting can be 1, or it can be more, so that maybe a single bat flying over your camera doesn't cause the hardware to throw in the towel. Long periods of cloudy sky, or knocking over the telescope, will cause many panic-inducing frames and you will see the blinking red LED light.</p>
             <p>When too many stars are very close together, it might confuse the motion analysis software. "<b>Cluster Tolerance</b>" determines how far apart a star need to be away from its nearest neighbouring star for it to be used for motion analysis.</p>
         </p></fieldset></div>
     </div>

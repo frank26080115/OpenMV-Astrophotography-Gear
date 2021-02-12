@@ -119,7 +119,7 @@ def get_rand_move(lim, mul):
 if __name__ == "__main__":
     import gc
     print("memory at boot %u" % gc.mem_free())
-    x = autoguider.AutoGuider(debug = True, simulate_file = "snap-20210206-040632.bmp")
+    x = autoguider.AutoGuider(debug = True, simulate_file = "snap-20210211-054213.bmp")
     #x = autoguider.AutoGuider(debug = True, simulate_file = "simulate.bmp")
     #x = AutoGuider(debug = True)
     while True:

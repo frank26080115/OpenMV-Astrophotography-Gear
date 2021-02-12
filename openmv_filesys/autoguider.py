@@ -94,6 +94,7 @@ class AutoGuider(object):
         self.last_move_err = 0
         self.snap_millis = 0
         self.stop_time = 0
+        self.last_pulse_dur = 0
         self.analysis_dur = [0, 0, 0, 0, 0]
         self.dbg_t1 = 0
         self.dbg_t2 = 0
@@ -431,8 +432,8 @@ class AutoGuider(object):
         self.backlash_dec.reduction   = self.settings["backlash_reduc_dec"]
         self.backlash_ra.hard_lock    = self.settings["backlash_lock_ra"]
         self.backlash_dec.hard_lock   = self.settings["backlash_lock_dec"]
-        guidepulser.set_flip_ra (self.settings["flip_ra" ])
-        guidepulser.set_flip_dec(self.settings["flip_dec"])
+        guidepulser.set_flip_ra (1 if self.settings["flip_ra" ] == 0 else -1)
+        guidepulser.set_flip_dec(1 if self.settings["flip_dec"] == 0 else -1)
         self.advfilt_ra    .load_settings(self.settings)
         self.advfilt_dec   .load_settings(self.settings)
         self.preempfilt_ra .load_settings(self.settings)
@@ -459,7 +460,7 @@ class AutoGuider(object):
         if self.img is not None:
             self.histogram = self.img.get_histogram()
             self.img_stats = self.histogram.get_statistics()
-            latest_stars, code = star_finder.find_stars(self.img, hist = self.histogram, stats = self.img_stats, thresh = self.settings["guidecam_thresh"], force_solve = True, guider = True)
+            latest_stars, code = star_finder.find_stars(self.img, hist = self.histogram, stats = self.img_stats, thresh = self.settings["guidecam_thresh"], force_solve = False, guider = True)
             self.dbg_t1 = pyb.millis()
             if self.simulator is not None:
                 latest_stars = self.simulator.get_stars(self, latest_stars)
@@ -570,21 +571,21 @@ class AutoGuider(object):
                 if self.testpulse_dir is not None:
                     if self.testpulse_dir == "n":
                         t = self.settings["calibration_pulse_dec"]
-                        guidepulser.move(0, t, self.settings["move_grace"])
+                        y = guidepulser.move(0, t, self.settings["move_grace"])
                         decided_pulse = t
                     elif self.testpulse_dir == "s":
                         t = self.settings["calibration_pulse_dec"]
-                        guidepulser.move(0, -t, self.settings["move_grace"])
+                        y = guidepulser.move(0, -t, self.settings["move_grace"])
                         decided_pulse = t
                     elif self.testpulse_dir == "e":
                         t = self.settings["calibration_pulse_ra"]
-                        guidepulser.move(t, 0, self.settings["move_grace"])
+                        y = guidepulser.move(t, 0, self.settings["move_grace"])
                         decided_pulse = t
                     elif self.testpulse_dir == "w":
                         t = self.settings["calibration_pulse_ra"]
-                        guidepulser.move(-t, 0, self.settings["move_grace"])
+                        y = guidepulser.move(-t, 0, self.settings["move_grace"])
                         decided_pulse = t
-                    self.log_msg("MSG: test pulse \"%s\" %u" % (self.testpulse_dir, decided_pulse))
+                    self.log_msg("MSG: test pulse \"%s\" %u" % (self.testpulse_dir.upper(), decided_pulse))
                     self.testpulse_dir = None
                     return decided_pulse
 
@@ -632,6 +633,7 @@ class AutoGuider(object):
                         self.preempfilt_ra.pause(False)
                         self.preempfilt_dec.pause(False)
                     decided_pulse = self.pulse_to_target(force_move = (self.guide_state == GUIDESTATE_DITHER))
+                    self.last_pulse_dur = decided_pulse
                     return decided_pulse
                 elif self.guide_state == GUIDESTATE_DITHER:
                     if self.selected_star is None:
@@ -648,6 +650,7 @@ class AutoGuider(object):
                     self.preempfilt_ra.pause(True)
                     self.preempfilt_dec.pause(True)
                     decided_pulse = self.pulse_to_target(force_move = True)
+                    self.last_pulse_dur = decided_pulse
                     if decided_pulse <= self.settings["dither_calmness"]:
                         self.dither_calm += 1
                     else:
@@ -728,6 +731,7 @@ class AutoGuider(object):
                             self.stop_time = guidepulser.move(decided_pulse, 0, self.settings["move_grace"])
                         else:
                             self.stop_time = guidepulser.move(0, decided_pulse, self.settings["move_grace"])
+                        self.last_pulse_dur = decided_pulse
                     return decided_pulse
                 elif self.guide_state == GUIDESTATE_IDLE:
                     self.backlash_ra.neutralize()
@@ -1035,10 +1039,10 @@ class AutoGuider(object):
             self.send_stars()
         if self.snap_wait():
             img = self.cam.snapshot_finish()
-            img_time = img.timestamp()
+            #img_time = img.timestamp()
             tspan = self.cam.get_timespan()
-            img_start_time = img_time - tspan
-            dt = ((self.stop_time - img_start_time) * 100) / tspan
+            tspent = self.last_pulse_dur
+            dt = ((tspent % tspan) * 100) / tspan
             motionwhilecapture = self.settings["motionwhilecapture"]
             still_enough = (dt <= motionwhilecapture or motionwhilecapture >= 100)
             if still_enough == False:

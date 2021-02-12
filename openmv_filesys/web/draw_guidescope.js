@@ -1,5 +1,7 @@
 var star_list = [];
-var viz_calib = false;
+var viz_calib = 0;
+var viz_slew = false;
+var slew_enabled = true;
 var pending_select = null;
 
 function get_draw_scale(zoom, scale_vert)
@@ -203,7 +205,9 @@ function draw_guidescope(obj)
             cirele.setAttribute("cy", ((cy / imgscale) - offset_y).toFixed(8));
             cirele.setAttribute("r", drawn_rad);
             cirele.setAttribute("style", "fill:rgb(255,255,255, 0.001);stroke:none;");
-            cirele.setAttribute("onclick", "star_onclick(" + cx + ", " + cy + ");");
+            if (viz_slew == false) {
+                cirele.setAttribute("onclick", "star_onclick(" + cx + ", " + cy + ");");
+            }
             svgele.appendChild(cirele);
         }
     });
@@ -279,8 +283,11 @@ function draw_guidescope(obj)
             txtele = document.createElementNS(svgNS, "text");
             txtele.setAttribute("x", 2);
             txtele.setAttribute("y", imgh - 5);
-            if (star_list.length > 0) {
+            if (star_list.length > 0 && viz_slew == false) {
                 txtele.innerHTML = "click/touch star to change selection";
+            }
+            else if (viz_slew != false) {
+                txtele.innerHTML = "click/touch red squares to issue test pulse";
             }
             else {
                 txtele.innerHTML = "no stars detected";
@@ -301,6 +308,10 @@ function draw_guidescope(obj)
     }
     else if (to_draw_calib == true) {
         draw_calibration(svgele, ds, obj, null);
+    }
+
+    if (viz_slew != false) {
+        draw_slewcontrols(svgele, ds);
     }
 
     imgdiv.appendChild(svgele);
@@ -453,4 +464,102 @@ function draw_calibration(svgele, drawscale, obj, axis)
             });
         }
     }
+}
+
+function draw_slewcontrols(svg, ds)
+{
+    var dataw    = ds[0];
+    var datah    = ds[1];
+    var imgw     = ds[2];
+    var imgh     = ds[3];
+    var imgscale = ds[4];
+
+    var sqsize = imgh / 4;
+    var stylestr, fontstr;
+    if (slew_enabled)
+    {
+        stylestr = "stroke:rgb(255,0,0,1);stroke-width:1;fill:rgb(255,0,0,0.2);";
+        fontstr = "font-size:" + (sqsize / 3) +  "px;font-family:sans-serif;color:red;fill:red;stroke:red;";
+    }
+    else
+    {
+        stylestr = "stroke:rgb(32,32,32,1);stroke-width:1;fill:rgb(32,32,32,0.2);";
+        fontstr = "font-size:" + (sqsize / 3) +  "px;font-family:sans-serif;color:#444;fill:#444;stroke:#444;";
+    }
+
+    var rectele = document.createElementNS(svgNS, "rect");
+    rectele.setAttribute("x", (imgw / 2) - (sqsize / 2));
+    rectele.setAttribute("y", (imgh / 2) - (sqsize / 2) - sqsize);
+    rectele.setAttribute("width", sqsize);
+    rectele.setAttribute("height", sqsize);
+    rectele.setAttribute("style", stylestr);
+    rectele.setAttribute("onclick", "slew_onclick(\"n\");");
+    svg.appendChild(rectele);
+
+    var textele = document.createElementNS(svgNS, "text");
+    textele.setAttribute("dominant-baseline", "middle");
+    textele.setAttribute("text-anchor", "middle");
+    textele.setAttribute("x", (imgw / 2));
+    textele.setAttribute("y", (imgh / 2) - sqsize);
+    textele.setAttribute("style", fontstr);
+    textele.setAttribute("onclick", "slew_onclick(\"n\");");
+    textele.innerHTML = "N";
+    svg.appendChild(textele);
+
+    rectele = document.createElementNS(svgNS, "rect");
+    rectele.setAttribute("x", (imgw / 2) - (sqsize / 2));
+    rectele.setAttribute("y", (imgh / 2) + (sqsize / 2));
+    rectele.setAttribute("width" , sqsize);
+    rectele.setAttribute("height", sqsize);
+    rectele.setAttribute("style" , stylestr);
+    rectele.setAttribute("onclick", "slew_onclick(\"s\");");
+    svg.appendChild(rectele);
+
+    textele = document.createElementNS(svgNS, "text");
+    textele.setAttribute("dominant-baseline", "middle");
+    textele.setAttribute("text-anchor", "middle");
+    textele.setAttribute("x", (imgw / 2));
+    textele.setAttribute("y", (imgh / 2) + sqsize);
+    textele.setAttribute("style", fontstr);
+    textele.setAttribute("onclick", "slew_onclick(\"s\");");
+    textele.innerHTML = "S";
+    svg.appendChild(textele);
+
+    rectele = document.createElementNS(svgNS, "rect");
+    rectele.setAttribute("x", (imgw / 2) - (sqsize / 2) - sqsize);
+    rectele.setAttribute("y", (imgh / 2) - (sqsize / 2));
+    rectele.setAttribute("width" , sqsize);
+    rectele.setAttribute("height", sqsize);
+    rectele.setAttribute("style" , stylestr);
+    rectele.setAttribute("onclick", "slew_onclick(\"w\");");
+    svg.appendChild(rectele);
+
+    textele = document.createElementNS(svgNS, "text");
+    textele.setAttribute("dominant-baseline", "middle");
+    textele.setAttribute("text-anchor", "middle");
+    textele.setAttribute("x", (imgw / 2) - sqsize);
+    textele.setAttribute("y", (imgh / 2));
+    textele.setAttribute("style", fontstr);
+    textele.setAttribute("onclick", "slew_onclick(\"w\");");
+    textele.innerHTML = "W";
+    svg.appendChild(textele);
+
+    rectele = document.createElementNS(svgNS, "rect");
+    rectele.setAttribute("x", (imgw / 2) + (sqsize / 2));
+    rectele.setAttribute("y", (imgh / 2) - (sqsize / 2));
+    rectele.setAttribute("width" , sqsize);
+    rectele.setAttribute("height", sqsize);
+    rectele.setAttribute("style" , stylestr);
+    rectele.setAttribute("onclick", "slew_onclick(\"e\");");
+    svg.appendChild(rectele);
+
+    textele = document.createElementNS(svgNS, "text");
+    textele.setAttribute("dominant-baseline", "middle");
+    textele.setAttribute("text-anchor", "middle");
+    textele.setAttribute("x", (imgw / 2) + sqsize);
+    textele.setAttribute("y", (imgh / 2));
+    textele.setAttribute("style", fontstr);
+    textele.setAttribute("onclick", "slew_onclick(\"e\");");
+    textele.innerHTML = "E";
+    svg.appendChild(textele);
 }
