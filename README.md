@@ -14,7 +14,7 @@ A normal polar scope is used to polar-align star-tracking camera mounts and equa
  * Shows a crosshair on screen so the user can point it right at the North Celestial Pole
 
 ![](doc/img/DSC01051_es.jpg)
-![](img/polarscopeusage.gif)
+![](doc/img/polarscopeusage.gif)
 
  * Use with any smartphone! Browser based UI, works as a WiFi soft-AP captive portal, no WiFi router required
  * Identifies 500 other stars around Polaris just in case you have trouble finding Polaris
