@@ -80,8 +80,7 @@ These tracking mounts, and all equatorial telescope mounts, computerized or not,
 
 Most of these trackers or mounts come with something called a **polar-scope**.
 
-Polar-Scope
-===========
+### Polar-Scope
 
 A mini-telescope with a crosshair that you point at Polaris.
 
@@ -128,8 +127,7 @@ So I put on my product designer hat. My minimum-viable-product needs to:
 
 How do I start?
 
-Picking Hardware
-================
+### Picking Hardware
 
 A Raspberry Pi seems like a solid starting point for any DIY camera project, especially now that they have a "high quality" camera that accepts CCTV lenses. It would get a bit bulky and pricey once you add in things like a case, battery pack, and a screen.
 
@@ -166,8 +164,7 @@ From the test images, I am able to correlate distance between the stars with dis
 ![](img/coding_in_a_park.png)
 
 
-Celestial Coordinate
-====================
+### Celestial Coordinate
 
 Just some background knowledge for those readers who are unfamiliar with astronomy.
 
@@ -177,8 +174,7 @@ This is the kind of data a star catalog would give you, the RA and Dec of each s
 
 You might be wondering... why are the positions different between dates? The answer is that the Earth's axis of rotation is actually slowly wobbling. We'll get to what problem this wobble causes this project.
 
-North Celestial Pole Calculation
-================================
+### North Celestial Pole Calculation
 
 Mathematically, these coordinates are very easy to work with. Remember how Polaris isn't exactly at the North Celestial Pole? To calculate where Polaris relative to the North Celestial Pole from a certain location on Earth, you simply take the R.A. of Polaris, apply an offset according to the current sidereal time, and then apply another offset according to your longitude (after converting degrees to hours). That would get you the angle of the vector, and the magnitude of the vector is simply 90 subtracting the declination of Polaris. This distance describes an arc in degrees but that's easily converted into pixel units for my camera.
 
@@ -206,8 +202,7 @@ Read more in depth about the calculations on [this separate page](Calculations-f
 
 [![](img/click_bate_3.png)](Calculations-for-Polaris.md)
 
-Plate Solving
-=============
+### Plate Solving
 
 Plate-solving, "finding match between the imaged stars and a star catalogue", is actually quite complicated. In fact, most open source plate-solvers are simply an API that uploads to [nova.astrometry.net](https://nova.astrometry.net) and download the result, and that obviously requires an internet connection (good dark skies and phone signals don't usually mix), and takes up to 10 minutes for just one camera frame. My own plate-solving algorithm will need to be optimized for my weak hardware and specific use case. This algorithm is described on a separate page where I show you real calculations and visualize what the code is actually doing!
 
@@ -215,8 +210,7 @@ Plate-solving, "finding match between the imaged stars and a star catalogue", is
 
 [Read it HERE!](Main-Algorithm-Development.md)
 
-Center Calibration
-==================
+### Center Calibration
 
 There will be a crosshair drawn on the image, and the user has to adjust the mount in a way that moves the crosshair towards the North Celestial Pole on the image. Easy peasy, right? Nope... next problem: the camera's axis isn't exactly aligned with the motor's rotation axis, so I can't just draw a crosshair dead center on the image. Where do I draw this crosshair?
 
@@ -242,8 +236,7 @@ When the user accepts the new location, the yellow crosshair will move to where 
 
 There is a secondary calibration mode that uses multiple points. When more points are registered, a circle-of-best-fit is calculated, and the center of the circle can be used as the new calibrated crosshair.
 
-Axis Wobble
-===========
+### Axis Wobble
 
 I've mentioned before that the Earth's rotation axis wobbles very slowly. One way of visualizing this is to simply watch what happens when you speed up time in Stellarium
 
@@ -261,8 +254,7 @@ Noteice that there's no reason to use sidereal time units for this calculation. 
 
 Unit testing my code and comparing against Stellarium, it showed that for the year 2024, the results were accurate to within 1 arc-second for declination, and 12 arc-minutes for RA. This is excellent because it's less than a pixel worth of error.
 
-Atmospheric Refraction
-======================
+### Atmospheric Refraction
 
 ![](img/atmospheric_refraction.png)
 
@@ -278,8 +270,7 @@ All of this is simple enough to code. At the North Pole, the result is very clos
 
 The hardest part about coding all this is actually trying to judge which way is "down", since the camera isn't necessarily upright. Luckily, the plate-solving algorithm knows how the other stars are rotated around Polaris, and the current date and location can be used to apply another rotation offset, giving me an angle of the horizon. Thus, I can figure out which way is down.
 
-Software and Firmware Engineering
-=================================
+### Software and Firmware Engineering
 
 I already mentioned the shutter speed hack. There are plenty more challenges that I've faced and have overcome.
 
@@ -312,8 +303,7 @@ The UI used a lot of [jQuery UI](https://jqueryui.com/), which made great lookin
 
 The WiFi module can operate in soft-access-point mode, so you do not need a WiFi router with you. In this mode, it starts a micro DNS server that redirects all DNS name resolutions to itself. This creates a captive portal, think of the Star Bucks WiFi login page. This means the page cannot be secured by SSL, as technically I've hijacked the connection and the whole point of SSL is to prevent hijacking. Not using SSL means I can't directly access the smartphone's GPS data through the web browser ("OpenMV wants to know your location, allow?"). The location coordinates needs to be entered in by the user manually. Bummer. I included the [Magellan JS library](http://dbarbalato.github.io/magellan/) to help parse GPS coordinates.
 
-More Plate Solving
-==================
+### More Plate Solving
 
 ![](img/platesolving.gif)
 
@@ -323,15 +313,15 @@ This was a big endeavour on its own. [Read about it here](Extra-Plate-Solving-Al
 
 [![](img/click_bate_2.png)](Extra-Plate-Solving-Algorithm.md)
 
-Hot Pixels
-==========
+### Hot Pixels
 
 When the weather got hot, I faced a new problem. The camera started seeing stars that didn't move even when I moved the camera. I was puzzled until I realized that the sensor is getting hot and seeing hot-pixels.
 
 The simple solution is to just add a button that makes the device remember where the hot pixels are. They can be removed from the image later. In my implementation, the hot pixels are still used during the image processing, but if the pixel is not a part of a pattern match, then it is removed from the visible image.
 
-3D Printed Base Plate
-=====================
+Other astronomy devices typically solve this problem using dark-frames. But for OpenMV, the memory is too low for this technique to be effective.
+
+### 3D Printed Base Plate
 
 To be able to attach the OpenMV to an equatorial mount or tracker, I designed a 3D printed plate that holds it.
 
@@ -347,8 +337,7 @@ The 3D model is open source, publicly hosted on OnShape and ready for export: [h
 
 The remaining mechanical problems are about cooling the camera sensor, and preventing damage from potential water drops. The OpenMV board itself does not make it easy for me to solve either of these problems, but luckily, it's open source!
 
-Results
-=======
+### Results
 
 ![](img/andromeda_galaxy.jpg)
 
@@ -380,8 +369,7 @@ To illustrate other kind of errors you may encounter:
 ![](img/mech_jerk_annotated.jpg)
 ![](img/elongated_stars.jpg)
 
-Future Improvements
-===================
+### Future Improvements
 
 The equivalent focal-length lens for a CS lens mount would have about twice the aperture as the current M12 lens. If I add a CS lens mount, the I can almost double the framerate.
 
@@ -397,23 +385,27 @@ Maybe I can figure out a way to cool the camera sensor. I can get a $10 extensio
 
 and then figure out how to mount a heatsink and maybe a fan.
 
-Next Project
-============
+# Next Project: [AutoGuider](Auto-Guider.md)
 
-An auto-guiding camera is something that locks onto one star, and commands a computerized telescope mount to move in tiny steps to follow that one star, thus correcting for any errors in motor speed and alignment. Currently available auto-guiding cameras are still simply over-priced webcams that require a laptop, and I hope to cut the laptop out of the equation.
+An [autoguider](Auto-Guider.md) is something that locks onto one star, and commands a computerized telescope mount to move in tiny steps to follow that one star, thus correcting for any errors in motor speed and alignment. This prevents blurriness in astrophotographs in extra long exposures. Currently available autoguiding cameras are still simply over-priced webcams that require a laptop, and I hope to cut the laptop out of the equation.
+
+![](img/autoguider_circuit.jpg)
+![](img/guidecambox.png)
 
 As a baseline test, I have successfully adapted the M12 lens mount to a Svbony SV106 guide-scope (it is the cheapest I could find). It does focus properly on the sensor, as the focus adjustment range is huge.
 
-![](img_guidescope/guidescope.jpg)
+![](img/guidescope_sv106.jpg)
 
-To make this even cheaper, I have developed a 3D printed guide scope, using a single 50mm wide 182.8mm focal length APO lens element. I also developed a PCB for OpenMV that provides opto-isolated ST-4 signals to provide the autoguiding signals to electronic tracking mounts. The PCB will also output the signal for a remote shutter, enabling automatic dithering (a technique to remove noise from images) throughout the night.
+To make this even cheaper, I have developed a 3D printed guide scope, using a single 50mm wide 182.8mm focal length APO lens element.
 
-![](img_guidescope/guide_scope_3d.png)
-![](img_guidescope/guide_scope_side.jpg)
-![](img_guidescope/guide_scope_redcat.jpg)
-![](img_guidescope/guide_scope_top.jpg)
-![](img_guidescope/guide_scope_test1.jpg)
+![](img/guide_scope_3d.png)
+![](img/guidescope_3dprinted.jpg)
+
+I also developed a PCB for OpenMV that provides opto-isolated ST-4 signals to provide the autoguiding signals to electronic tracking mounts. The PCB will also output the signal for a remote shutter, enabling automatic dithering (a technique to remove noise from images) throughout the night.
+
+![](img/guide_shield.png)
+![](img/guide_shield_2.png)
 
 This project will eventually completely eliminate the need to use the PHD2 software.
 
-After this is done, the next step is to add a declination motor to the Sky-Watcher Star Adventurer, and to give it extra load capacity. This will eliminate the need to own a fully computerized goto mount to take advantage of autoguidance.
+### [Click Here to read all about the OpenMV AutoGuider](Auto-Guider.md)

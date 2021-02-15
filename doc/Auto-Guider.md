@@ -5,6 +5,8 @@ Autoguiders are cameras that command a motorized equatorial telescope mount to t
 
 [Wikipedia page on Autoguider](https://en.wikipedia.org/wiki/Autoguider)
 
+When the autoguider detects that stars are moving in the image it sees, it will tell the motors to make very tiny corrections, to keep the stars where they were originally.
+
 ![](img/mech_jerk_autoguider.png)
 
 Current popular autoguider cameras are expensive and require a computer to run special software (such as PHD2). My project goal is to eliminate the need for a computer by using OpenMV instead, allowing for my gear to be more portable.
@@ -20,7 +22,6 @@ The autoguider is inserted into a small guide-scope. This is done by replacing t
 ![](img/guidescope_sv106.jpg)
 
 ### Star Tracking and Analysis
-
 
 [![](img/star_center_find/clickhere.png)](Star-Tracking-and-Analysis.md)
 
