@@ -1,5 +1,3 @@
-# OpenMV-Astrophotography-Gear
-
 Using OpenMV to assist in astrophotography!
 
 I made a Polar Scope and Autoguider using OpenMV
