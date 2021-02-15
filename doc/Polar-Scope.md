@@ -1,14 +1,8 @@
-# OpenMV Polar-Scope
-
-Using OpenMV to assist in astrophotography!
-
-I made a Polar Scope using OpenMV
+A normal polar scope is used to polar-align star-tracking camera mounts and equatorial telescope mounts. A digital camera version that leverages computer vision algorithms can achieve much better accuracy, improving the quality of astro-photographs!
 
 ![](img/DSC01041_es.jpg)
 ![](img/DSC01048_es.jpg)
 ![](img/DSC01029_es.jpg)
-
-A normal polar scope is used to polar-align star-tracking camera mounts and equatorial telescope mounts. A digital camera version that leverages computer vision algorithms can achieve much better accuracy, improving the quality of astro-photographs!
 
  * Identifies Polaris, aka The North Star, and computes the position of the North Celestial Pole
  * Shows a crosshair on screen so the user can point it right at the North Celestial Pole

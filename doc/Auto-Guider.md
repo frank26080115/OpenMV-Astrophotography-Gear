@@ -1,6 +1,3 @@
-OpenMV AutoGuider
-==================
-
 Autoguiders are cameras that command a motorized equatorial telescope mount to track a particular star in the sky. This allows astrophotographers to take extremely long exposure photos, as the tracking will eliminate star-streaking and blurriness caused by incorrect motion (mechanical imperfections of the gears) and error in polar-alignment.
 
 [Wikipedia page on Autoguider](https://en.wikipedia.org/wiki/Autoguider)
