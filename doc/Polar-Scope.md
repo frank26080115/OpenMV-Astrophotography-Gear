@@ -20,7 +20,7 @@ A normal polar scope is used to polar-align star-tracking camera mounts and equa
 
 ![](img/openmv_ide.png)
 
-[click here for the instructions document](Polar-Scope-Instructions.md)
+[click here for the instructions document](Polar-Scope-Instructions)
 
 The journey it took to complete this project was quite the special learning experience. This is the story about what happens when a bird photographer with a EE degree gets lost and finds a telescope store.
 
@@ -192,17 +192,17 @@ Since we are using computer code, the MicroPython time library uses seconds-sinc
 
 All calculations have been verified up to the year 2040, just to make sure that floating point precision is good enough.
 
-Read more in depth about the calculations on [this separate page](Calculations-for-Polaris.md)
+Read more in depth about the calculations on [this separate page](Calculations-for-Polaris)
 
-[![](img/click_bate_3.png)](Calculations-for-Polaris.md)
+[![](img/click_bate_3.png)](Calculations-for-Polaris)
 
 ### Plate Solving
 
 Plate-solving, "finding match between the imaged stars and a star catalogue", is actually quite complicated. In fact, most open source plate-solvers are simply an API that uploads to [nova.astrometry.net](https://nova.astrometry.net) and download the result, and that obviously requires an internet connection (good dark skies and phone signals don't usually mix), and takes up to 10 minutes for just one camera frame. My own plate-solving algorithm will need to be optimized for my weak hardware and specific use case. This algorithm is described on a separate page where I show you real calculations and visualize what the code is actually doing!
 
-[![](img/click_bate.png)](Main-Algorithm-Development.md)
+[![](img/click_bate.png)](Main-Algorithm-Development)
 
-[Read it HERE!](Main-Algorithm-Development.md)
+[Read it HERE!](Main-Algorithm-Development)
 
 ### Center Calibration
 
@@ -303,9 +303,9 @@ The WiFi module can operate in soft-access-point mode, so you do not need a WiFi
 
 I wanted another feature: identify other stars that are not Polaris. This would help people if they get "lost". If people can identify what they are pointed at, they can use additional smartphone apps to help navigate towards Polaris.
 
-This was a big endeavour on its own. [Read about it here](Extra-Plate-Solving-Algorithm.md).
+This was a big endeavour on its own. [Read about it here](Extra-Plate-Solving-Algorithm).
 
-[![](img/click_bate_2.png)](Extra-Plate-Solving-Algorithm.md)
+[![](img/click_bate_2.png)](Extra-Plate-Solving-Algorithm)
 
 ### Hot Pixels
 
@@ -379,9 +379,9 @@ Maybe I can figure out a way to cool the camera sensor. I can get a $10 extensio
 
 and then figure out how to mount a heatsink and maybe a fan.
 
-# Next Project: [AutoGuider](Auto-Guider.md)
+# Next Project: [AutoGuider](Auto-Guider)
 
-An [autoguider](Auto-Guider.md) is something that locks onto one star, and commands a computerized telescope mount to move in tiny steps to follow that one star, thus correcting for any errors in motor speed and alignment. This prevents blurriness in astrophotographs in extra long exposures. Currently available autoguiding cameras are still simply over-priced webcams that require a laptop, and I hope to cut the laptop out of the equation.
+An [autoguider](Auto-Guider) is something that locks onto one star, and commands a computerized telescope mount to move in tiny steps to follow that one star, thus correcting for any errors in motor speed and alignment. This prevents blurriness in astrophotographs in extra long exposures. Currently available autoguiding cameras are still simply over-priced webcams that require a laptop, and I hope to cut the laptop out of the equation.
 
 ![](img/autoguider_circuit.jpg)
 ![](img/guidecambox.png)
@@ -402,4 +402,4 @@ I also developed a PCB for OpenMV that provides opto-isolated ST-4 signals to pr
 
 This project will eventually completely eliminate the need to use the PHD2 software.
 
-### [Click Here to read all about the OpenMV AutoGuider](Auto-Guider.md)
+### [Click Here to read all about the OpenMV AutoGuider](Auto-Guider)

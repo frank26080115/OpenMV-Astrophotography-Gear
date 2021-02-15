@@ -2,8 +2,8 @@ Using OpenMV to assist in astrophotography!
 
 I made a Polar Scope and Autoguider using OpenMV
 
-[![](doc/img/openmvpolarscope_intro.png)](doc/Polar-Scope.md)
-[![](doc/img/autoguider_intro.jpg)](doc/Auto-Guider.md)
+[![](doc/img/openmvpolarscope_intro.png)](doc/Polar-Scope)
+[![](doc/img/autoguider_intro.jpg)](doc/Auto-Guider)
 
 A normal polar scope is used to polar-align star-tracking camera mounts and equatorial telescope mounts. A digital camera version that leverages computer vision algorithms can achieve much better accuracy, improving the quality of astro-photographs!
 

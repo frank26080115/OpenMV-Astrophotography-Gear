@@ -20,7 +20,7 @@ The autoguider is inserted into a small guide-scope. This is done by replacing t
 
 ### Star Tracking and Analysis
 
-[![](img/star_center_find/clickhere.png)](Star-Tracking-and-Analysis.md)
+[![](img/star_center_find/clickhere.png)](Star-Tracking-and-Analysis)
 
 ### Intervalometer and Dithering
 
@@ -107,7 +107,7 @@ The down-side is that the code becomes less accessible, and in-field code change
 
 Since writing code outdoors is difficult, especially in the winter months, a simulator was written to enable development at home. The simulator can analyze static image files and then randomly move the stars around to simulate movement.
 
-As discovered in the previous [polar-scope project](Polar-Scope.md), the HTTP server has trouble handling multiple HTTP requests simultaneously. This HTTP server will append required JS and CSS files right into the HTML page being served, to avoid additional HTTP requests. This is also why WebSocket is used, to reduce additional HTTP requests. Even graphic files are converted to base 64 data URLs so that they are not being loaded as a file HTTP request.
+As discovered in the previous [polar-scope project](Polar-Scope), the HTTP server has trouble handling multiple HTTP requests simultaneously. This HTTP server will append required JS and CSS files right into the HTML page being served, to avoid additional HTTP requests. This is also why WebSocket is used, to reduce additional HTTP requests. Even graphic files are converted to base 64 data URLs so that they are not being loaded as a file HTTP request.
 
 ### 3D Printed Guide-Scope
 

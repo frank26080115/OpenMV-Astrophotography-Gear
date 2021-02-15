@@ -43,7 +43,7 @@ Let's do an example. Imagine if the camera saw this image on `August 31 2020 at 
 
 The plate solver tells me that the angle is rotated 22.5° counterclockwise. If the star `HD 5914` is supposed to be `-10.6°` away from Polaris, but is detected at `-33.1°` instead, then the rotation returned be 22.5° counterclockwise. (the algorithm checks more than one star, the report would've been an average)
 
-(I have a whole other page describing how the plate-solver works: [click here to read it](Main-Algorithm-Development.md))
+(I have a whole other page describing how the plate-solver works: [click here to read it](Main-Algorithm-Development))
 
 On this day, Polaris has coordinates `R.A. 2H58m21.21s` and `Dec. +89°21'07.7"`. Convert R.A. to angle gives 44.59°. I can convert the declination to pixels directly, the scale is about 301.3 pixel-per-degree. The declination is 0.647861° away from the NCP. `301.3 * 0.647861 = 195.2` pixels. The angle from the NCP would be `44.59° - 22.5° = 22.09°` clockwise (clockwise because now positive Y is down).
 
@@ -63,7 +63,7 @@ This kind of calculation is critical for compensating for atmospheric refraction
 
 Obviously, to do this kind of compensation, you must know which way is up and which way is down! Remember, the camera is free to rotate by the user, you can't just assume camera orientation.
 
-(info on how atmospheric refraction is calculated is written back in the [main page](../README.md))
+(info on how atmospheric refraction is calculated is written back in the [main page](Polar-Scope))
 
 When I was working on this project, there was a lot of testing done to verify my mathematics. But during the development, California decided to go on fire so I couldn't actually do many outdoor tests. Testing was done in the following ways:
 
