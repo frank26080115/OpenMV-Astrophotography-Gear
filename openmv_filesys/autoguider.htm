@@ -570,9 +570,9 @@ function handleStateObj()
     else
     {
         ui_list["btn_guideend"  ].button("option", "disabled", false);
-        if (vis_slew) {
+        if (viz_slew) {
             $("#chk_visualize_slew").checkboxradio().prop("checked", false).checkboxradio("refresh");
-            vis_slew = false;
+            viz_slew = false;
         }
         disable_testpulsebtns();
         if (ui_guide_state == GUIDESTATE_PANIC)
@@ -802,9 +802,9 @@ function make_ui_mainctrl()
         guideCmd(GUIDESTATE_GUIDING);
         guide_state_pretend = GUIDESTATE_GUIDING;
         guide_state_pretend_cnt = 0;
-        if (viz_calib > 0 || vis_slew != false) {
+        if (viz_calib > 0 || viz_slew != false) {
             viz_calib = 0;
-            vis_slew = false;
+            viz_slew = false;
             draw_guidescope();
         }
     });
