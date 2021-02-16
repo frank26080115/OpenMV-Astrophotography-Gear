@@ -34,7 +34,7 @@ This autoguider has hardware that allows it to be a camera intervalometer. An in
 
 The intervalometer has basic intervalometer capabilities, such as taking repeated long exposure photos on a loop. It can also take single photos for the purposes of testing exposure settings. The loop can be paused without ruining the currently running exposure.
 
-**I wrote a separate page about [astrophotography image stacking and dithering (click here to read)](Stacking-and-Dithering).** It uses visualized examples to help you understand why stacking and dithering are important for astrophotography.
+[![](img/stacking_clickbate.png)](Stacking-and-Dithering)
 
 To be able to do dithering, an autoguider is required as randomized dithering without tracking may lead the main telescope to go off-target. But the dithering movements must happen while the photo camera's shutter is closed, so the autoguider needs to coordinate with the intervalometer somehow. The solution is to simply build the intervalometer signal output into the same circuit that generates the ST-4 pulse signals. A 3.5mm jack for an intervalometer output is placed beside the ST-4 output port on the special shield I designed.
 

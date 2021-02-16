@@ -52,6 +52,14 @@ Stretching works better when the file format has more bits, and the input is fro
 
 Ditering is a technique that reduces apparant noise in stacked photographs. If a camera is extra noisy in one spot, or has a hot-pixel, and consecutive photos from that camera are stacked together, then the noise or hot-pixel will appear in the final stacked photograph. This is because the rejection algorithms in the stacking software can reject things that sporatically appear, but not things that are always there. In layman's terms, the algorithm thinks that things that are "always there" should be there.
 
-Dithering means that for each photo, the camera is moved around slightly. This way, even though a bad pixel is staying at the same coordinate on the image, it does not stay at the same spot in the sky. This will make the stacking software reject the bad pixel. This also helps reduce patterned noise because it smears the noise around, while preserving signal details.
+![](img/stacking_dithering_1.png)
 
-![](img/stacking_dithering.png)
+Dithering means that for each photo, the camera is moved around slightly. This way, even though a bad pixel is staying at the same coordinate on the image, it does not stay at the same spot in the sky.
+
+![](img/stacking_dithering_2.png)
+
+This will make the stacking software reject the bad pixel. This also helps reduce patterned noise because it smears the noise around, while preserving signal details.
+
+![](img/stacking_dithering_3.png)
+
+Notice that some of the stacked images won't have regions that overlap with other images in the same stack. So the end result of the stack is a little bit smaller than the original.
