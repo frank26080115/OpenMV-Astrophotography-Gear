@@ -14,6 +14,8 @@ So the calibration must be done again every time you point your telescope somewh
 
 The calibration process is automatic, and can be saved. Saved files can be loaded for the purposes of continuing autoguiding quickly after a power-loss.
 
+A keen eye will notice that the algorithm will not work once the telescope is pointed very close to the celestial pole. This is true. The area of the sky above 80° of declination will probably cause the star motion tracking algorithm to fail. However, this is acceptable, as there's nothing really pretty to photograph in that area of the sky.
+
 ## Predictive Filtering
 
 The basic algorithm is a reactive algorithm, it sees a mistake has been made, and then corrects it. The bad news is that by the time the correction has taken place, some photons have already missed their target in the photograph. So
