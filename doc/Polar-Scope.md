@@ -200,9 +200,9 @@ Read more in depth about the calculations on [this separate page](Calculations-f
 
 Plate-solving, "finding match between the imaged stars and a star catalogue", is actually quite complicated. In fact, most open source plate-solvers are simply an API that uploads to [nova.astrometry.net](https://nova.astrometry.net) and download the result, and that obviously requires an internet connection (good dark skies and phone signals don't usually mix), and takes up to 10 minutes for just one camera frame. My own plate-solving algorithm will need to be optimized for my weak hardware and specific use case. This algorithm is described on a separate page where I show you real calculations and visualize what the code is actually doing!
 
-[![](img/click_bate.png)](Main-Algorithm-Development)
+[![](img/click_bate.png)](Polar-Scope-Algorithm)
 
-[Read it HERE!](Main-Algorithm-Development)
+[Read it HERE!](Polar-Scope-Algorithm)
 
 ### Center Calibration
 

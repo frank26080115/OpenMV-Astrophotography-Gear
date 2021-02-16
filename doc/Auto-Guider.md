@@ -22,6 +22,10 @@ The autoguider is inserted into a small guide-scope. This is done by replacing t
 
 [![](img/star_center_find/clickhere.png)](Star-Tracking-and-Analysis)
 
+### Corrective Movements
+
+[![](img/autoguider_calc_clickbate.jpg)](Auto-Guider-Corrective-Movements)
+
 ### Intervalometer and Dithering
 
 Ditering is a technique that reduces apparant noise in stacked photographs. If a camera is extra noisy in one spot, or has a hot-pixel, and consecutive photos from that camera are stacked together, then the noise or hot-pixel will appear in the final stacked photograph. This is because the rejection algorithms in the stacking software can reject things that sporatically appear, but not things that are always there. In layman's terms, the algorithm thinks that things that are "always there" should be there.
@@ -48,6 +52,8 @@ All of these outputs are opto-isolated. This is a nice feature as all the equipm
 
 The web interface is a HTML page served from the microSD card using a HTTP server implemented in MicroPython. There is a configuration file that is used by the WiFi chipset to know which WiFi access point to connect to (with login credentials), if it fails to connect to an existing access point, it will default to becoming its own adhoc access point. Out in the field, the user can use a smartphone to access the web interface, either by using a hotspot, or by using the adhoc access point.
 
+![](img/autoguider_withphone.jpg)
+
 The web interface uses [jQuery](https://jquery.com/) and [jQuery-UI](https://jqueryui.com/) to make the nice looking UI elements. The error graph is draw using [Chartist by gionkunz](http://gionkunz.github.io/chartist-js/). The toast messages are generated using [js-toast by mlcheng](https://github.com/mlcheng/js-toast).
 
 The image from the camera is shown as a SVG, not the true image, due to the bandwidth constraints of the slow WiFi chipset. Star coordinates and properties are sent over to the JavaScript, and the SVG simply draws some circles. The circle's size, brightness, and color, are changed according to the properties of the star. At a glance, the user can make quick inferences and decisions from just how the circle looks, without the actual image.
@@ -60,7 +66,7 @@ This architecture is extremely easy to debug while sitting at a desktop computer
 
 ![](img/simulating_webdevelopertools.png)
 
-Once the autoguider is fully configured, calibrated, and running, the smartphone can be disconnected and the autoguider will continue to operate throughout the night. If it encounters an unrecoverable error, it will rapidly flash the red LED.
+Once the autoguider is fully configured, calibrated, and running, **the smartphone can be disconnected and the autoguider will continue to operate throughout the night**. If it encounters an unrecoverable error, it will rapidly flash the red LED.
 
 The HTML page also features collapsible help text, to help the user understand each function and setting. There are also some handy calculators that can help determine the most optimal settings.
 
@@ -75,7 +81,7 @@ A popular entry level guide camera is the ZWO ASI120MM.
 Some of the algorithms I implemented are inspired by the popular PHD2 autoguiding software. Features from PHD2 that I've implemented:
 
  * single star tracking
- * multi-star tracking
+ * multiple star tracking
  * dithering
  * calibration
  * direction lock-in
@@ -93,7 +99,7 @@ Also, my user interface is much more simple and mostly unit-less (I have a close
 
 ![](img/phd2_errgraph_comparison.png)
 
-There are other "standalone" autoguiders on the market. The NexGuide or SynGuider only has 752 x 480 resolution at $300 (with poor user reviews). Better ones like StarAid or Lacerta costs well over $1000.
+There are other "standalone" autoguiders on the market. The NexGuide or SynGuider only has 752 x 480 resolution at $300 (with poor user reviews, and require bigger guide-scopes). Better ones like StarAid or Lacerta costs well over $1000.
 
 NOTE: I cannot personally make any qualitative comparisons as it would be extremely expensive to purchase the equipment required (multiple autoguiding cameras, plus additional telescopes that can show the differences between them), and astrophotography involves many other factors that may affect how good a photo looks. Photos from one night may simply look better due to weather.
 
