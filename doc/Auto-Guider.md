@@ -1,3 +1,5 @@
+![](img/autoguider_withphone.jpg)
+
 Autoguiders are cameras that command a motorized equatorial telescope mount to track a particular star in the sky. This allows astrophotographers to take extremely long exposure photos, as the tracking will eliminate star-streaking and blurriness caused by incorrect motion (mechanical imperfections of the gears) and error in polar-alignment.
 
 [Wikipedia page on Autoguider](https://en.wikipedia.org/wiki/Autoguider)
@@ -52,9 +54,9 @@ All of these outputs are opto-isolated. This is a nice feature as all the equipm
 
 The web interface is a HTML page served from the microSD card using a HTTP server implemented in MicroPython. There is a configuration file that is used by the WiFi chipset to know which WiFi access point to connect to (with login credentials), if it fails to connect to an existing access point, it will default to becoming its own adhoc access point. Out in the field, the user can use a smartphone to access the web interface, either by using a hotspot, or by using the adhoc access point.
 
-![](img/autoguider_withphone.jpg)
+![](img/autoguider_screenshot.png)
 
-The web interface uses [jQuery](https://jquery.com/) and [jQuery-UI](https://jqueryui.com/) to make the nice looking UI elements. The error graph is draw using [Chartist by gionkunz](http://gionkunz.github.io/chartist-js/). The toast messages are generated using [js-toast by mlcheng](https://github.com/mlcheng/js-toast).
+The web interface uses [jQuery](https://jquery.com/) and [jQuery-UI](https://jqueryui.com/) to make the nice looking UI elements. The error graph is draw using [Chartist by gionkunz](http://gionkunz.github.io/chartist-js/). The toast messages are generated using [js-toast by mlcheng](https://github.com/mlcheng/js-toast). The usage of these modern JavaScript packages ensure that the GUI scales to any screen size very nicely.
 
 The image from the camera is shown as a SVG, not the true image, due to the bandwidth constraints of the slow WiFi chipset. Star coordinates and properties are sent over to the JavaScript, and the SVG simply draws some circles. The circle's size, brightness, and color, are changed according to the properties of the star. At a glance, the user can make quick inferences and decisions from just how the circle looks, without the actual image.
 
