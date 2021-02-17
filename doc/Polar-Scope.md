@@ -1,4 +1,6 @@
-A normal polar scope is used to polar-align star-tracking camera mounts and equatorial telescope mounts. A digital camera version that leverages computer vision algorithms can achieve much better accuracy, improving the quality of astro-photographs!
+# Polar Scope
+
+A polar scope is a small telescope used to polar-align star-tracking camera mounts and equatorial telescope mounts. A digital camera version that leverages computer vision algorithms can achieve much better accuracy, improving the quality of astro-photographs!
 
 ![](img/DSC01041_es.jpg)
 ![](img/DSC01048_es.jpg)
