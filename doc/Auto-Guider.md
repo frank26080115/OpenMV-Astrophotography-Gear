@@ -121,7 +121,7 @@ As discovered in the previous [polar-scope project](Polar-Scope), the HTTP serve
 
 I attempted to 3D print a guide-scope, using a 50mm diameter 183mm focal length lens.
 
-![](img_guidescope/guide_scope_3d.png)
+![](img/guide_scope_3d.png)
 ![](img/guidescope_3dprinted.jpg)
 
 This does work, and is fun to build. The lens is sandwiched between the lens hood and the main tube. The focus mechanism consists of one screw that can move the telescopic inner tube. The rear has an opening allowing for any standard 1.25 inch diameter eyepiece, or in this case, camera, to be attached.
