@@ -1102,6 +1102,25 @@ class AutoGuider(object):
                 if dither:
                     if self.debug:
                         print("shutter closed while in dither mode")
+                else:
+                    if self.origin_coord is not None and self.target_coord is not None:
+                        if self.intervalometer_state == INTERVALSTATE_IDLE or self.guide_state == GUIDESTATE_IDLE:
+                             self.target_coord = self.origin_coord
+                        else:
+                            d = self.origin_coord[0] - self.target_coord[0]
+                            if d > 0.1:
+                                self.target_coord = (self.target_coord[0] + 0.1, self.target_coord[1])
+                            elif (d <= 0.1 and d >= 0) or (d >= -0.1 and d <= 0):
+                                self.target_coord = (self.origin_coord[0], self.target_coord[1])
+                            elif d < -0.1:
+                                self.target_coord = (self.target_coord[0] - 0.1, self.target_coord[1])
+                            d = self.origin_coord[1] - self.target_coord[1]
+                            if d > 0.1:
+                                self.target_coord = (self.target_coord[0], self.target_coord[1] + 0.1)
+                            elif (d <= 0.1 and d >= 0) or (d >= -0.1 and d <= 0):
+                                self.target_coord = (self.target_coord[0], self.origin_coord[1])
+                            elif d < -0.1:
+                                self.target_coord = (self.target_coord[0], self.target_coord[1] - 0.1)
             if self.intervalometer_state == INTERVALSTATE_ACTIVE and dither == False:
                 self.intervalometer_state = INTERVALSTATE_ACTIVE_GAP
                 if self.debug:
