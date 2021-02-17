@@ -122,3 +122,7 @@ You may use OpenMV IDE to do whatever you want. The whole project is open source
 There's a `polarscope_settings.json` file. You can make manual edits to it if you wish but you do need to reset OpenMV, and then refresh the web interface, to make the changes take effect.
 
 If you ever mess up, you can always just delete everything and start all over.
+
+----------
+
+[click here to go back to the polar scope page](https://frank26080115.github.io/OpenMV-Astrophotography-Gear/doc/Polar-Scope)

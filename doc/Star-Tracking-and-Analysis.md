@@ -66,4 +66,6 @@ The second part of the motion analysis is multi-star tracking. This is to combat
 
 The motion of multiple stars can be averaged together, instead of analyzing just one star, in order to prevent detection of motion that didn't really occur.
 
+----------
 
+[click here to go back to the autoguider page](https://frank26080115.github.io/OpenMV-Astrophotography-Gear/doc/Auto-Guider)

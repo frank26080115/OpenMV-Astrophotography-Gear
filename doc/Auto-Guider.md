@@ -132,3 +132,9 @@ It's got some flaws:
  * ordinary plastic is very reflective, should use matte black plastic, or coat the inside
 
 If this method is not appealing, the recommended off-the-shelf guide-scope is a Svbony SV106. This guide-scope has a 50mm diameter lens with 190mm of focal length. It's easier to focus and aim, but doesn't look very sleek. The large diameter allows for enough light that the RGB sensor of the OpenMV is not at a disadvantage anymore. The focal length makes it suitable for even the longest refractor telescope you can buy when you combine it with the higher sensor resolution of the OpenMV.
+
+### Other Project: Polar Scope
+
+A polar scope is used to polar-align star-tracking camera mounts and equatorial telescope mounts. A digital camera version that leverages OpenMV computer vision algorithms can achieve much better accuracy, improving the quality of astro-photographs! With a WiFi connected web UI, it's way more convenient to use.
+
+[![](img/openmvpolarscope_intro.png)](https://frank26080115.github.io/OpenMV-Astrophotography-Gear/doc/Polar-Scope)

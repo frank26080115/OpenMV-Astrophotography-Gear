@@ -99,3 +99,6 @@ I've found somebody else who has coded a astrophotograph stacker in C++ and he t
 
 [![](img/benedikt_star_stacking.gif)](https://benedikt-bitterli.me/astro/)
 
+----------
+
+[click here to go back to the polar scope page](https://frank26080115.github.io/OpenMV-Astrophotography-Gear/doc/Polar-Scope)

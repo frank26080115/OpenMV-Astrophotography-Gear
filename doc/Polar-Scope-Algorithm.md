@@ -1,5 +1,5 @@
-The Main Algorithm
-==================
+Main Algorithm
+==============
 
 I will show you the plate solving algorithm for the OpenMV PolarScope project. The plate solver only has to identify one star: Polaris. It is optimized to take advantage of many aspects about the usage scenario:
 
@@ -131,3 +131,7 @@ The matching does have some tolerance to account for blurriness and lens distort
 This whole algorithm for Polaris is different from the other more generalized plate solving algorithm implemented later. The difference is that the more generalized algorithm does not establish a reference angle with the first star it matches, instead, it simply loops through 360 different angles and see which angle results in the most matches. This is slower but the slower algorithm runs on the smartphone (as JavaScript) instead of OpenMV (as MicroPython) so I don't really care, it doesn't really ruin the user experience.
 
 This Polaris specific algorithm only works if the stars "HD 14369" and "HD 1687" are not visible, otherwise the algorithm needs to become recursive and check three different reference angles instead of just one. Those two stars are quite dim and my camera never sees them even at aggressive settings, which is why testing the camera before writing the code was so important. The generalized algorithm does not have this problem as it checks all 360 angles.
+
+----------
+
+[click here to go back to the polar scope page](https://frank26080115.github.io/OpenMV-Astrophotography-Gear/doc/Polar-Scope)

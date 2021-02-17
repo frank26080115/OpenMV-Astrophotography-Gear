@@ -63,3 +63,7 @@ This will make the stacking software reject the bad pixel. This also helps reduc
 ![](img/stacking_dithering_3.png)
 
 Notice that some of the stacked images won't have regions that overlap with other images in the same stack. So the end result of the stack is a little bit smaller than the original.
+
+----------
+
+[click here to go back to the autoguider page](https://frank26080115.github.io/OpenMV-Astrophotography-Gear/doc/Auto-Guider)

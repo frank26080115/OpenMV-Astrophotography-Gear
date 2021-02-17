@@ -70,3 +70,7 @@ When I was working on this project, there was a lot of testing done to verify my
  * take photos of Polaris, and rotate the image
  * randomly generate future date, time, and location, then check expected rotation against Stellarium
  * add a time acceleration mode to see if things were rotating in the right direction
+
+----------
+
+[click here to go back to the polar scope page](https://frank26080115.github.io/OpenMV-Astrophotography-Gear/doc/Polar-Scope)

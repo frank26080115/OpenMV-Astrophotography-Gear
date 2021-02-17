@@ -402,4 +402,4 @@ I also developed a PCB for OpenMV that provides opto-isolated ST-4 signals to pr
 
 This project will eventually completely eliminate the need to use the PHD2 software.
 
-### [Click Here to read all about the OpenMV AutoGuider](Auto-Guider)
+[Click Here to read all about the OpenMV AutoGuider](Auto-Guider)

@@ -1,3 +1,5 @@
+## Basic Algorithm
+
 Before the autoguider can generate corrective movement commands, it needs to be calibrated first. Both axis (right-ascension and declination) needs to be calibrated independantly.
 
 ![](img/autoguider_eg_calib.png)
@@ -33,3 +35,7 @@ Some advanced autoguiding techniques exist to take advantage of those facts abov
 For the declination axis, it will have a tendency to spin very very slowly in one direction. To avoid oscillation problems caused by backlash, the firmware will check which direction it has a tendency for, and then only allow it to spin in that direction in the future. Further more, the P.I.D. controller and L.P.F. filter will also track the direction, and their outputs can be used to pre-emptively make corrective moves in that direction very early.
 
 Other sources of error are things like a gust of wind, or atmospheric seeing. These are considered very quick events, and ones that will naturally return to its original position. It is actually preferable not to issue corrections for these events, as they can result in over-correction.
+
+----------
+
+[click here to go back to the autoguider page](https://frank26080115.github.io/OpenMV-Astrophotography-Gear/doc/Auto-Guider)
