@@ -17,7 +17,7 @@
   <body>
 
       <header>
-        <h1><a href="{{ '/' | relative_url }}" style="color:white;" class="maintitlelink">{{ page.title | default: site.title | default: site.github.repository_name }}</a></h1>
+        <h1><a href="{{ '/' | relative_url }}" style="color:white;" class="maintitlelink">{{ default: site.title | default: site.github.repository_name }}</a></h1>
         <p>{{ page.description | default: site.description | default: site.github.project_tagline }}</p>
       </header>
 
