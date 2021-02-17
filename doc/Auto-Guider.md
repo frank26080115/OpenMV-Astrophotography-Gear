@@ -22,6 +22,10 @@ The autoguider is inserted into a small guide-scope. This is done by replacing t
 
 ![](img/guidescope_sv106.jpg)
 
+Here it is mounted on a RedCat telescope and motorized equatorial mount:
+
+![](img/autoguider_ontelescope.jpg)
+
 Here's a sample image of what the OpenMV sees through a typical guide-scope:
 
 ![](img/autoguider_sampleimg.png)
