@@ -1,4 +1,4 @@
-# Polar Scope
+# OpenMV Polar Scope
 
 A polar scope is a small telescope used to polar-align star-tracking camera mounts and equatorial telescope mounts. A digital camera version that leverages computer vision algorithms can achieve much better accuracy, improving the quality of astro-photographs!
 
@@ -76,7 +76,7 @@ These tracking mounts, and all equatorial telescope mounts, computerized or not,
 
 Most of these trackers or mounts come with something called a **polar-scope**.
 
-### Polar-Scope
+### What's a polar-scope?
 
 A mini-telescope with a crosshair that you point at Polaris.
 
