@@ -69,7 +69,7 @@ function draw_guidescope(obj)
     bgrect.setAttribute("x", 0);
     bgrect.setAttribute("y", 0);
     var bgc = 0;
-    if (obj != null) { Math.round(obj["img_mean"] * 0.9).toString(); }
+    if (obj != null) { bgc = Math.round(obj["img_mean"] * 0.9).toString(); }
     bgrect.setAttribute("style", "fill:rgb(" + bgc + "," + bgc + "," + bgc + ");stroke:none;");
     svgele.appendChild(bgrect);
 
@@ -145,7 +145,7 @@ function draw_guidescope(obj)
             cirele.setAttribute("cx", ((cx / imgscale) - offset_x).toFixed(8));
             cirele.setAttribute("cy", ((cy / imgscale) - offset_y).toFixed(8));
             cirele.setAttribute("r", drawn_rad);
-            cirele.setAttribute("style", "stroke:rgb(255,255,0);stroke-width:1");
+            cirele.setAttribute("style", "stroke:rgb(255,255,0);stroke-width:1;fill:none;");
             svgele.appendChild(cirele);
         }
     }

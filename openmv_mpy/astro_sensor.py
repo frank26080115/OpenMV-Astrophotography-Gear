@@ -1,7 +1,11 @@
 import micropython
 micropython.opt_level(2)
 
-import sensor, image, pyb, time, gc
+import sensor
+import image
+import pyb
+import time
+import gc
 import exclogger
 
 class AstroCam(object):

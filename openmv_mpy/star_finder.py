@@ -77,6 +77,7 @@ def find_stars(img, hist = None, stats = None, thresh = 0, max_dia = 100, region
 
     # use old technique for polarscope
     blobs_cnt = len(blobs)
+    stars = []
     while blobs_cnt > 0:
         try:
             stars = [None] * blobs_cnt

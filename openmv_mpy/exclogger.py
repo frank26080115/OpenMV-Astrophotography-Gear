@@ -1,4 +1,11 @@
-import micropython, sys, uos, uio, pyb, gc
+import micropython
+micropython.opt_level(2)
+
+import sys
+import uos
+import uio
+import pyb
+import gc
 
 def log_exception(exc, time_str = "", to_print = True, to_file = False, fatal = False, reboot = False):
 

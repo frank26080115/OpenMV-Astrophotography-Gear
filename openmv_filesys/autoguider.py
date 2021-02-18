@@ -480,6 +480,7 @@ class AutoGuider(object):
                 if self.debug:
                     print("exposure error %u %u" % (code, len(latest_stars)))
                 if self.expo_err > self.settings["panicthresh_expoerr"]:
+                    self.stars = []
                     self.panic(msg = "too many exposure errors")
                 self.dither_calm = 0
                 return decided_pulse

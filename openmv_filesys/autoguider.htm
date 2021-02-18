@@ -428,6 +428,16 @@ function handleStateObj()
     if (obj["stars"] != null && obj["stars"] != false) {
         star_list = parseStarsStr(obj["stars"]);
     }
+    else
+    {
+        if (('expo_code' in obj) != false)
+        {
+            var ecode = obj['expo_code'];
+            if (ecode == 1 || ecode == 2 || ecode == 5) {
+                star_list = [];
+            }
+        }
+    }
     imageStatsUpdate(obj);
     hotpixelsInfoUpdate(obj);
 
@@ -636,7 +646,10 @@ function handleStateObj()
     if (guide_state == GUIDESTATE_GUIDING && intervalometer_status != INTERVALSTATE_IDLE) {
         txt += "<br />drift sum: " + pulse_maxsum.toString();// + "<br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(prev=" + pulse_maxsum_cache.toString() + ")";
     }
-    txt += "<br />analysis quality:<br />&nbsp;&nbsp;&nbsp;&nbsp;error=" + obj["last_move_err"] + "&nbsp;<br />&nbsp;&nbsp;&nbsp;&nbsp;matches=" + obj["multistar_cnt"][0] + " (" + Math.round(obj["multistar_cnt"][0] * 100 / star_list.length) + "%)";
+    txt += "<br />analysis quality:<br />&nbsp;&nbsp;&nbsp;&nbsp;error=" + obj["last_move_err"] + "&nbsp;<br />&nbsp;&nbsp;&nbsp;&nbsp;matches=" + obj["multistar_cnt"][0];
+    if (obj["multistar_cnt"][0] > 0 && star_list.length > 0) {
+        txt += " (" + Math.round(obj["multistar_cnt"][0] * 100 / star_list.length) + "%)";
+    }
     if (settings["multistar_cnt_max"] > 1 || obj["multistar_cnt"][1] > 1) {
         txt += "<br />multi-star used: " + obj["multistar_cnt"][1];
     }
@@ -734,6 +747,9 @@ function star_onclick(x, y)
         pending_select = [x, y];
         draw_guidescope();
         selectStar(x, y);
+        setTimeout(function(){
+            pending_select = null;
+        }, 5000);
     }
     else
     {

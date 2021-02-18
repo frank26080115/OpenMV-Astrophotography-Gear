@@ -48,8 +48,9 @@ class GuiderSimulator(object):
             dx = 0
             dy = 0
             if self.guider.target_coord is not None and self.guider.selected_star is not None:
-                dx = self.guider.target_coord[0] - self.guider.selected_star.cxf()
-                dy = self.guider.target_coord[1] - self.guider.selected_star.cyf()
+                #dx = self.guider.target_coord[0] - self.guider.selected_star.cxf()
+                #dy = self.guider.target_coord[1] - self.guider.selected_star.cyf()
+                pass
             i = 0
             while i < star_cnt:
                 old_star = self.base_stars[i]
