@@ -339,7 +339,7 @@ The remaining mechanical problems are about cooling the camera sensor, and preve
 
 ![](img/veil_nebula.jpg)
 
-Those are my first two deep sky astrophotographers. The specs of these photos:
+Those are my first two deep sky astrophotographs. The specs of these photos:
 
  * Sony a6000 camera, 20 megapixels, APS-C sensor, IR-UV filter removed (aka. astro-modified sensor)
  * RedCat 51 telescope, 250mm focal length, 51mm objective diameter
